@@ -42,8 +42,12 @@ async function start(code, typedName) {
     return render();
   }
   A = { code, ...data, sets: (data.sets || []).map(cleanSet).filter(s => s.questions.length) };
+  // The code's subject: the one all its sets share (a mixed revision folder keeps the Ludgrove look)
+  const subs = [...new Set(A.sets.map(s => THEME.subjectFor(s)))];
+  A.subject = subs.length === 1 ? subs[0] : null;
   if (typedName && !me.first) { const parts = String(typedName).trim().split(/\s+/); me.first = parts[0] || ''; if (parts[1]) me.initial = parts[1][0].toUpperCase(); }
-  V = { screen: 'name' }; render();
+  V = { screen: 'name' };
+  THEME.takeover(A.subject, render);   // the sign-in screen already wears the subject's look
 }
 async function loadHistory() {
   const { data } = await sb.rpc('pupil_history', { p_code: A.code, p_pupil: pupilName() });
@@ -266,7 +270,7 @@ app.addEventListener('click', e => {
   const a = t.dataset.a;
   if (a === 'exit') { stopTick(); location.href = location.pathname; }
   if (a === 'pick') openSet(A.sets.find(s => s.id === t.dataset.id));
-  if (a === 'back') { stopTick(); G = null; V = { screen: 'pick' }; THEME.takeover(null, render); }
+  if (a === 'back') { stopTick(); G = null; V = { screen: 'pick' }; THEME.takeover(A.subject, render); }
   if (a === 'go') begin(V.set || (G && G.set));
   if (a === 'answer') answer(+t.dataset.i);
   if (a === 'next') next();
