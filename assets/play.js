@@ -93,6 +93,8 @@ function leave(msg) {
 function onState(st) {
   if (S.awaitingState) { S.awaitingState = false; stopRetry(); clearTimeout(waitT); }
   if ((st.subject || null) !== THEME.current) THEME.takeover(st.subject, render);   // the subject's look takes over
+  if (st.runner) S.runner = st.runner;
+  S.team = st.team || null;
   Object.assign(S, { title: st.title, name: st.name, score: st.score, streak: st.streak, answered: st.answered, correct: st.correct, mode: st.mode, kg: st.kg || 0, lure: st.lure || 1 });
   S.frenzyUntil = st.frenzyIn ? Date.now() + st.frenzyIn : 0;
   S.paused = !!st.paused;
@@ -114,6 +116,7 @@ function onResult(r) {
   if (!S.q || r.seq !== S.q.seq || S.screen !== 'checking') return;
   stopRetry();
   S.result = r;
+  if (r.right) RUNNER.boost(); else RUNNER.trip();
   Object.assign(S, { score: r.score, streak: r.streak, answered: r.answered, correct: r.correct, kg: r.kg || 0, lure: r.lure || 1 });
   S.nextQ = r.next;
   S.lockUntil = Date.now() + r.lockMs;
@@ -167,15 +170,16 @@ const lurePips = n => `<span class="flames lure" aria-hidden="true">${[1, 2, 3, 
 function frenzyBar() {
   return fishing() && S.frenzyUntil > Date.now() ? `<div class="frenzy-banner" role="status"><b>${esc(THEME.modes().event)}!</b><span>Every catch weighs double for <span id="frenzy-left">${Math.ceil((S.frenzyUntil - Date.now()) / 1000)}</span>s</span></div>` : '';
 }
+const teamLine = () => (S.team ? `<div class="team-strip" style="--team:${esc(S.team.colour)}">Team <b>${esc(S.team.name)}</b></div>` : '');
 function hud() {
-  if (fishing()) return `${frenzyBar()}<div class="hud pupil-hud fish-hud">
+  if (fishing()) return `${frenzyBar()}${teamLine()}<div class="hud pupil-hud fish-hud">
     <div class="stat"><div class="k">Time left</div><div class="v" id="hud-time">${S.endAt ? fmtTime(S.endAt - Date.now()) : '∞'}</div></div>
-    <div class="stat"><div class="k">Total catch</div><div class="v">${LB.fmtKg(S.kg)}</div></div>
+    <div class="stat"><div class="k">Total ${LB.catchNoun()}</div><div class="v">${LB.fmtCatch(S.kg)}</div></div>
     <div class="stat mult"><div class="k">Lure level</div><div class="v">${S.lure}${lurePips(S.lure)}</div></div>
   </div>`;
   const showNext = S.screen === 'question' || S.screen === 'ready';
   const m = showNext ? multFor(S.streak + 1) : multFor(Math.max(1, S.streak));
-  return `<div class="hud pupil-hud">
+  return `${teamLine()}<div class="hud pupil-hud">
     <div class="stat"><div class="k">Time left</div><div class="v" id="hud-time">${S.endAt ? fmtTime(S.endAt - Date.now()) : '∞'}</div></div>
     <div class="stat"><div class="k">Points</div><div class="v">${S.score.toLocaleString('en-GB')}</div></div>
     <div class="stat"><div class="k">Streak</div><div class="v">${S.streak}${LB.flames(S.streak)}</div></div>
@@ -218,7 +222,7 @@ function render() {
     case 'connecting': h = `<div class="gate"><div class="gate-card center">${LB.mark}<h1 style="font-size:24px">Joining…</h1><p>Finding game ${esc(S.code)}</p></div></div>`; break;
     case 'lost': h = `<div class="gate"><div class="gate-card">${LB.mark}<h1 style="font-size:24px">Can’t reach your game</h1><p>Check the internet connection, then try again. If the game has finished, join a new one.</p>
       <button class="btn primary" data-act="reconnect">Try again</button><button class="btn" data-act="leave">Join a different game</button></div></div>`; break;
-    case 'lobby': h = `<div class="gate"><div class="gate-card center">${LB.mark}<span class="qlabel">${esc(S.title || '')}</span><h1 style="font-size:30px">You’re in, ${esc(S.name)}!</h1>
+    case 'lobby': h = `<div class="gate"><div class="gate-card center">${LB.mark}<span class="qlabel">${esc(S.title || '')}</span><h1 style="font-size:30px">You’re in, ${esc(S.name)}!</h1>${S.team ? `<p class="team-badge" style="--team:${esc(S.team.colour)}">Team <b>${esc(S.team.name)}</b></p>` : ''}
       <p>Look at the board. The game starts when your teacher is ready.</p><div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
       <button class="btn ghost small" data-act="leave">Leave game</button></div></div>`; break;
     case 'ready': {
@@ -240,9 +244,9 @@ function render() {
         h = `<div class="wrap play">${hud()}<div class="stage center catch ${f.tier >= 3 ? 'sparkle' : ''}" style="--tier:${t.colour}">
           ${f.tier >= 3 ? `<div class="burst" aria-hidden="true">${Array.from({ length: 12 }, (_, i) => `<i style="--a:${i * 30}deg"></i>`).join('')}</div>` : ''}
           <span class="tier-chip">${t.name}</span>
-          <div class="catch-fish">${LB.fishSVG(f.tier, f.shape, 220)}</div>
-          <h2 class="catch-name">You caught ${/^[AEIOU]/.test(f.name) ? 'an' : 'a'} ${esc(f.name)}!</h2>
-          <div class="catch-kg">${LB.fmtKg(f.kg)}${f.doubled ? ` <span class="x2">×2 ${esc(THEME.modes().event)}</span>` : ''}</div>
+          <div class="catch-fish">${LB.catchSVG(f, 220)}</div>
+          <h2 class="catch-name">${f.icon ? 'You found' : 'You caught'} ${esc(LB.catchPhrase(f))}!</h2>
+          <div class="catch-kg">${LB.fmtCatch(f.kg)}${f.doubled ? ` <span class="x2">×2 ${esc(THEME.modes().event)}</span>` : ''}</div>
           <p class="hint" style="margin:0">Streak ${r.streak} · next cast with lure level ${r.lure}</p>
           <button class="btn primary go" id="go" data-act="next" data-autofocus><span class="lbl">Next question</span><span class="bar"></span></button>
         </div></div>`;
@@ -250,7 +254,7 @@ function render() {
       }
       const verdict = r.right
         ? `<div class="verdict good pop"><div><h3>Correct! +${r.gain}</h3><p>Streak ${r.streak} · ${fmtMult(multFor(r.streak))}</p></div>`
-        : `<div class="verdict bad pop"><div><h3>${fishing() ? 'The fish got away' : 'Not quite'}</h3><p>The right answer is highlighted.${r.lost > 1 ? ` Streak of ${r.lost} lost.` : ''}${fishing() ? ' Lure back to level 1.' : ''}</p></div>`;
+        : `<div class="verdict bad pop"><div><h3>${fishing() ? LB.missText() : 'Not quite'}</h3><p>The right answer is highlighted.${r.lost > 1 ? ` Streak of ${r.lost} lost.` : ''}${fishing() ? ' Lure back to level 1.' : ''}</p></div>`;
       h = `<div class="wrap play">${hud()}<div class="stage"><span class="qlabel">Question ${S.answered}</span><div class="qtext">${esc(S.q.q)}</div>${answersHTML(true)}
         ${verdict}<button class="btn primary go ${locked ? 'locking' : ''}" id="go" data-act="next" ${locked ? 'disabled' : 'data-autofocus'}><span class="lbl">${locked ? 'Wait a moment…' : 'Next question'}</span><span class="bar"></span></button></div></div></div>`;
       break;
@@ -261,16 +265,17 @@ function render() {
       const acc = f.answered ? Math.round(100 * f.correct / f.answered) : 0;
       h = `<div class="wrap play"><div class="stage center pop">
         <span class="qlabel">Game over · ${esc(S.title || '')}</span>
+        ${f.team ? `<p class="team-badge" style="--team:${esc(f.team.colour)}">Team <b>${esc(f.team.name)}</b> came ${ordinal(f.team.place)} of ${f.team.of} with ${esc(f.team.total)}</p>` : ''}
         ${f.rank ? `<h1 style="font-size:clamp(32px,6vw,56px)">You came ${ordinal(f.rank)}</h1><p class="hint" style="margin:0">out of ${f.of} ${f.rankBy === 'points' ? '' : `(ranked by ${f.rankBy === 'correct' ? 'correct answers' : `accuracy, for pupils with ${LB.MIN_FOR_ACCURACY} or more answers`})`}</p>` : '<h1>Game over</h1>'}
         <div class="summary" style="max-width:640px">
           ${f.mode === 'fishing'
-            ? `<div class="stat"><div class="k">Total catch</div><div class="v">${LB.fmtKg(f.kg || 0)}</div></div>`
+            ? `<div class="stat"><div class="k">Total ${LB.catchNoun()}</div><div class="v">${LB.fmtCatch(f.kg || 0)}</div></div>`
             : `<div class="stat"><div class="k">Points</div><div class="v">${(f.score || 0).toLocaleString('en-GB')}</div></div>`}
           <div class="stat"><div class="k">Correct</div><div class="v">${f.correct || 0}/${f.answered || 0}</div></div>
           <div class="stat"><div class="k">Accuracy</div><div class="v">${acc}%</div></div>
           <div class="stat"><div class="k">Best streak</div><div class="v">${f.best || 0}</div></div>
         </div>
-        ${f.mode === 'fishing' && f.biggest ? `<p class="hint" style="margin:0">Your biggest catch: <strong style="color:${LB.FISH_TIERS[f.biggest.tier].colour}">${LB.FISH_TIERS[f.biggest.tier].name} ${esc(f.biggest.name)}</strong>, ${LB.fmtKg(f.biggest.kg)}</p>` : ''}
+        ${f.mode === 'fishing' && f.biggest ? `<p class="hint" style="margin:0">${LB.catchUnit() ? "Your best treasure" : "Your biggest catch"}: <strong style="color:${LB.FISH_TIERS[f.biggest.tier].colour}">${LB.FISH_TIERS[f.biggest.tier].name} ${esc(f.biggest.name)}</strong>, ${LB.fmtCatch(f.biggest.kg)}</p>` : ''}
         ${(f.review || []).length ? `<div class="review"><h2 class="side-h" style="margin-top:8px">Questions to look at again</h2><ol>${f.review.map(r => `<li><div class="rq">${esc(r.q)}</div><div class="ra"><span class="yours">You said: ${esc(r.yours)}</span><span class="right">Answer: ${esc(r.answer)}</span></div></li>`).join('')}</ol></div>`
           : (f.answered ? '<p class="hint" style="margin:0">You didn’t get any questions wrong. Brilliant!</p>' : '')}
         <button class="btn" data-act="leave">Join another game</button></div></div>`;
@@ -279,6 +284,8 @@ function render() {
   }
   app.innerHTML = h;
   document.body.classList.toggle('water', fishing() && ['ready', 'question', 'checking', 'casting', 'feedback', 'timeup'].includes(S.screen));
+  // Classic mode: the runner strip sits above the question
+  if (S.mode === 'classic' && [...GAME_SCREENS, 'timeup'].includes(S.screen)) RUNNER.show(THEME.current, S.runner); else RUNNER.hide();
   typeset(app);
   const f = app.querySelector('[data-autofocus]') || (S.screen === 'join' && document.getElementById(S.code ? 'name' : 'code'));
   if (f) f.focus();

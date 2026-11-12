@@ -50,14 +50,15 @@ async function boot() {
   if (error || !data) return fatal('Couldn’t load that set', 'Check your connection, or go back to the library and try again.');
   // Drop blank answer slots and keep the correct answer pointing at the right one
   const questions = (data.questions || []).filter(validQ).map(q => {
-    const kept = q.answers.map((a, j) => [String(a), j]).filter(([a]) => a.trim());
+    const seen = new Set([String(q.answers[q.correct]).trim().toLowerCase()]);
+    const kept = q.answers.map((a, j) => [String(a), j]).filter(([a, j]) => a.trim() && (j === q.correct || !seen.has(a.trim().toLowerCase()) && seen.add(a.trim().toLowerCase())));
     return { id: q.id, q: q.q, answers: kept.map(k => k[0]), correct: kept.findIndex(k => k[1] === q.correct) };
   });
   if (!questions.length) return fatal('This set has no finished questions', 'Add at least one question with two answers first.');
   G = {
     code: null, setId, title: data.title || 'Untitled set', questions,
     subject: THEME.subjectFor(data), kx: null,
-    settings: { minutes: 10, rankBy: 'points', mode: 'classic', shuffle: true },
+    settings: { minutes: 10, rankBy: 'points', mode: 'classic', shuffle: true, teams: 0 },
     paused: false, pausedAt: null,
     biggest: null, frenzyUntil: null, nextFrenzyAt: null,
     phase: 'setup', endAt: null, startedAt: null, endedAt: null,
@@ -108,7 +109,7 @@ function dropChannel(pid) {
 /* ---------- game logic ---------- */
 function newPupil(name, pub, chan) {
   let pid; do { pid = rid(10); } while (G.pupils[pid]);   // pid is this tab's own label for the pupil; it is never sent anywhere
-  return { pid, pub, chan, name, score: 0, kg: 0, catches: 0, biggest: null, streak: 0, best: 0, answered: 0, correct: 0, deck: [], last: null, cur: null, perm: null, log: [], seq: 0, lockUntil: 0, lastActive: Date.now(), lastResult: null, joinedAt: Date.now() };
+  return { pid, pub, chan, name, runner: RUNNER.pick(G.subject), score: 0, kg: 0, catches: 0, biggest: null, streak: 0, best: 0, answered: 0, correct: 0, deck: [], last: null, cur: null, perm: null, log: [], seq: 0, lockUntil: 0, lastActive: Date.now(), lastResult: null, joinedAt: Date.now() };
 }
 function deal(p) {
   if (!p.deck.length) {
@@ -124,7 +125,7 @@ const qById = id => G.questions.find(q => q.id === id);
 const fishing = () => G.settings.mode === 'fishing';
 const frenzyOn = () => !!(G.frenzyUntil && Date.now() < G.frenzyUntil);
 const val = p => (fishing() ? p.kg : p.score);            // the 'points' measure for the current mode
-const fmtVal = v => (fishing() ? LB.fmtKg(v) : v.toLocaleString('en-GB'));
+const fmtVal = v => (fishing() ? LB.fmtCatch(v) : v.toLocaleString('en-GB'));
 function qPayload(p) {
   const q = qById(p.cur);
   if (!q) return null;
@@ -133,7 +134,8 @@ function qPayload(p) {
 }
 function stateFor(p) {
   return {
-    phase: G.phase, title: G.title, name: p.name, subject: G.subject,
+    phase: G.phase, title: G.title, name: p.name, subject: G.subject, runner: p.runner,
+    team: teamOf(p) ? { name: teamOf(p)[0], colour: teamOf(p)[1] } : null,
     endIn: G.phase === 'playing' && G.endAt ? G.endAt - (G.paused ? G.pausedAt : Date.now()) : null,
     mode: G.settings.mode, kg: p.kg, lure: LB.lureFor(p.streak + 1),
     frenzyIn: frenzyOn() ? G.frenzyUntil - (G.paused ? G.pausedAt : Date.now()) : 0,
@@ -172,7 +174,7 @@ async function onJoin(m) {
       same.pub = m.pub; same.chan = chan; same.allowRejoinUntil = 0; p = same;   // score kept
     } else {
       p = newPupil(chk.name, m.pub, chan);
-      G.pupils[p.pid] = p;
+      G.pupils[p.pid] = p; placeInTeam(p);
       if (G.phase === 'playing') deal(p);
     }
   }
@@ -207,8 +209,8 @@ function onAnswer(pid, m) {
       catchMade.doubled = frenzyOn();
       if (catchMade.doubled) catchMade.kg = Math.round(catchMade.kg * 20) / 10;
       p.kg = Math.round((p.kg + catchMade.kg) * 10) / 10; p.catches++;
-      if (!p.biggest || catchMade.kg > p.biggest.kg) p.biggest = { name: catchMade.name, tier: catchMade.tier, kg: catchMade.kg };
-      if (!G.biggest || catchMade.kg > G.biggest.kg) G.biggest = { who: p.name, name: catchMade.name, tier: catchMade.tier, shape: catchMade.shape, kg: catchMade.kg };
+      if (!p.biggest || catchMade.kg > p.biggest.kg) p.biggest = { name: catchMade.name, tier: catchMade.tier, shape: catchMade.shape, icon: catchMade.icon, kg: catchMade.kg };
+      if (!G.biggest || catchMade.kg > G.biggest.kg) G.biggest = { who: p.name, name: catchMade.name, tier: catchMade.tier, shape: catchMade.shape, icon: catchMade.icon, kg: catchMade.kg };
     } else {
       gain = Math.round(LB.BASE * multFor(p.streak)); p.score += gain;
     }
@@ -226,6 +228,7 @@ function onAnswer(pid, m) {
     lockMs: right ? 0 : LB.WRONG_LOCK_MS, next: qPayload(p)
   };
   send(ch, 'result', p.lastResult);
+  if (!fishing() && race) { updateRace(); const rid = G.settings.teams && p.team != null ? 'team' + p.team : pid; if (right) race.boost(rid); else race.trip(rid); }
   persist(); liveRender();
 }
 
@@ -298,6 +301,34 @@ function frenzyTick() {
 }
 function broadcastState() { Object.values(G.pupils).forEach(p => send(chans.get(p.pid), 'state', stateFor(p))); }
 
+/* ---------- teams: pupils' scores add up for their team. Nothing to buy, no power-ups. ---------- */
+const teamDefs = () => (window.APP.teams[G.subject] || window.APP.teams.none).slice(0, G.settings.teams || 0);
+const teamOf = p => (G.settings.teams && p.team != null ? teamDefs()[p.team] : null);
+function placeInTeam(p) {
+  if (!G.settings.teams) { p.team = null; return; }
+  const counts = teamDefs().map((_, i) => Object.values(G.pupils).filter(x => x !== p && x.team === i).length);
+  const least = Math.min(...counts), open = counts.map((c, i) => [c, i]).filter(([c]) => c === least).map(([, i]) => i);
+  p.team = open[Math.floor(Math.random() * open.length)];
+}
+function shuffleTeams() {
+  const ps = shuffle(Object.values(G.pupils)), n = G.settings.teams;
+  ps.forEach((p, i) => (p.team = n ? i % n : null));
+}
+function teamTotals() {
+  return teamDefs().map(([name, colour], i) => {
+    const members = Object.values(G.pupils).filter(p => p.team === i);
+    return { i, name, colour, members, total: members.reduce((n, p) => n + val(p), 0), correct: members.reduce((n, p) => n + p.correct, 0), answered: members.reduce((n, p) => n + p.answered, 0) };
+  }).sort((a, b) => b.total - a.total || b.correct - a.correct);
+}
+const teamChip = p => { const t = teamOf(p); return t ? `<span class="team-dot" style="--team:${t[1]}" title="${esc(t[0])}"></span>` : ''; };
+function teamsBarHTML() {
+  if (!G.settings.teams) return '';
+  const ts = teamTotals(), top = Math.max(1, ...ts.map(t => t.total));
+  return `<div class="teams-bar">${ts.map((t, k) => `<div class="team-total" style="--team:${t.colour}">
+    <div class="team-head"><span class="lb-rank">${k + 1}</span><b>${esc(t.name)}</b><span class="hint">${t.members.length}</span></div>
+    <div class="team-num">${fmtVal(t.total)}</div><div class="meter"><i style="width:${Math.round(100 * t.total / top)}%;background:var(--team)"></i></div></div>`).join('')}</div>`;
+}
+
 /* ---------- ranking & results ---------- */
 const acc = p => (p.answered ? p.correct / p.answered : 0);
 const enough = p => (p.answered >= LB.MIN_FOR_ACCURACY ? 1 : 0);
@@ -318,7 +349,8 @@ function reviewFor(p) {
 }
 function finalFor(p) {
   const list = ranked();
-  return { rank: list.indexOf(p) + 1, of: list.length, score: p.score, kg: p.kg, biggest: p.biggest, mode: G.settings.mode, answered: p.answered, correct: p.correct, best: p.best, rankBy: G.settings.rankBy, review: reviewFor(p) };
+  const tt = G.settings.teams ? teamTotals() : [], tp = tt.findIndex(t => t.i === p.team);
+  return { team: tp >= 0 ? { name: tt[tp].name, colour: tt[tp].colour, place: tp + 1, of: tt.length, total: fmtVal(tt[tp].total) } : null, rank: list.indexOf(p) + 1, of: list.length, score: p.score, kg: p.kg, biggest: p.biggest, mode: G.settings.mode, answered: p.answered, correct: p.correct, best: p.best, rankBy: G.settings.rankBy, review: reviewFor(p) };
 }
 function questionRows() {
   return G.questions.map(q => {
@@ -370,9 +402,10 @@ function downloadCSV() {
 async function download() {
   try { await window.APP.loadXLSX(); } catch (e) { return; }
   const fish = fishing();
-  const pupils = [['Rank', 'Name', fish ? 'Total kg' : 'Points', 'Answered', 'Correct', 'Accuracy %', 'Best streak', ...(fish ? ['Fish caught', 'Biggest fish', 'Biggest fish kg'] : [])]];
-  ranked().forEach((p, i) => pupils.push([i + 1, p.name, fish ? p.kg : p.score, p.answered, p.correct, p.answered ? Math.round(100 * acc(p)) : '', p.best,
-    ...(fish ? [p.catches, p.biggest ? `${p.biggest.name} (${LB.FISH_TIERS[p.biggest.tier].name})` : '', p.biggest ? p.biggest.kg : ''] : [])]));
+  const unit = LB.catchUnit(G.subject), noun = unit ? 'treasure' : 'fish';
+  const pupils = [['Rank', 'Name', ...(G.settings.teams ? ['Team'] : []), fish ? LB.catchLabel(G.subject) : 'Points', 'Answered', 'Correct', 'Accuracy %', 'Best streak', ...(fish ? [unit ? 'Treasures found' : 'Fish caught', `Best ${noun}`, `Best ${noun} ${unit || 'kg'}`] : [])]];
+  ranked().forEach((p, i) => pupils.push([i + 1, p.name, ...(G.settings.teams ? [teamOf(p) ? teamOf(p)[0] : ''] : []), fish ? (unit ? Math.round(p.kg * 10) : p.kg) : p.score, p.answered, p.correct, p.answered ? Math.round(100 * acc(p)) : '', p.best,
+    ...(fish ? [p.catches, p.biggest ? `${p.biggest.name} (${LB.FISH_TIERS[p.biggest.tier].name})` : '', p.biggest ? (unit ? Math.round(p.biggest.kg * 10) : p.biggest.kg) : ''] : [])]));
   const qs = [['Question', 'Times answered', 'Correct %', 'Most common wrong answer', 'Times chosen', 'Answer 1', 'Answer 2', 'Answer 3', 'Answer 4', 'Correct answer']];
   questionRows().forEach(r => {
     const counts = r.q.answers.map((a, j) => `${a} (${j === r.q.correct ? r.st.right : (r.st.wrong[j] || 0)})`);
@@ -383,6 +416,12 @@ async function download() {
   const s1 = XLSX.utils.aoa_to_sheet(pupils); s1['!cols'] = [{ wch: 6 }, { wch: 22 }, { wch: 9 }, { wch: 10 }, { wch: 9 }, { wch: 11 }, { wch: 12 }, { wch: 11 }, { wch: 30 }, { wch: 15 }];
   const s2 = XLSX.utils.aoa_to_sheet(qs); s2['!cols'] = [{ wch: 50 }, { wch: 14 }, { wch: 10 }, { wch: 26 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
   XLSX.utils.book_append_sheet(wb, s1, 'Pupils');
+  if (G.settings.teams) {
+    const tsh = XLSX.utils.aoa_to_sheet([['Place', 'Team', fish ? LB.catchLabel(G.subject) : 'Points', 'Pupils', 'Answered', 'Correct', 'Accuracy %'],
+      ...teamTotals().map((t, k) => [k + 1, t.name, fish && unit ? Math.round(t.total * 10) : t.total, t.members.map(p => p.name).join(', '), t.answered, t.correct, t.answered ? Math.round(100 * t.correct / t.answered) : ''])]);
+    tsh['!cols'] = [{ wch: 6 }, { wch: 18 }, { wch: 10 }, { wch: 50 }, { wch: 10 }, { wch: 9 }, { wch: 11 }];
+    XLSX.utils.book_append_sheet(wb, tsh, 'Teams');
+  }
   const pq = XLSX.utils.json_to_sheet(pupilQuestionRows());
   pq['!cols'] = [{ wch: 11 }, { wch: 24 }, { wch: 8 }, { wch: 18 }, { wch: 44 }, { wch: 24 }, { wch: 7 }, { wch: 7 }, { wch: 7 }, { wch: 8 }, { wch: 8 }, { wch: 9 }, { wch: 30 }];
   XLSX.utils.book_append_sheet(wb, pq, 'By pupil and question');
@@ -458,12 +497,28 @@ function liveRender() {
     if (b) { const top = b.scrollTop; b.innerHTML = boardRows(); b.scrollTop = top; }
     if (s) { s.innerHTML = statsHTML(); typeset(s); }
     if (c) c.textContent = Object.keys(G.pupils).length;
+    const tl = document.getElementById('teams-live'); if (tl) tl.innerHTML = teamsBarHTML();
+    updateRace();
     const d = document.getElementById('drawer');
     if (d && ui.pupil) { const sc = d.querySelector('.drawer'); const top = sc ? sc.scrollTop : 0; d.innerHTML = pupilDrawer(); typeset(d); const n2 = d.querySelector('.drawer'); if (n2) n2.scrollTop = top; }
   }, 300);
 }
-const rankLabels = () => ({ points: fishing() ? 'Total kg' : 'Points', correct: 'Correct answers', accuracy: `Accuracy (${LB.MIN_FOR_ACCURACY}+ answers)` });
+const rankLabels = () => ({ points: fishing() ? LB.catchLabel(G.subject) : 'Points', correct: 'Correct answers', accuracy: `Accuracy (${LB.MIN_FOR_ACCURACY}+ answers)` });
 
+/* Classic mode: the top pupils race across the top of the projector screen */
+let race = null;
+function updateRace() {
+  const show = G.phase === 'playing' && !fishing() && Object.keys(G.pupils).length > 0;
+  let box = document.getElementById('race');
+  if (!show) { if (race) { race.stop(); race = null; } if (box) box.hidden = true; return; }
+  if (!box) { box = document.createElement('div'); box.id = 'race'; box.className = 'race'; box.setAttribute('aria-hidden', 'true'); document.body.insertBefore(box, app); }
+  box.hidden = false;
+  if (!race) race = RUNNER.race(box);
+  if (G.settings.teams) {   // one runner per team
+    G.teamRunners = G.teamRunners || teamDefs().map(() => RUNNER.pick(G.subject));
+    race.set(G.subject, teamTotals().map(t => ({ id: 'team' + t.i, name: t.name, kind: G.teamRunners[t.i], value: t.total })));
+  } else race.set(G.subject, ranked().slice(0, 6).map(p => ({ id: p.pid, name: p.name, kind: p.runner || 'athlete', value: val(p) })));
+}
 function render() {
   if (!G) return;
   if (G.phase === 'setup') app.innerHTML = setupHTML();
@@ -471,20 +526,25 @@ function render() {
   else if (G.phase === 'playing') app.innerHTML = playingHTML();
   else app.innerHTML = endedHTML();
   document.body.classList.toggle('water', G.phase === 'playing' && fishing());
+  updateRace();
   music.want(musicKey());
   typeset(app);
   autoScroll();
 }
 
 function fishingRulesHTML() {
-  return `<div class="fish-tiers">${LB.FISH_TIERS.map((t, i) => `<div class="fish-tier">${LB.fishSVG(i, t.fish[0][1], 64)}<b style="color:${t.colour}">${t.name}</b><span>${t.min}–${t.max} kg</span></div>`).join('')}</div>
-    <p class="hint" style="margin:0;max-width:60ch">Every right answer catches a fish. A streak raises the pupil’s lure level (up to 4), which roughly doubles the chance of Rare or better. A wrong answer catches nothing, resets the streak and pauses the pupil for 2 seconds. About every 3 minutes a 30-second ${esc(THEME.modes().event)} doubles every catch.</p>`;
+  const tr = THEME.treasure(G.subject);
+  const pics = LB.FISH_TIERS.map((t, i) => tr && tr.items[i] ? LB.itemSVG(tr.items[i][0][1], i, 64) : LB.fishSVG(i, t.fish[0][1], 64));
+  const range = t => tr ? `${(t.min * 10).toLocaleString('en-GB')}–${(t.max * 10).toLocaleString('en-GB')}` : `${t.min}–${t.max} kg`;
+  return `<div class="fish-tiers">${LB.FISH_TIERS.map((t, i) => `<div class="fish-tier">${pics[i]}<b style="color:${t.colour}">${t.name}</b><span>${range(t)}</span></div>`).join('')}</div>
+    <p class="hint" style="margin:0;max-width:60ch">${tr ? `Every right answer brings up a treasure, worth ${esc(tr.unit)}.` : 'Every right answer catches a fish.'} A streak raises the pupil’s lure level (up to 4), which roughly doubles the chance of Rare or better. A wrong answer ${tr ? 'finds nothing' : 'catches nothing'}, resets the streak and pauses the pupil for 2 seconds. About every 3 minutes a 30-second ${esc(THEME.modes().event)} doubles every ${tr ? 'find' : 'catch'}.</p>`;
 }
 function readSetup() {
   const m = document.getElementById('minutes'), r = document.getElementById('rankby');
   if (m) G.settings.minutes = +m.value;
   if (r) G.settings.rankBy = r.value;
   const sh = document.getElementById('shuffle'); if (sh) G.settings.shuffle = sh.checked;
+  const tm = document.getElementById('teams'); if (tm) G.settings.teams = +tm.value;
 }
 function setupHTML() {
   const r = ui.resume;
@@ -502,6 +562,7 @@ function setupHTML() {
       </div>
       <div class="ed-row" style="justify-content:center">
         <div class="field"><label for="minutes">Game length</label><select id="minutes">${[3, 5, 10, 15, 20, 30, 0].map(m => `<option value="${m}" ${G.settings.minutes === m ? 'selected' : ''}>${m ? m + ' minutes' : 'Until I end it'}</option>`).join('')}</select></div>
+        <div class="field"><label for="teams">Teams</label><select id="teams">${[0, 2, 3, 4].map(n => `<option value="${n}" ${G.settings.teams === n ? 'selected' : ''}>${n ? n + ' teams' : 'No teams'}</option>`).join('')}</select></div>
         <label class="tog-row" style="align-self:flex-end;padding-bottom:8px"><input type="checkbox" id="shuffle" ${G.settings.shuffle ? 'checked' : ''}> Shuffle answer order</label>
         <div class="field"><label for="rankby">Rank pupils by</label><select id="rankby">${Object.entries(rankLabels()).map(([k, v]) => `<option value="${k}" ${G.settings.rankBy === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
       </div>
@@ -531,7 +592,10 @@ function lobbyHTML() {
     </section>
     <div class="main-head" style="margin-top:24px"><div><h1><span id="count">${list.length}</span> ${list.length === 1 ? 'pupil' : 'pupils'} joined</h1><p>Click a name to remove that pupil.</p></div>
       <div class="head-acts"><button class="btn primary big-go" data-act="start" ${list.length ? '' : 'disabled'}>Start game</button></div></div>
-    <div class="names">${list.length ? list.map(p => `<button class="name-chip pop" data-act="ask-kick" data-id="${p.pid}" title="Remove ${esc(p.name)}">${esc(p.name)}</button>`).join('') : '<p class="hint">Waiting for pupils to join…</p>'}</div>
+    ${G.settings.teams && list.length ? `<div class="ed-row" style="margin-bottom:10px"><button class="btn small" data-act="shuffle-teams">Shuffle teams</button></div>
+      <div class="team-cols">${teamDefs().map(([name, colour], i) => `<div class="team-col" style="--team:${colour}"><h3>${esc(name)} <span class="hint">${list.filter(p => p.team === i).length}</span></h3>
+        <div class="names">${list.filter(p => p.team === i).map(p => `<button class="name-chip pop" data-act="ask-kick" data-id="${p.pid}" title="Remove ${esc(p.name)}">${esc(p.name)}</button>`).join('')}</div></div>`).join('')}</div>`
+    : `<div class="names">${list.length ? list.map(p => `<button class="name-chip pop" data-act="ask-kick" data-id="${p.pid}" title="Remove ${esc(p.name)}">${esc(p.name)}</button>`).join('') : '<p class="hint">Waiting for pupils to join…</p>'}</div>`}
     ${kickConfirm()}
   </div>`;
 }
@@ -545,7 +609,7 @@ function boardRows() {
   if (!list.length) return '<p class="hint" style="padding:12px">No pupils yet.</p>';
   return list.map((p, i) => `<div class="lb-row ${i < 3 ? 'top' + (i + 1) : ''}">
     <span class="lb-rank">${i + 1}</span>
-    <button class="lb-name" data-act="pupil" data-id="${p.pid}" title="See ${esc(p.name)}’s answers">${esc(p.name)}${p.streak >= 3 ? LB.flames(p.streak) : ''}</button>
+    <button class="lb-name" data-act="pupil" data-id="${p.pid}" title="See ${esc(p.name)}’s answers">${teamChip(p)}${esc(p.name)}${p.streak >= 3 ? LB.flames(p.streak) : ''}</button>
     <span class="lb-num ${by === 'points' ? 'key' : ''}">${fmtVal(val(p))}</span>
     <span class="lb-num ${by === 'correct' ? 'key' : ''}">${p.correct}/${p.answered}</span>
     <span class="lb-num ${by === 'accuracy' ? 'key' : ''}">${p.answered ? Math.round(100 * acc(p)) + '%' : '–'}</span>
@@ -562,8 +626,8 @@ function statsHTML() {
   const answered = ps.reduce((n, p) => n + p.answered, 0), correct = ps.reduce((n, p) => n + p.correct, 0);
   const rows = questionRows().filter(r => r.st.seen).sort((a, b) => a.pct - b.pct || b.st.seen - a.st.seen);
   const big = G.biggest;
-  const bigHTML = fishing() ? `<h3 class="side-h">Biggest catch so far</h3>${big
-    ? `<div class="big-catch">${LB.fishSVG(big.tier, big.shape, 96)}<div><b>${esc(big.who)}</b><span style="color:${LB.FISH_TIERS[big.tier].colour}">${LB.FISH_TIERS[big.tier].name} ${esc(big.name)}</span><span class="lb-num key">${LB.fmtKg(big.kg)}</span></div></div>`
+  const bigHTML = fishing() ? `<h3 class="side-h">${LB.catchUnit(G.subject) ? 'Best treasure so far' : 'Biggest catch so far'}</h3>${big
+    ? `<div class="big-catch">${LB.catchSVG(big, 96)}<div><b>${esc(big.who)}</b><span style="color:${LB.FISH_TIERS[big.tier].colour}">${LB.FISH_TIERS[big.tier].name} ${esc(big.name)}</span><span class="lb-num key">${LB.fmtCatch(big.kg)}</span></div></div>`
     : '<p class="hint">No fish yet.</p>'}` : '';
   return `${bigHTML}<div class="summary" style="grid-template-columns:repeat(2,minmax(0,1fr))">
       <div class="stat"><div class="k">Answers</div><div class="v">${answered}</div></div>
@@ -593,7 +657,7 @@ function playingHTML() {
     </div>
     ${kickConfirm()}
     <div class="host-grid">
-      <section style="min-width:0"><h2 class="side-h">Leaderboard · ranked by ${rankLabels()[G.settings.rankBy].toLowerCase()}</h2>${boardHTML()}</section>
+      <section style="min-width:0"><div id="teams-live">${teamsBarHTML()}</div><h2 class="side-h">Leaderboard · ranked by ${rankLabels()[G.settings.rankBy].toLowerCase()}</h2>${boardHTML()}</section>
       <aside id="stats" style="min-width:0">${statsHTML()}</aside>
     </div><div id="drawer">${pupilDrawer()}</div></div>`;
 }
@@ -630,8 +694,9 @@ function endedHTML() {
     <div class="toolbar"><a class="btn ghost small" href="teacher.html">← Library</a><span class="sp"></span>${LB.mark}</div>
     <div class="main-head"><div><span class="qlabel">Game over · ${esc(G.title)}</span><h1 style="font-size:clamp(32px,5vw,52px)">Results</h1></div>
       <div class="head-acts"><button class="btn primary" data-act="download">⇩ Download results</button><button class="btn" data-act="download-csv" title="One row per pupil per question, for importing into another program">⇩ Pupil weaknesses (CSV)</button><button class="btn" data-act="again">Play again</button></div></div>
-    ${podium.length ? `<div class="podium">${podium.map((p, i) => `<div class="pod pod${i + 1}"><span class="pod-rank">${i + 1}</span><span class="pod-name">${esc(p.name)}</span><span class="pod-score">${G.settings.rankBy === 'points' ? (fishing() ? LB.fmtKg(p.kg) : p.score.toLocaleString('en-GB') + ' pts') : G.settings.rankBy === 'correct' ? p.correct + ' correct' : Math.round(100 * acc(p)) + '%'}</span></div>`).join('')}</div>` : ''}
-    ${fishing() && G.biggest ? `<div class="big-catch wide-catch">${LB.fishSVG(G.biggest.tier, G.biggest.shape, 110)}<div><span class="qlabel">Biggest catch of the game</span><b>${esc(G.biggest.who)}</b><span style="color:${LB.FISH_TIERS[G.biggest.tier].colour}">${LB.FISH_TIERS[G.biggest.tier].name} ${esc(G.biggest.name)} · ${LB.fmtKg(G.biggest.kg)}</span></div></div>` : ''}
+    ${G.settings.teams ? `<h2 class="side-h">Teams</h2>${teamsBarHTML()}<h2 class="side-h" style="margin-top:18px">Pupils</h2>` : ''}
+    ${podium.length ? `<div class="podium">${podium.map((p, i) => `<div class="pod pod${i + 1}"><span class="pod-rank">${i + 1}</span><span class="pod-name">${esc(p.name)}</span><span class="pod-score">${G.settings.rankBy === 'points' ? (fishing() ? LB.fmtCatch(p.kg) : p.score.toLocaleString('en-GB') + ' pts') : G.settings.rankBy === 'correct' ? p.correct + ' correct' : Math.round(100 * acc(p)) + '%'}</span></div>`).join('')}</div>` : ''}
+    ${fishing() && G.biggest ? `<div class="big-catch wide-catch">${LB.catchSVG(G.biggest, 110)}<div><span class="qlabel">${LB.catchUnit(G.subject) ? 'Best treasure of the game' : 'Biggest catch of the game'}</span><b>${esc(G.biggest.who)}</b><span style="color:${LB.FISH_TIERS[G.biggest.tier].colour}">${LB.FISH_TIERS[G.biggest.tier].name} ${esc(G.biggest.name)} · ${LB.fmtCatch(G.biggest.kg)}</span></div></div>` : ''}
     <div class="summary" style="margin-block:20px">
       <div class="stat"><div class="k">Pupils</div><div class="v">${ps.length}</div></div>
       <div class="stat"><div class="k">Answers</div><div class="v">${answered}</div></div>
@@ -707,6 +772,7 @@ app.addEventListener('click', async e => {
       render();
       break;
     case 'start': startGame(); break;
+    case 'shuffle-teams': shuffleTeams(); Object.values(G.pupils).forEach(p => send(chans.get(p.pid), 'state', stateFor(p))); persist(); render(); break;
     case 'ask-kick': ui.kick = t.dataset.id; render(); break;
     case 'no-kick': ui.kick = null; render(); break;
     case 'kick': ui.kick = null; if (ui.pupil === t.dataset.id) ui.pupil = null; kick(t.dataset.id); break;

@@ -44,13 +44,14 @@ window.APP = {
       keys: ['I', 'II', 'III', 'IV'],
       pixels: ['#8f1d1d', '#b8892b', '#f3ede1', '#2a1a12', '#6b2a6e', '#d9c9a3'],
       music: { lobby: 'assets/music/latin-lobby.mp3', game: 'assets/music/latin.mp3' },
-      fish: [
-        ['Sardina', 'Perca', 'Gobius', 'Scomber'],
-        ['Mullus', 'Aurata', 'Lupus'],
-        ['Murena', 'Salmo', 'Rhombus'],
-        ['Acipenser', 'Thunnus', 'Silurus'],
-        ['Delphinus Aureus', 'Piscis Neptuni', 'Leviathan']
-      ]
+      // Fishing mode brings up treasures instead of fish, worth denarii. [name, picture], five tiers from Common to Legendary.
+      treasure: { unit: 'denarii', items: [
+        [['Rusty sword', 'sword'], ['Chipped pot', 'pot'], ['Old sandal', 'sandal'], ['Bronze coin', 'coin']],
+        [['Oil lamp', 'lamp'], ['Greek vase', 'vase'], ['Wax tablet', 'tablet']],
+        [['Legionary helmet', 'helmet'], ['Model Trojan horse', 'horse'], ['Silver ring', 'ring']],
+        [['Golden laurel wreath', 'wreath'], ['Marble bust', 'bust'], ['Golden eagle', 'eagle']],
+        [['Golden Fleece', 'fleece'], ['Neptune’s trident', 'trident'], ['Shield of Achilles', 'shield']]
+      ] }
     },
     french: {
       label: 'French',
@@ -58,14 +59,20 @@ window.APP = {
       modes: { classic: 'Le Concours', fishing: 'La Pêche', event: 'La Grande Marée' },
       pixels: ['#0055a4', '#ffffff', '#e1352b', '#14213d', '#f6f1e6', '#0055a4'],
       music: { lobby: 'assets/music/french-lobby.mp3', game: 'assets/music/french.mp3' },
-      fish: [
-        ['Goujon', 'Perche', 'Gardon', 'Maquereau'],
-        ['Truite', 'Brème', 'Bar'],
-        ['Brochet', 'Saumon', 'Carpe'],
-        ['Esturgeon', 'Thon rouge', 'Silure'],
-        ['Poisson d’Or', 'Capitaine Cabillaud', 'Poisson d’Avril']
-      ]
+      treasure: { unit: 'francs', items: [
+        [['Garlic bulb', 'garlic'], ['Stale baguette', 'baguette'], ['Old beret', 'beret'], ['Snail shell', 'snail']],
+        [['Bottle of perfume', 'perfume'], ['Copy of Les Misérables', 'book'], ['Pétanque boule', 'boule']],
+        [['Napoleon’s hat', 'bicorne'], ['Accordion', 'accordion'], ['Painter’s palette', 'palette']],
+        [['Model Eiffel Tower', 'eiffel'], ['Golden croissant', 'croissant'], ['Royal crown', 'crown']],
+        [['Sword of Joan of Arc', 'sword'], ['The Golden Snail', 'snail'], ['The Great Golden Cheese', 'cheese']]
+      ] }
     }
+  },
+  // Team names for team games, by subject, with each team's colour
+  teams: {
+    latin: [['Romani', '#8f1d1d'], ['Graeci', '#2d5a8c'], ['Galli', '#4f7a3f'], ['Carthaginienses', '#b8892b']],
+    french: [['Les Bleus', '#0055a4'], ['Les Rouges', '#e1352b'], ['Les Verts', '#2e8b6e'], ['Les Jaunes', '#c9962a']],
+    none: [['Red', '#c7392b'], ['Blue', '#1f5fae'], ['Green', '#1f8a5c'], ['Gold', '#b8892b']]
   },
   // Takeover colours for the Ludgrove pages (used when a game ends and the page returns home).
   pixels: ['#002664', '#ffffff', '#dbe6f6', '#0a3a86', '#f4f6fa', '#002664'],

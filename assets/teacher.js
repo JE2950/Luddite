@@ -40,6 +40,7 @@ const mkQ = (q = '', answers = ['', '', '', ''], correct = 0) => ({ id: uid(), q
 const getSet = id => sets.find(s => s.id === id);
 const mine = s => me && s.owner === me.id;
 const folderName = id => (folders.find(f => f.id === id) || {}).name || 'Unfiled';
+const hasDupes = q => { const ks = q.answers.map(a => String(a).trim().toLowerCase()).filter(Boolean); return new Set(ks).size < ks.length; };
 const validQ = q => q.q.trim() && q.answers.filter(a => String(a).trim()).length >= 2 && String(q.answers[q.correct] ?? '').trim();
 const ownerLabel = s => (s.owner_email || '').split('@')[0] || 'a teacher';
 
@@ -549,7 +550,7 @@ function renderEditor() {
   </div>`;
 }
 function renderQ(q, i, total) {
-  const bad = !validQ(q);
+  const bad = !validQ(q), dup = hasDupes(q);
   const rows = q.answers.map((a, j) => `
     <div class="ans-row ${q.correct === j ? 'correct' : ''}">
       <label class="pick" for="c-${q.id}-${j}" title="Mark as correct answer"><input type="radio" id="c-${q.id}-${j}" name="cor-${q.id}" data-field="correct" data-i="${j}" ${q.correct === j ? 'checked' : ''}><span class="tag t${j}">${j + 1}</span></label>
@@ -558,7 +559,7 @@ function renderQ(q, i, total) {
     </div>`).join('');
   return `<article class="q ${bad ? 'warn' : ''}" data-qid="${q.id}">
     <div class="q-edit">
-      <div class="q-head"><span class="q-num">Q${i + 1}</span>${bad ? '<span class="q-warn">Needs a question and at least 2 answers</span>' : ''}<span class="sp"></span>
+      <div class="q-head"><span class="q-num">Q${i + 1}</span>${bad ? '<span class="q-warn">Needs a question and at least 2 answers</span>' : dup ? '<span class="q-warn">Two answers are the same: pupils will only see one</span>' : ''}<span class="sp"></span>
         <button class="btn ghost small" data-act="up" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
         <button class="btn ghost small" data-act="down" ${i === total - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
         <button class="btn ghost small danger" data-act="rm-q" aria-label="Delete question">Delete</button></div>
@@ -580,8 +581,9 @@ function refreshQ(q) {
   clearTimeout(pv._t); pv._t = setTimeout(() => typeset(pv), 200);
   card.classList.toggle('warn', !validQ(q));
   const w = card.querySelector('.q-warn');
-  if (!validQ(q) && !w) card.querySelector('.q-num').insertAdjacentHTML('afterend', '<span class="q-warn">Needs a question and at least 2 answers</span>');
-  if (validQ(q) && w) w.remove();
+  const msg = !validQ(q) ? 'Needs a question and at least 2 answers' : hasDupes(q) ? 'Two answers are the same: pupils will only see one' : '';
+  if (w && (!msg || w.textContent !== msg)) w.remove();
+  if (msg && !card.querySelector('.q-warn')) card.querySelector('.q-num').insertAdjacentHTML('afterend', `<span class="q-warn">${msg}</span>`);
   card.querySelectorAll('.ans-row').forEach((r, j) => r.classList.toggle('correct', q.correct === j));
 }
 
@@ -660,7 +662,10 @@ function rowsToQuestions(rows) {
     if (pairs.length > 4) { warnings.push(`Row ${rowNo}: skipped, more than 4 answers.`); return; }
     const ci = pairs.findIndex(p => p[0] === Number(corr));
     if (ci < 0) { warnings.push(`Row ${rowNo}: skipped, correct answer ${corr} is blank.`); return; }
-    questions.push(mkQ(text, pairs.map(p => p[1]), ci));
+    const d = dedupeAnswers(pairs.map(p => p[1]), ci);
+    if (d.dropped) warnings.push(`Row ${rowNo}: the same answer appeared twice; the copy was removed.`);
+    if (d.answers.length < 2) { warnings.push(`Row ${rowNo}: skipped, needs at least 2 different answers.`); return; }
+    questions.push(mkQ(text, d.answers, d.correct));
   });
   return { questions, warnings, mode: 'simple' };
 }
@@ -682,20 +687,37 @@ function parseQuizlet(text, dir, n) {
     cards.push({ term, def });
   });
   if (cards.length < 2) return { questions: [], warnings: warnings.concat(['A Quizlet set needs at least 2 cards to make wrong answers from.']), mode: 'quizlet', cards: cards.length };
-  const same = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
-  const make = (q, right, pool) => {
-    const wrong = shuffle(pool.filter(x => !same(x, right)).filter((x, i, a) => a.findIndex(y => same(x, y)) === i)).slice(0, n - 1);
-    const answers = shuffle([right, ...wrong]);
-    return mkQ(q, answers, answers.indexOf(right));
+  // A form can belong to several cards (domini: genitive singular, nominative plural, vocative plural).
+  // Cards that share a term (or a definition) become ONE question whose right answer lists every meaning,
+  // and nothing that is also right can appear as a wrong answer.
+  const key = x => x.trim().toLowerCase();
+  const group = (from, to) => {
+    const m = new Map();
+    cards.forEach(c => { const k = key(c[from]); const g = m.get(k) || { show: c[from], all: [] }; if (!g.all.some(x => key(x) === key(c[to]))) g.all.push(c[to]); m.set(k, g); });
+    return [...m.values()];
   };
-  const defs = cards.map(c => c.def), terms = cards.map(c => c.term), questions = [];
-  cards.forEach(c => {
-    if (dir !== 'def') questions.push(make(c.term, c.def, defs));
-    if (dir !== 'term') questions.push(make(c.def, c.term, terms));
-  });
-  const distinct = new Set(defs.map(d => d.toLowerCase())).size;
-  if (distinct < n) warnings.push(`Only ${distinct} different definitions, so some questions have fewer than ${n} answers.`);
+  const make = (g, pool) => {
+    const right = g.all.join(' / '), bad = new Set(g.all.map(key));
+    const wrong = shuffle(pool.filter(x => !bad.has(key(x)) && key(x) !== key(right)).filter((x, i, a) => a.findIndex(y => key(y) === key(x)) === i)).slice(0, n - 1);
+    const answers = shuffle([right, ...wrong]);
+    return mkQ(g.show, answers, answers.indexOf(right));
+  };
+  const questions = [], byTerm = group('term', 'def'), byDef = group('def', 'term');
+  // Wrong answers for "show the term" are other definitions; a group's combined answer is offered whole
+  const defPool = byDef.map(g => g.show), termPool = byTerm.map(g => g.show);
+  if (dir !== 'def') byTerm.forEach(g => questions.push(make(g, defPool)));
+  if (dir !== 'term') byDef.forEach(g => questions.push(make(g, termPool)));
+  const merged = (dir !== 'def' ? byTerm : []).concat(dir !== 'term' ? byDef : []).filter(g => g.all.length > 1);
+  if (merged.length) warnings.push(`${merged.length} ${merged.length === 1 ? 'card has' : 'cards have'} more than one right answer, so ${merged.length === 1 ? 'its answers are' : 'their answers are'} combined (e.g. ${merged[0].show}: ${merged[0].all.join(' / ')}). No wrong answer is ever another right one.`);
+  const distinct = Math.min(defPool.length, termPool.length);
+  if (distinct < n) warnings.push(`Only ${distinct} different answers, so some questions have fewer than ${n} answers.`);
   return { questions, warnings, mode: 'quizlet', cards: cards.length };
+}
+/* Remove an answer that repeats another (ignoring case and spaces), keeping the right one */
+function dedupeAnswers(answers, correct) {
+  const k = x => String(x).trim().toLowerCase(), right = k(answers[correct]), seen = new Set([right]);
+  const out = answers.filter((a, i) => i === correct || (k(a) && !seen.has(k(a)) && seen.add(k(a))));
+  return { answers: out, correct: out.indexOf(answers[correct]), dropped: out.length < answers.filter(a => k(a)).length };
 }
 function parsePaste(text) {
   const unq = c => { const m = c.match(/^"([\s\S]*)"$/); return m ? m[1].replace(/""/g, '"') : c; };
@@ -705,8 +727,8 @@ function parsePaste(text) {
 /* ---------- play (solo preview of the pupil screen) ---------- */
 function startGame(setId) {
   const s = getSet(setId);
-  const qs = s.questions.filter(validQ).map(q => ({ ...q, answers: [...q.answers] }));
-  game = { set: s, qs, order: [], cur: null, phase: 'setup', minutes: ui.lastMinutes ?? 10, score: 0, streak: 0, best: 0, answered: 0, correct: 0, stats: {}, endAt: null, last: null, lastGain: 0 };
+  const qs = s.questions.filter(validQ).map(q => { const d = dedupeAnswers(q.answers.filter((a, i) => i === q.correct || String(a).trim()), q.answers.filter((a, i) => i === q.correct || String(a).trim()).indexOf(q.answers[q.correct])); return { ...q, answers: d.answers, correct: d.correct }; });
+  game = { set: s, qs, order: [], cur: null, phase: 'setup', runner: RUNNER.pick(THEME.subjectFor(s)), minutes: ui.lastMinutes ?? 10, score: 0, streak: 0, best: 0, answered: 0, correct: 0, stats: {}, endAt: null, last: null, lastGain: 0 };
   qs.forEach(q => (game.stats[q.id] = { seen: 0, right: 0, wrong: {} }));
   view = { ...view, name: 'play', setId };
   render();
@@ -741,6 +763,7 @@ function answer(j) {
   }
   game.phase = 'feedback';
   renderPlayBody();
+  if (j === q.correct) RUNNER.boost(); else RUNNER.trip();
 }
 function endGame() { if (!game) return; stopTimer(); game.phase = 'over'; renderPlayBody(); }
 function stopTimer() { if (game && game.timer) { clearInterval(game.timer); game.timer = null; } }
@@ -768,6 +791,7 @@ function renderPlay() {
 function renderPlayBody() {
   const b = document.getElementById('play-body'); if (!b) return;
   b.innerHTML = playBodyHTML(); typeset(b);
+  if (game && ['ready', 'question', 'feedback'].includes(game.phase)) RUNNER.show(THEME.current, game.runner); else RUNNER.hide();
   const f = b.querySelector('[data-autofocus]'); if (f) f.focus();
 }
 function answersHTML(q, done) {
@@ -1013,7 +1037,7 @@ app.addEventListener('click', async e => {
     case 'next': if (Date.now() >= (game.lockUntil || 0)) nextQ(); break;
     case 'end-game': endGame(); break;
     case 'again': { const back = view.returnTo; startGame(game.set.id); view.returnTo = back; break; }
-    case 'leave-play': stopTimer(); game = null; view = view.returnTo || { name: 'library', folder: 'mine' }; delete view.returnTo; ui = { search: ui.search }; render(); THEME.takeover(null, render); break;
+    case 'leave-play': stopTimer(); game = null; RUNNER.hide(); view = view.returnTo || { name: 'library', folder: 'mine' }; delete view.returnTo; ui = { search: ui.search }; render(); THEME.takeover(null, render); break;
   }
 });
 

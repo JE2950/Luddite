@@ -14,7 +14,7 @@ function tag() {
   untag();
   const used = new Set();
   MORPH.forEach(([name, sel]) => {
-    const el = [...document.querySelectorAll(sel)].find(e => !used.has(e) && !e.closest('.takeover-banner') && visible(e));
+    const el = [...document.querySelectorAll(sel)].find(e => !used.has(e) && visible(e));
     if (el) { used.add(el); el.style.viewTransitionName = name; el.dataset.morph = name; }
   });
 }
@@ -25,7 +25,7 @@ const T = window.THEME = {
   list: () => Object.keys(C.subjects || {}),
   modes: () => Object.assign({}, C.modes, (def(T.current) || {}).modes),
   keyLabel: j => { const k = (def(T.current) || {}).keys; return k && k[j] ? k[j] : String(j + 1); },
-  fishNames: s => (def(s) || {}).fish || null,
+  treasure: s => (def(s) || {}).treasure || null,
   // key is 'lobby', 'classic' or 'fishing'; a subject has a lobby track and one game track
   music: (s, key) => { const m = (def(s) || {}).music; if (!m) return null; if (typeof m === 'string') return m; return key === 'lobby' ? m.lobby || null : m.game || m[key] || null; },
 
@@ -71,8 +71,7 @@ const T = window.THEME = {
 
   /* Takeover, like PowerPoint's Morph: a wave sweeps across the screen from left to right, carrying the
      new look with it, while the logo, the main heading, the main panel and the main button glide and
-     reshape from where they were to where they now sit. The subject's name pops up on a card as the wave
-     passes. Browsers without view transitions get a soft fade instead. `mid` redraws the page in the new look. */
+     reshape from where they were to where they now sit. Browsers without view transitions get a soft fade instead. `mid` redraws the page in the new look. */
   takeover(s, mid) {
     s = def(s) ? s : null;
     if (s === T.current && !T._busy) { if (mid) mid(); return Promise.resolve(); }
@@ -81,14 +80,9 @@ const T = window.THEME = {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches || !document.body) { swap(); return Promise.resolve(); }
 
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    const label = def(s) ? def(s).banner || def(s).label : (C.school || C.name);
-    const banner = document.createElement('div');
-    banner.className = 'takeover-banner to-' + (s || 'home');
-    banner.setAttribute('aria-hidden', 'true');
-    banner.innerHTML = `<span>${String(label).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</span>`;
-    // The banner's font is fixed (style.css) and loaded before it shows, so the text never resizes mid-animation
+    // Load the new look's fonts first, so text doesn't change shape partway through
     const face = s === 'latin' ? 'Cinzel' : s === 'french' ? '"Playfair Display"' : '"Libre Baskerville"';
-    const fonts = document.fonts ? Promise.all([document.fonts.load(`700 48px ${face}`, label), document.fonts.load(`700 32px ${face}`)]) : null;
+    const fonts = document.fonts ? Promise.all([document.fonts.load(`700 48px ${face}`), document.fonts.load(`700 32px ${face}`)]) : null;
     const fontReady = Promise.race([fonts, wait(700)]).catch(() => {});
 
     T._busy = (async () => {
@@ -99,25 +93,20 @@ const T = window.THEME = {
         const wave = document.createElement('div');
         wave.className = 'lx-wave to-' + (s || 'home'); wave.setAttribute('aria-hidden', 'true');
         const vt = document.startViewTransition(() => { swap(); document.body.appendChild(wave); });
-        vt.finished.finally(() => wave.remove());
-        if (s) vt.ready.then(() => { document.body.appendChild(banner); banner.getBoundingClientRect(); setTimeout(() => banner.classList.add('is-in'), 380); }, () => {});
+        vt.finished.then(() => wave.remove(), () => wave.remove());
         try { await vt.finished; } catch (e) { if (T.current !== s) swap(); }
         document.documentElement.classList.remove('vt-morph');
         untag();
-        if (s) { if (!banner.isConnected) document.body.appendChild(banner); banner.classList.add('is-in'); await wait(520); }
       } else {
-        if (s) { document.body.appendChild(banner); banner.getBoundingClientRect(); banner.classList.add('is-in'); }
         const veil = document.createElement('div');
         veil.className = 'takeover-veil to-' + (s || 'home');
-        document.body.insertBefore(veil, banner);
+        document.body.appendChild(veil);
         veil.getBoundingClientRect(); veil.classList.add('is-in');
         await wait(460); swap();
         await wait(120); veil.classList.remove('is-in');
         await wait(560); veil.remove();
         await wait(180);
       }
-      // Returning to the Ludgrove pages shows no name card
-      if (banner.isConnected) { banner.classList.remove('is-in'); banner.classList.add('is-out'); await wait(400); banner.remove(); }
       T._busy = null;
       const n = T._next; T._next = null;
       if (n && n.s !== T.current) return T.takeover(n.s, n.mid);

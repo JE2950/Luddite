@@ -26,7 +26,8 @@ let tickT = null, saveT = null;
 const pupilName = () => `${me.first} ${me.initial}`;
 const validQ = q => q && String(q.q || '').trim() && (q.answers || []).filter(a => String(a).trim()).length >= 2 && String((q.answers || [])[q.correct] ?? '').trim();
 const cleanSet = s => ({ ...s, questions: (s.questions || []).filter(validQ).map(q => {
-  const kept = q.answers.map((a, j) => [String(a), j]).filter(([a]) => a.trim());
+  const seen = new Set([String(q.answers[q.correct]).trim().toLowerCase()]);
+  const kept = q.answers.map((a, j) => [String(a), j]).filter(([a, j]) => a.trim() && (j === q.correct || !seen.has(a.trim().toLowerCase()) && seen.add(a.trim().toLowerCase())));
   return { id: q.id, q: q.q, answers: kept.map(k => k[0]), correct: kept.findIndex(k => k[1] === q.correct) };
 }) });
 const fishing = () => A && A.mode === 'fishing';
@@ -70,7 +71,7 @@ function begin(set) {
   const st = statsFor(set);
   G = {
     set, id: crypto.randomUUID ? crypto.randomUUID() : ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)),
-    token: LB.rid(24), score: 0, kg: 0, streak: 0, best: 0, answered: 0, correct: 0, log: [], deck: [], last: null,
+    runner: RUNNER.pick(THEME.subjectFor(set)), token: LB.rid(24), score: 0, kg: 0, streak: 0, best: 0, answered: 0, correct: 0, log: [], deck: [], last: null,
     weakIds: new Set(st.weak.map(q => q.id)), endAt: A.minutes ? Date.now() + A.minutes * 60000 : null, lockUntil: 0, phase: 'ready', biggest: null
   };
   V = { screen: 'play' }; render(); startTick(); save(false);
@@ -108,6 +109,7 @@ function answer(shown) {
     setTimeout(() => { if (V.screen === 'play' && G && G.phase === 'feedback') render(); }, LB.WRONG_LOCK_MS + 20);
   }
   G.phase = 'feedback'; render();
+  if (!fishing()) { if (right) RUNNER.boost(); else RUNNER.trip(); }
   if (G.answered % 5 === 0) save(false);
 }
 function next() {
@@ -149,7 +151,7 @@ function hud() {
   const time = `<div class="stat"><div class="k">Time left</div><div class="v" id="hud-time">${G.endAt ? fmtTime(G.endAt - Date.now()) : '∞'}</div></div>`;
   const end = `<button class="btn" data-a="finish" style="height:auto">Finish</button>`;
   if (fishing()) return `<div class="hud pupil-hud fish-hud" style="grid-template-columns:repeat(3,minmax(0,1fr)) auto">${time}
-    <div class="stat"><div class="k">Total catch</div><div class="v">${LB.fmtKg(G.kg)}</div></div>
+    <div class="stat"><div class="k">Total ${LB.catchNoun()}</div><div class="v">${LB.fmtCatch(G.kg)}</div></div>
     <div class="stat mult"><div class="k">Lure level</div><div class="v">${LB.lureFor(G.streak + 1)}</div></div>${end}</div>`;
   const m = G.phase === 'question' ? multFor(G.streak + 1) : multFor(Math.max(1, G.streak));
   return `<div class="hud">${time}
@@ -170,7 +172,7 @@ function setsHTML() {
     const st = statsFor(s), subj = THEME.subjectFor(s);
     return `<button class="pick-set" data-a="pick" data-id="${esc(s.id)}">
       <span class="pick-title">${esc(s.title || 'Untitled set')}</span>
-      <span class="pick-meta">${subj ? `<span class="tag-chip subj subj-${subj}">${esc(THEME.label(subj))}</span>` : ''}${s.questions.length} questions${st.plays ? ` · played ${st.plays}× · best ${fishing() ? LB.fmtKg(st.best) : st.best.toLocaleString('en-GB')}` : ''}${st.weak.length ? ` · ${st.weak.length} to practise` : ''}</span>
+      <span class="pick-meta">${subj ? `<span class="tag-chip subj subj-${subj}">${esc(THEME.label(subj))}</span>` : ''}${s.questions.length} questions${st.plays ? ` · played ${st.plays}× · best ${fishing() ? LB.fmtCatch(st.best) : st.best.toLocaleString('en-GB')}` : ''}${st.weak.length ? ` · ${st.weak.length} to practise` : ''}</span>
     </button>`;
   }).join('')}</div>`;
 }
@@ -199,7 +201,7 @@ function render() {
         <h1 style="font-size:clamp(28px,5vw,44px)">${esc(s.title || 'Untitled set')}</h1>
         ${st.plays ? `<div class="summary" style="max-width:560px;grid-template-columns:repeat(3,minmax(0,1fr))">
           <div class="stat"><div class="k">Plays</div><div class="v">${st.plays}</div></div>
-          <div class="stat"><div class="k">Best</div><div class="v">${fishing() ? LB.fmtKg(st.best) : st.best.toLocaleString('en-GB')}</div></div>
+          <div class="stat"><div class="k">Best</div><div class="v">${fishing() ? LB.fmtCatch(st.best) : st.best.toLocaleString('en-GB')}</div></div>
           <div class="stat"><div class="k">Accuracy</div><div class="v">${st.acc == null ? '–' : st.acc + '%'}</div></div></div>` : ''}
         ${st.weak.length ? `<div class="review"><h2 class="side-h">Questions to practise (they come up more often)</h2><ol>${st.weak.slice(0, 8).map(q => `<li><div class="rq">${esc(q.q)}</div><div class="ra"><span class="right">Answer: ${esc(q.answers[q.correct])}</span></div></li>`).join('')}</ol></div>` : ''}
         <button class="btn primary big-go" data-a="go" data-autofocus>Play</button></div></div>`;
@@ -212,9 +214,9 @@ function render() {
       if (done) {
         const right = G.log[G.log.length - 1].right;
         verdict = right
-          ? (G.fish ? `<div class="verdict good pop"><div><h3>${esc(G.fish.name)}! ${LB.fmtKg(G.fish.kg)}</h3><p>${LB.FISH_TIERS[G.fish.tier].name} · streak ${G.streak}</p></div>`
+          ? (G.fish ? `<div class="verdict good pop catch-row"><div>${LB.catchSVG(G.fish, 72)}</div><div><h3>${esc(G.fish.name)}! ${LB.fmtCatch(G.fish.kg)}</h3><p>${LB.FISH_TIERS[G.fish.tier].name} · streak ${G.streak}</p></div>`
                     : `<div class="verdict good pop"><div><h3>Correct! +${G.gain}</h3><p>Streak ${G.streak} · ${fmtMult(multFor(G.streak))}</p></div>`)
-          : `<div class="verdict bad pop"><div><h3>${fishing() ? 'The fish got away' : 'Not quite'}</h3><p>The right answer is highlighted.${G.lost > 1 ? ` Streak of ${G.lost} lost.` : ''}</p></div>`;
+          : `<div class="verdict bad pop"><div><h3>${fishing() ? LB.missText() : 'Not quite'}</h3><p>The right answer is highlighted.${G.lost > 1 ? ` Streak of ${G.lost} lost.` : ''}</p></div>`;
         verdict += `<button class="btn primary go ${locked ? 'locking' : ''}" id="go" data-a="next" ${locked ? 'disabled' : 'data-autofocus'}><span class="lbl">${locked ? 'Wait a moment…' : 'Next question'}</span><span class="bar"></span></button></div>`;
       }
       h = `<div class="wrap play">${hud()}<div class="stage pop"><span class="qlabel">Question ${G.answered + (done ? 0 : 1)}</span><div class="qtext">${esc(G.cur.q.q)}</div>${answersHTML(done)}
@@ -227,7 +229,7 @@ function render() {
       const review = [...wrong].map(([qid, c]) => { const q = G.set.questions.find(x => x.id === qid); return q ? { q: q.q, yours: q.answers[c], answer: q.answers[q.correct] } : null; }).filter(Boolean);
       h = `<div class="wrap play"><div class="stage center pop">
         <span class="qlabel">Finished · ${esc(G.set.title || '')}</span>
-        <div class="hero-n">${fishing() ? LB.fmtKg(G.kg) : G.score.toLocaleString('en-GB')}</div><span class="hint">${fishing() ? 'caught' : 'points'}</span>
+        <div class="hero-n">${fishing() ? LB.fmtCatch(G.kg) : G.score.toLocaleString('en-GB')}</div><span class="hint">${fishing() ? (LB.catchUnit() ? 'found' : 'caught') : 'points'}</span>
         <div class="summary" style="max-width:560px;grid-template-columns:repeat(3,minmax(0,1fr))">
           <div class="stat"><div class="k">Correct</div><div class="v">${G.correct}/${G.answered}</div></div>
           <div class="stat"><div class="k">Accuracy</div><div class="v">${acc}%</div></div>
@@ -241,6 +243,7 @@ function render() {
   }
   app.innerHTML = h;
   document.body.classList.toggle('water', V.screen === 'play' && fishing());
+  if (V.screen === 'play' && !fishing() && G) RUNNER.show(THEME.current, G.runner); else RUNNER.hide();
   typeset(app);
   const f = app.querySelector('[data-autofocus]') || (V.screen === 'name' && document.getElementById(me.first ? 'a-init' : 'a-first'));
   if (f) f.focus();

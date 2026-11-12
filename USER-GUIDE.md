@@ -84,6 +84,16 @@ Use your laptop on the projector. **Your browser tab runs the game**, so keep it
 
 If you close the tab by accident, open **Host live game** on the same set within 3 hours and click **Resume it**. The pupils carry on where they were.
 
+## Teams
+
+In the host settings, choose **2 teams**, **3 teams** or **4 teams**. Pupils go into the smallest team as they join; **Shuffle teams** in the lobby mixes them up again. Each pupil's points (or treasure) count towards his team. The board shows the team totals above the leaderboard, each pupil sees his team on his screen, and the results and download include a **Teams** sheet. Team names follow the subject: Romani, Graeci, Galli and Carthaginienses for Latin; Les Bleus, Les Rouges, Les Verts and Les Jaunes for French.
+
+## The runner and the treasures
+
+- **Classic mode:** a character runs across the top of each pupil's screen. A right answer gives him a burst of speed; a wrong one trips him over. Latin sets give a man or woman in a toga, a gladiator, or now and then a charioteer; French sets give a mime, a chef with a frying pan or a peasant in a garlic necklace. On the board, the top six pupils (or the teams) race each other, placed by their scores.
+- **Fishing mode with a Latin or French set:** each right answer brings up a treasure instead of a fish, worth denarii or francs: from rusty swords and garlic bulbs up to the Golden Fleece and the Great Golden Cheese.
+- **Your own pictures:** put PNGs in `assets/runners` (see the note there) and they replace the drawn characters.
+
 ## Assignments and revision folders
 
 Pupils can also play on their own, outside lessons, and you see how they get on.
