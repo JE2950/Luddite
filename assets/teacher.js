@@ -445,8 +445,21 @@ function renderImport() {
   const tab = ui.importTab || 'paste';
   const r = ui.importResult;
   return `<section class="import" aria-label="Import questions">
-    <div class="tabs"><button class="${tab === 'paste' ? 'on' : ''}" data-act="imp-tab" data-tab="paste">Paste from Excel</button><button class="${tab === 'file' ? 'on' : ''}" data-act="imp-tab" data-tab="file">Upload a file</button></div>
-    ${tab === 'paste' ? `
+    <div class="tabs"><button class="${tab === 'paste' ? 'on' : ''}" data-act="imp-tab" data-tab="paste">Paste from Excel</button><button class="${tab === 'quizlet' ? 'on' : ''}" data-act="imp-tab" data-tab="quizlet">Paste from Quizlet</button><button class="${tab === 'file' ? 'on' : ''}" data-act="imp-tab" data-tab="file">Upload a file</button></div>
+    ${tab === 'quizlet' ? `
+      <p class="hint" style="margin:0">In Quizlet, open the set, choose <b>⋯ → Export</b>, leave the settings as they are (Tab between term and definition, New line between rows), click <b>Copy text</b> and paste it here. Each card becomes a question; the wrong answers come from other cards in the set.</p>
+      <div class="ed-row">
+        <div class="field"><label for="ql-dir">Questions show</label><select id="ql-dir">
+          ${[['term', 'Term → pick the definition'], ['def', 'Definition → pick the term'], ['both', 'Both ways (two questions per card)']].map(([v, l]) => `<option value="${v}" ${(ui.qlDir || 'term') === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select></div>
+        <div class="field"><label for="ql-n">Answers per question</label><select id="ql-n">
+          ${[4, 3, 2].map(n => `<option value="${n}" ${(ui.qlN || 4) === n ? 'selected' : ''}>${n}</option>`).join('')}
+        </select></div>
+      </div>
+      <label class="sr" for="import-quizlet">Pasted Quizlet set</label>
+      <textarea id="import-quizlet" placeholder="puella&#9;girl&#10;rex&#9;king">${esc(ui.qlText || '')}</textarea>
+      <div class="ed-row"><button class="btn primary" data-act="imp-quizlet">Check cards</button></div>`
+    : tab === 'paste' ? `
       <p class="hint" style="margin:0">Copy rows from Excel and paste them here. One question per row: the question, then 2–4 answers, then the number of the correct answer.</p>
       <div class="fmt"><table><tr><th>Question</th><th>Answer 1</th><th>Answer 2</th><th>Answer 3</th><th>Answer 4</th><th>Correct #</th></tr>
         ${EXAMPLE_ROWS.map(row => `<tr>${row.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table></div>
@@ -459,8 +472,9 @@ function renderImport() {
       <label class="sr" for="import-file">Spreadsheet file</label>
       <input type="file" id="import-file" accept=".xlsx,.xls,.csv">`}
     ${r ? `<div class="result">
-      <strong>${r.questions.length ? `Found ${r.questions.length} ${r.questions.length === 1 ? 'question' : 'questions'}${r.mode === 'blooket' ? ' (Blooket template)' : ''}.` : 'No questions found.'}</strong>
+      <strong>${r.questions.length ? `Found ${r.questions.length} ${r.questions.length === 1 ? 'question' : 'questions'}${r.mode === 'blooket' ? ' (Blooket template)' : r.mode === 'quizlet' ? ` from ${r.cards} Quizlet cards` : ''}.` : 'No questions found.'}</strong>
       ${r.warnings.length ? `<ul>${r.warnings.slice(0, 12).map(w => `<li>${esc(w)}</li>`).join('')}${r.warnings.length > 12 ? `<li>…and ${r.warnings.length - 12} more</li>` : ''}</ul>` : ''}
+      ${r.mode === 'quizlet' && r.questions.length ? `<div class="hint">First question: <b>${esc(r.questions[0].q)}</b> with answers ${r.questions[0].answers.map((a, j) => j === r.questions[0].correct ? `<b>${esc(a)}</b> ✓` : esc(a)).join(', ')}</div>` : ''}
       ${r.questions.length ? `<div class="ed-row"><button class="btn primary small" data-act="imp-add">Add to the end of this set</button><button class="btn small" data-act="imp-replace">Replace all questions</button></div>` : ''}
     </div>` : ''}
   </section>`;
@@ -499,6 +513,39 @@ function rowsToQuestions(rows) {
     questions.push(mkQ(text, pairs.map(p => p[1]), ci));
   });
   return { questions, warnings, mode: 'simple' };
+}
+/* Quizlet export: one card per line, term and definition separated by a tab (Quizlet's default).
+   Also copes with the other separators Quizlet offers: comma, " - ", and ";" between cards. */
+function parseQuizlet(text, dir, n) {
+  const warnings = [];
+  let lines = text.replace(/\r/g, '').split('\n');
+  if (lines.filter(l => l.trim()).length === 1 && /;/.test(lines[0]) && !/\t/.test(lines[0])) lines = lines[0].split(';');
+  const cards = [];
+  lines.forEach((line, k) => {
+    if (!line.trim()) return;
+    let i = line.indexOf('\t'), w = 1;
+    if (i < 0) { i = line.indexOf(' - '); w = 3; }
+    if (i < 0) { i = line.indexOf(','); w = 1; }
+    if (i < 0) { warnings.push(`Line ${k + 1}: skipped, no tab between the term and the definition.`); return; }
+    const term = line.slice(0, i).trim(), def = line.slice(i + w).trim();
+    if (!term || !def) { warnings.push(`Line ${k + 1}: skipped, the term or definition is blank.`); return; }
+    cards.push({ term, def });
+  });
+  if (cards.length < 2) return { questions: [], warnings: warnings.concat(['A Quizlet set needs at least 2 cards to make wrong answers from.']), mode: 'quizlet', cards: cards.length };
+  const same = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const make = (q, right, pool) => {
+    const wrong = shuffle(pool.filter(x => !same(x, right)).filter((x, i, a) => a.findIndex(y => same(x, y)) === i)).slice(0, n - 1);
+    const answers = shuffle([right, ...wrong]);
+    return mkQ(q, answers, answers.indexOf(right));
+  };
+  const defs = cards.map(c => c.def), terms = cards.map(c => c.term), questions = [];
+  cards.forEach(c => {
+    if (dir !== 'def') questions.push(make(c.term, c.def, defs));
+    if (dir !== 'term') questions.push(make(c.def, c.term, terms));
+  });
+  const distinct = new Set(defs.map(d => d.toLowerCase())).size;
+  if (distinct < n) warnings.push(`Only ${distinct} different definitions, so some questions have fewer than ${n} answers.`);
+  return { questions, warnings, mode: 'quizlet', cards: cards.length };
 }
 function parsePaste(text) {
   const unq = c => { const m = c.match(/^"([\s\S]*)"$/); return m ? m[1].replace(/""/g, '"') : c; };
@@ -771,6 +818,10 @@ app.addEventListener('click', async e => {
       try { navigator.clipboard.writeText(txt).then(() => { if (msg) msg.textContent = 'Copied. Paste into Excel to start your own.'; }, fallback); } catch (err) { fallback(); }
       break;
     }
+    case 'imp-quizlet':
+      ui.qlText = document.getElementById('import-quizlet').value;
+      ui.qlDir = document.getElementById('ql-dir').value; ui.qlN = +document.getElementById('ql-n').value;
+      ui.importResult = parseQuizlet(ui.qlText, ui.qlDir, ui.qlN); render(); break;
     case 'imp-check': ui.importText = document.getElementById('import-paste').value; ui.importResult = parsePaste(ui.importText); render(); break;
     case 'imp-add': case 'imp-replace': {
       const blankOnly = set.questions.length === 1 && !set.questions[0].q.trim() && !set.questions[0].answers.some(a => a.trim());

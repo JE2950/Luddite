@@ -52,6 +52,7 @@ Sets save automatically as you type. Watch for **Saved** next to the logo.
 
 Click **Import questions**:
 - **Paste from Excel:** one question per row, in the columns *Question, Answer 1, Answer 2, Answer 3, Answer 4, Correct answer number (1–4)*. Answers 3 and 4 can be blank. Copy the rows in Excel and paste them into the box, then click **Check rows**. It lists any rows it skipped and why.
+- **Paste from Quizlet:** in Quizlet, open the set and choose **⋯ → Export**. Keep the default settings (tab between term and definition, new line between rows), click **Copy text** and paste it in. Choose whether questions show the term, the definition, or both (two questions per card), and how many answers each has. The wrong answers come from other cards in the same set, so a set needs at least 4 cards for 4 answers. Click **Check cards** to see the first question before adding.
 - **Upload a file:** an .xlsx or .csv in that layout, or a Blooket spreadsheet import template exactly as Blooket gives it.
 
 Then choose **Add to the end of this set** or **Replace all questions**.
