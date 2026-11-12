@@ -31,7 +31,9 @@ function persist(now) {
 function stored() {
   try {
     const g = JSON.parse(localStorage.getItem(STORE) || 'null');
-    if (g && g.setId === setId && g.phase !== 'setup' && Date.now() - g.savedAt < 3 * 3600e3) return g;
+    // A saved game is only for resuming after an accidental close. After 3 hours it is wiped from this laptop.
+    if (g && Date.now() - g.savedAt >= 3 * 3600e3) { localStorage.removeItem(STORE); return null; }
+    if (g && g.setId === setId && g.phase !== 'setup' && g.kx) return g;
   } catch (e) {}
   return null;
 }
@@ -44,7 +46,7 @@ async function boot() {
   if (!setId) return fatal('No set chosen', 'Open the teacher library and click Host on a set.');
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return fatal('Sign in first', 'Hosting a game needs a teacher account.', true);
-  const { data, error } = await sb.from('sets').select('id,title,questions').eq('id', setId).single();
+  const { data, error } = await sb.from('sets').select('*').eq('id', setId).single();
   if (error || !data) return fatal('Couldn’t load that set', 'Check your connection, or go back to the library and try again.');
   // Drop blank answer slots and keep the correct answer pointing at the right one
   const questions = (data.questions || []).filter(validQ).map(q => {
@@ -54,15 +56,17 @@ async function boot() {
   if (!questions.length) return fatal('This set has no finished questions', 'Add at least one question with two answers first.');
   G = {
     code: null, setId, title: data.title || 'Untitled set', questions,
+    subject: THEME.def(data.subject) ? data.subject : null, kx: null,
     settings: { minutes: 10, rankBy: 'points', mode: 'classic', shuffle: true },
     paused: false, pausedAt: null,
     biggest: null, frenzyUntil: null, nextFrenzyAt: null,
     phase: 'setup', endAt: null, startedAt: null, endedAt: null,
-    pupils: {}, blocked: [], qstats: {}
+    pupils: {}, blocked: [], blockedNames: [], qstats: {}
   };
   questions.forEach(q => (G.qstats[q.id] = { seen: 0, right: 0, wrong: {} }));
   ui.resume = stored();
   render();
+  THEME.takeover(G.subject, render);   // the subject's look takes over from the library's
 }
 function fatal(title, msg, signIn) {
   app.innerHTML = `<div class="gate"><div class="gate-card">${LB.mark}<h1 style="font-size:24px">${esc(title)}</h1><p>${esc(msg)}</p>
@@ -89,7 +93,7 @@ async function openLobby() {
 }
 async function pupilChannel(pid) {
   if (chans.has(pid)) return chans.get(pid);
-  const ch = await subscribe(LB.pupilChannel(G.code, pid), {
+  const ch = await subscribe(LB.pupilChannel(G.code, G.pupils[pid].chan), {
     hello: () => { const p = G.pupils[pid]; if (p) { p.lastActive = Date.now(); send(ch, 'state', stateFor(p)); } },
     answer: m => onAnswer(pid, m)
   });
@@ -102,9 +106,9 @@ function dropChannel(pid) {
 }
 
 /* ---------- game logic ---------- */
-function newPupil(name, token) {
-  let pid; do { pid = rid(10); } while (G.pupils[pid]);
-  return { pid, token, name, score: 0, kg: 0, catches: 0, biggest: null, streak: 0, best: 0, answered: 0, correct: 0, deck: [], last: null, cur: null, perm: null, log: [], seq: 0, lockUntil: 0, lastActive: Date.now(), lastResult: null, joinedAt: Date.now() };
+function newPupil(name, pub, chan) {
+  let pid; do { pid = rid(10); } while (G.pupils[pid]);   // pid is this tab's own label for the pupil; it is never sent anywhere
+  return { pid, pub, chan, name, score: 0, kg: 0, catches: 0, biggest: null, streak: 0, best: 0, answered: 0, correct: 0, deck: [], last: null, cur: null, perm: null, log: [], seq: 0, lockUntil: 0, lastActive: Date.now(), lastResult: null, joinedAt: Date.now() };
 }
 function deal(p) {
   if (!p.deck.length) {
@@ -129,7 +133,7 @@ function qPayload(p) {
 }
 function stateFor(p) {
   return {
-    phase: G.phase, title: G.title, name: p.name,
+    phase: G.phase, title: G.title, name: p.name, subject: G.subject,
     endIn: G.phase === 'playing' && G.endAt ? G.endAt - (G.paused ? G.pausedAt : Date.now()) : null,
     mode: G.settings.mode, kg: p.kg, lure: LB.lureFor(p.streak + 1),
     frenzyIn: frenzyOn() ? G.frenzyUntil - (G.paused ? G.pausedAt : Date.now()) : 0,
@@ -142,23 +146,32 @@ function stateFor(p) {
 }
 
 async function onJoin(m) {
-  const reply = body => send(lobby, 'joined', { token: m.token, ...body });
-  if (!m.token) return;
+  if (!LB.kx.validPub(m.pub) || !G.kx) return;
+  // Replies go out on the lobby, addressed by the pupil's public key. They carry nothing another pupil could use.
+  const reply = body => send(lobby, 'joined', { to: m.pub, hpub: G.kx.pub, ...body });
   if (G.phase === 'ended') return reply({ ok: false, msg: 'This game has finished.' });
-  if (G.blocked.includes(m.token)) return reply({ ok: false, msg: 'Your teacher has removed you from this game.' });
   const chk = LB.checkName(m.name);
   if (!chk.ok) return reply({ ok: false, msg: chk.msg });
-  const list = Object.values(G.pupils);
-  let p = list.find(x => x.token === m.token);
+  if (G.blocked.includes(m.pub) || G.blockedNames.includes(chk.name.toLowerCase())) return reply({ ok: false, msg: 'Your teacher has removed you from this game.' });
+  let p = Object.values(G.pupils).find(x => x.pub === m.pub);
   if (!p) {
-    const same = list.find(x => x.name.toLowerCase() === chk.name.toLowerCase());
-    if (same) {
-      const recentlyActive = Date.now() - same.lastActive < 30000;
-      if (G.phase === 'lobby' || recentlyActive) return reply({ ok: false, msg: `Someone called ${chk.name} is already playing. Add your surname initial.` });
+    let chan;
+    try { chan = await LB.kx.secret(G.kx.priv, m.pub, G.code); } catch (e) { return; }
+    p = Object.values(G.pupils).find(x => x.pub === m.pub);   // the same join can arrive twice
+    const same = !p && Object.values(G.pupils).find(x => x.name.toLowerCase() === chk.name.toLowerCase());
+    if (p) { /* already in */ }
+    else if (same) {
+      // A second laptop using a name already in the game only gets in if the teacher has just allowed it
+      if (!(same.allowRejoinUntil > Date.now())) {
+        return reply({ ok: false, msg: G.phase === 'lobby'
+          ? `Someone called ${chk.name} has already joined. Add your surname initial.`
+          : `Someone called ${chk.name} is already playing. If that is you, ask your teacher to let you back in.` });
+      }
       const old = chans.get(same.pid); if (old) send(old, 'replaced', {});
-      same.token = m.token; p = same;               // rejoin on a new device: score kept
+      dropChannel(same.pid);
+      same.pub = m.pub; same.chan = chan; same.allowRejoinUntil = 0; p = same;   // score kept
     } else {
-      p = newPupil(chk.name, m.token);
+      p = newPupil(chk.name, m.pub, chan);
       G.pupils[p.pid] = p;
       if (G.phase === 'playing') deal(p);
     }
@@ -166,7 +179,7 @@ async function onJoin(m) {
   p.lastActive = Date.now();
   const ch = await pupilChannel(p.pid);
   if (!ch) return reply({ ok: false, msg: 'The game couldn’t connect you. Try again.' });
-  reply({ ok: true, pid: p.pid, name: p.name });
+  reply({ ok: true, name: p.name });
   persist(); liveRender();
 }
 
@@ -190,7 +203,7 @@ function onAnswer(pid, m) {
     p.streak++; p.best = Math.max(p.best, p.streak); p.correct++; st.right++;
     if (fishing()) {
       // Cast with the lure earned by the streak so far, then land a fish
-      catchMade = LB.rollFish(LB.lureFor(p.streak));
+      catchMade = LB.rollFish(LB.lureFor(p.streak), G.subject);
       catchMade.doubled = frenzyOn();
       if (catchMade.doubled) catchMade.kg = Math.round(catchMade.kg * 20) / 10;
       p.kg = Math.round((p.kg + catchMade.kg) * 10) / 10; p.catches++;
@@ -233,7 +246,7 @@ function endGame() {
 function kick(pid) {
   const p = G.pupils[pid]; if (!p) return;
   send(chans.get(pid), 'kicked', {});
-  G.blocked.push(p.token);
+  G.blocked.push(p.pub); G.blockedNames.push(p.name.toLowerCase());
   setTimeout(() => dropChannel(pid), 500);
   delete G.pupils[pid];
   persist(); render();
@@ -287,11 +300,13 @@ function broadcastState() { Object.values(G.pupils).forEach(p => send(chans.get(
 
 /* ---------- ranking & results ---------- */
 const acc = p => (p.answered ? p.correct / p.answered : 0);
+const enough = p => (p.answered >= LB.MIN_FOR_ACCURACY ? 1 : 0);
 function ranked() {
   const by = G.settings.rankBy;
   return Object.values(G.pupils).sort((a, b) => {
     if (by === 'correct') return b.correct - a.correct || val(b) - val(a) || a.name.localeCompare(b.name);
-    if (by === 'accuracy') return (b.answered > 0) - (a.answered > 0) || acc(b) - acc(a) || b.answered - a.answered || a.name.localeCompare(b.name);
+    // Accuracy: pupils with enough answers rank above those without, so one lucky answer can't win
+    if (by === 'accuracy') return enough(b) - enough(a) || acc(b) - acc(a) || b.answered - a.answered || a.name.localeCompare(b.name);
     return val(b) - val(a) || b.correct - a.correct || a.name.localeCompare(b.name);
   });
 }
@@ -359,8 +374,12 @@ const music = {
     const start = () => {
       if (this.el) { this.el.pause(); this.el = null; }
       if (!key) return;
-      const a = new Audio(TRACKS[key]); a.loop = true; a.volume = 0; this.el = a;
-      a.play().then(() => this.fadeTo(this.target(), 1200)).catch(() => {});
+      // The subject's own track if there is one, otherwise the default track
+      const own = THEME.music(G.subject, key);
+      const a = new Audio(own || TRACKS[key]); a.loop = true; a.volume = 0; this.el = a;
+      const go = () => a.play().then(() => this.fadeTo(this.target(), 1200)).catch(() => {});
+      if (own) a.addEventListener('error', () => { if (this.el === a) { a.src = TRACKS[key]; go(); } }, { once: true });
+      go();
     };
     if (this.el) this.fadeTo(0, 800, start); else start();
   },
@@ -396,7 +415,7 @@ function liveRender() {
     if (d && ui.pupil) { const sc = d.querySelector('.drawer'); const top = sc ? sc.scrollTop : 0; d.innerHTML = pupilDrawer(); typeset(d); const n2 = d.querySelector('.drawer'); if (n2) n2.scrollTop = top; }
   }, 300);
 }
-const rankLabels = () => ({ points: fishing() ? 'Total kg' : 'Points', correct: 'Correct answers', accuracy: 'Accuracy' });
+const rankLabels = () => ({ points: fishing() ? 'Total kg' : 'Points', correct: 'Correct answers', accuracy: `Accuracy (${LB.MIN_FOR_ACCURACY}+ answers)` });
 
 function render() {
   if (!G) return;
@@ -412,7 +431,7 @@ function render() {
 
 function fishingRulesHTML() {
   return `<div class="fish-tiers">${LB.FISH_TIERS.map((t, i) => `<div class="fish-tier">${LB.fishSVG(i, t.fish[0][1], 64)}<b style="color:${t.colour}">${t.name}</b><span>${t.min}–${t.max} kg</span></div>`).join('')}</div>
-    <p class="hint" style="margin:0;max-width:60ch">Every right answer catches a fish. A streak raises the pupil’s lure level (up to 4), which roughly doubles the chance of Rare or better. A wrong answer catches nothing, resets the streak and pauses the pupil for 2 seconds. About every 3 minutes a 30-second ${esc(window.APP.modes.event)} doubles every catch.</p>`;
+    <p class="hint" style="margin:0;max-width:60ch">Every right answer catches a fish. A streak raises the pupil’s lure level (up to 4), which roughly doubles the chance of Rare or better. A wrong answer catches nothing, resets the streak and pauses the pupil for 2 seconds. About every 3 minutes a 30-second ${esc(THEME.modes().event)} doubles every catch.</p>`;
 }
 function readSetup() {
   const m = document.getElementById('minutes'), r = document.getElementById('rankby');
@@ -431,8 +450,8 @@ function setupHTML() {
       <h1 style="font-size:clamp(30px,5vw,48px)">${esc(G.title)}</h1>
       <p class="hint" style="margin:0">${G.questions.length} ${G.questions.length === 1 ? 'question' : 'questions'}, shuffled for each pupil and repeated until time is up.</p>
       <div class="modes" role="radiogroup" aria-label="Game mode">
-        <button class="mode ${fishing() ? '' : 'on'}" role="radio" aria-checked="${!fishing()}" data-act="mode" data-mode="classic"><b>${esc(window.APP.modes.classic)}</b><span>Points for every right answer, boosted by streaks.</span></button>
-        <button class="mode fishing ${fishing() ? 'on' : ''}" role="radio" aria-checked="${fishing()}" data-act="mode" data-mode="fishing"><b>${esc(window.APP.modes.fishing)}</b><span>Right answers catch fish. Streaks bring rarer, heavier fish.</span></button>
+        <button class="mode ${fishing() ? '' : 'on'}" role="radio" aria-checked="${!fishing()}" data-act="mode" data-mode="classic"><b>${esc(THEME.modes().classic)}</b><span>Points for every right answer, boosted by streaks.</span></button>
+        <button class="mode fishing ${fishing() ? 'on' : ''}" role="radio" aria-checked="${fishing()}" data-act="mode" data-mode="fishing"><b>${esc(THEME.modes().fishing)}</b><span>Right answers catch fish. Streaks bring rarer, heavier fish.</span></button>
       </div>
       <div class="ed-row" style="justify-content:center">
         <div class="field"><label for="minutes">Game length</label><select id="minutes">${[3, 5, 10, 15, 20, 30, 0].map(m => `<option value="${m}" ${G.settings.minutes === m ? 'selected' : ''}>${m ? m + ' minutes' : 'Until I end it'}</option>`).join('')}</select></div>
@@ -449,7 +468,7 @@ function setupHTML() {
 function lobbyHTML() {
   const list = Object.values(G.pupils).sort((a, b) => a.joinedAt - b.joinedAt);
   return `<div class="wrap host">
-    <div class="toolbar"><button class="btn ghost small" data-act="cancel-lobby">← Cancel</button><span class="sp"></span>${musicHTML()}<span class="chip">${esc(G.title)}</span></div>
+    <div class="toolbar"><button class="btn ghost small" data-act="cancel-lobby">← Cancel</button><span class="sp"></span>${musicHTML()}${G.subject ? `<span class="chip subj">${esc(THEME.label(G.subject))}</span>` : ''}<span class="chip">${esc(G.title)}</span></div>
     <section class="join-banner">
       <div><span class="qlabel">Go to</span><div class="join-url">${esc(JOIN_URL)}</div></div>
       <div><span class="qlabel">Game code</span><div class="join-code">${esc(G.code)}</div></div>
@@ -462,7 +481,7 @@ function lobbyHTML() {
 }
 function kickConfirm() {
   const p = ui.kick && G.pupils[ui.kick];
-  return p ? `<div class="confirm" style="margin-top:16px">Remove ${esc(p.name)} from this game? They won’t be able to rejoin. <button class="btn small danger" data-act="kick" data-id="${p.pid}">Remove</button><button class="btn small ghost" data-act="no-kick">Keep</button></div>` : '';
+  return p ? `<div class="confirm" style="margin-top:16px">Remove ${esc(p.name)} from this game? That laptop and that name are blocked for the rest of the game. <button class="btn small danger" data-act="kick" data-id="${p.pid}">Remove</button><button class="btn small ghost" data-act="no-kick">Keep</button></div>` : '';
 }
 
 function boardRows() {
@@ -504,7 +523,7 @@ function statsHTML() {
 function playingHTML() {
   return `<div class="wrap host wide">
     ${G.paused ? `<div class="pause-banner" role="status"><b>Paused</b><span>Eyes on the board. Pupils’ screens are frozen.</span><button class="btn primary" data-act="resume-game">▶ Resume</button></div>` : ''}
-    ${frenzyOn() && !G.paused ? `<div class="frenzy-banner" role="status"><b>${esc(window.APP.modes.event)}!</b><span>Every catch weighs double for <span id="frenzy-left">${Math.ceil((G.frenzyUntil - Date.now()) / 1000)}</span>s</span></div>` : ''}
+    ${frenzyOn() && !G.paused ? `<div class="frenzy-banner" role="status"><b>${esc(THEME.modes().event)}!</b><span>Every catch weighs double for <span id="frenzy-left">${Math.ceil((G.frenzyUntil - Date.now()) / 1000)}</span>s</span></div>` : ''}
     <div class="host-bar">
       ${LB.mark}
       <div class="host-code"><span class="qlabel">Join at ${esc(JOIN_URL)}</span><b>${esc(G.code)}</b></div>
@@ -539,7 +558,11 @@ function pupilDrawer() {
         <span class="mk" aria-label="${e.right ? 'Right' : 'Wrong'}">${e.right ? '✓' : '✗'}</span>
         <div><div class="plog-q">${esc(q.q)}</div><div class="hint">Answered <strong>${esc(q.answers[e.choice])}</strong>${e.right ? '' : ` · right answer <strong>${esc(q.answers[q.correct])}</strong>`}</div></div></li>`; }).join('')}</ol>`
       : '<p class="hint">No answers yet.</p>'}
-    ${G.phase === 'playing' ? `<button class="btn small ghost danger" data-act="ask-kick" data-id="${p.pid}" style="margin-top:12px">Remove from game</button>` : ''}
+    ${G.phase === 'playing' ? `<div class="ed-row" style="margin-top:12px">
+      ${p.allowRejoinUntil > Date.now()
+        ? `<span class="hint">${esc(p.name)} can now join on another laptop with the same name, for the next 2 minutes.</span>`
+        : `<button class="btn small" data-act="allow-rejoin" data-id="${p.pid}">Let ${esc(p.name)} join on another laptop</button>`}
+      <button class="btn small ghost danger" data-act="ask-kick" data-id="${p.pid}">Remove from game</button></div>` : ''}
   </aside>`;
 }
 function endedHTML() {
@@ -595,6 +618,8 @@ app.addEventListener('click', async e => {
       readSetup();
       t.disabled = true; t.textContent = 'Opening…';
       G.code = String(Math.floor(100000 + Math.random() * 900000));
+      try { if (!LB.kx.ok) throw 0; G.kx = await LB.kx.newPair(); }
+      catch (err) { t.disabled = false; t.textContent = 'Open the lobby'; document.getElementById('setup-err').textContent = 'This browser can’t host a game. Open the page with https:// at the start of the address.'; return; }
       if (!(await openLobby())) {
         t.disabled = false; t.textContent = 'Open the lobby';
         document.getElementById('setup-err').textContent = 'Couldn’t open the lobby. Check your connection and try again.';
@@ -605,7 +630,8 @@ app.addEventListener('click', async e => {
     }
     case 'resume': {
       const r = ui.resume; ui.resume = null;
-      Object.assign(G, r);
+      Object.assign(G, r, { subject: G.subject });
+      G.blockedNames = G.blockedNames || [];
       t.disabled = true;
       if (G.phase !== 'ended') {
         await openLobby();
@@ -620,7 +646,7 @@ app.addEventListener('click', async e => {
     case 'cancel-lobby':
       Object.values(G.pupils).forEach(p => send(chans.get(p.pid), 'kicked', { cancelled: true }));
       setTimeout(() => { chans.forEach((c, pid) => dropChannel(pid)); if (lobby) sb.removeChannel(lobby); lobby = null; }, 400);
-      G.phase = 'setup'; G.pupils = {}; G.code = null;
+      G.phase = 'setup'; G.pupils = {}; G.code = null; G.kx = null; G.blocked = []; G.blockedNames = [];
       try { localStorage.removeItem(STORE); } catch (err) {}
       render();
       break;
@@ -633,6 +659,7 @@ app.addEventListener('click', async e => {
     case 'resume-game': setPaused(false); break;
     case 'pupil': ui.pupil = t.dataset.id; render(); break;
     case 'close-pupil': ui.pupil = null; render(); break;
+    case 'allow-rejoin': { const p = G.pupils[t.dataset.id]; if (p) { p.allowRejoinUntil = Date.now() + 120000; persist(); render(); } break; }
     case 'no-end': ui.confirmEnd = false; render(); break;
     case 'end': endGame(); break;
     case 'download': download(); break;

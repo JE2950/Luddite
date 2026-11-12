@@ -23,9 +23,37 @@ L.fmtMult = m => '×' + (Number.isInteger(m) ? m : m.toFixed(1));
 L.flames = streak => `<span class="flames" aria-hidden="true">${[1, 3, 5, 8].map(t => `<i class="${streak >= t ? 'on' : ''}"></i>`).join('')}</span>`;
 L.WRONG_LOCK_MS = 2000;
 
-/* Realtime channel names. Pupil traffic uses one private channel per pupil so it is not copied to the whole class. */
+/* Realtime channel names. Everyone can listen to the lobby channel, so nothing secret is sent on it.
+   Each pupil then gets a channel whose name only that pupil's browser and the teacher's tab can work out
+   (see L.kx), so one pupil cannot read or answer for another. */
 L.lobbyChannel = code => `lmb-${code}`;
-L.pupilChannel = (code, pid) => `lmb-${code}-${pid}`;
+L.pupilChannel = (code, secret) => `lmb-${code}-${secret}`;
+
+/* Key exchange (ECDH, P-256). The pupil and the teacher's tab each make a key pair and swap the public
+   halves over the lobby. Both then derive the same secret; anyone listening sees only the public halves. */
+const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = str => Uint8Array.from(atob(str), c => c.charCodeAt(0));
+const EC = { name: 'ECDH', namedCurve: 'P-256' };
+L.kx = {
+  ok: !!(window.crypto && crypto.subtle),
+  async newPair() {
+    const k = await crypto.subtle.generateKey(EC, true, ['deriveBits']);
+    return { pub: b64(await crypto.subtle.exportKey('raw', k.publicKey)), priv: await crypto.subtle.exportKey('jwk', k.privateKey) };
+  },
+  validPub: p => typeof p === 'string' && /^[A-Za-z0-9+/]{86,88}={0,2}$/.test(p),
+  async secret(privJwk, otherPub, code) {
+    const priv = await crypto.subtle.importKey('jwk', privJwk, EC, false, ['deriveBits']);
+    const pub = await crypto.subtle.importKey('raw', unb64(otherPub), EC, false, []);
+    const bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: pub }, priv, 256));
+    const tag = new TextEncoder().encode('quiz-channel:' + code);
+    const both = new Uint8Array(bits.length + tag.length); both.set(bits); both.set(tag, bits.length);
+    const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', both));
+    return Array.from(hash.slice(0, 16), b => b.toString(16).padStart(2, '0')).join('');
+  }
+};
+
+/* Ranking by accuracy only counts pupils who have answered at least this many questions */
+L.MIN_FOR_ACCURACY = 10;
 
 L.client = () => {
   const cfg = window.APP;
@@ -49,12 +77,15 @@ L.FISH_TIERS = [
 // Moderate boost: Rare-or-better goes from 15% at lure 1 to 31% at lure 4.
 L.LURE_ODDS = [null, [60, 25, 10, 4, 1], [52, 28, 13, 5.5, 1.5], [45, 30, 16, 7, 2], [38, 31, 19, 9, 3]];
 L.lureFor = streak => (streak >= 8 ? 4 : streak >= 5 ? 3 : streak >= 3 ? 2 : 1);
-L.rollFish = lure => {
+L.rollFish = (lure, subject) => {
   const odds = L.LURE_ODDS[Math.min(4, Math.max(1, lure))];
   let r = Math.random() * 100, t = 0;
   while (t < 4 && r >= odds[t]) { r -= odds[t]; t++; }
   const tier = L.FISH_TIERS[t];
-  const [name, shape] = tier.fish[Math.floor(Math.random() * tier.fish.length)];
+  const i = Math.floor(Math.random() * tier.fish.length);
+  const themed = window.THEME && window.THEME.fishNames(subject);   // subject sets use that subject's fish names
+  const shape = tier.fish[i][1];
+  const name = (themed && themed[t] && themed[t][i]) || tier.fish[i][0];
   const kg = Math.round((tier.min + (tier.max - tier.min) * Math.pow(Math.random(), 1.5)) * 10) / 10;
   return { name, shape, tier: t, tierName: tier.name, kg };
 };

@@ -1,6 +1,6 @@
-# Quiz Arena: how to use it
+# Ludus: how to use it
 
-Quiz Arena (or whatever you've renamed it) runs quick quiz games in class. You build sets of multiple-choice questions; pupils join a game on their own laptops with a 6-digit code and their first name, and everyone answers at their own pace. Pupils need no accounts, and nothing about them is stored online.
+Ludus (or whatever you've renamed it) runs quick quiz games in class. You build sets of multiple-choice questions; pupils join a game on their own laptops with a 6-digit code and their first name, and everyone answers at their own pace. Pupils need no accounts, and nothing about them is stored online.
 
 In this guide, "your site" means your Netlify address or your own domain. If you set up a `play.` address, pupils use that.
 
@@ -19,7 +19,7 @@ The left-hand side of the library has:
 - **Other teachers' sets:** everyone else's, which you can view, play or host
 - **My folders:** your own folders, private to you. Click **+ New folder** to add one; open a folder to rename or delete it. Deleting a folder moves its sets to Unfiled.
 
-The **search box** finds sets by name or tag (and by teacher, under Other teachers' sets). Clicking a tag on a set searches for it.
+The **search box** finds sets by name, tag or subject (and by teacher, under Other teachers' sets). Clicking a tag or the subject label on a set searches for it.
 
 Each set has these buttons:
 - **Host live game:** run it with a class (see below)
@@ -34,7 +34,7 @@ Each set has these buttons:
 
 Sets save automatically as you type. Watch for **Saved** next to the logo.
 
-1. Open a folder (optional) and click **+ New set**. Give it a name.
+1. Open a folder (optional) and click **+ New set**. Give it a name, and choose its **Subject** (Latin, French or None). The subject decides the look, mode names and music of any game played with the set. New sets start with the subject you last chose.
 2. For each question, type the question and 2–4 answers, and tick the circle next to the right one. The **Pupil sees** preview shows exactly how it will look.
 3. Add **tags**, separated by commas (e.g. `Year 7, fractions`), to find the set later.
 
@@ -66,14 +66,14 @@ Use your laptop on the projector. **Your browser tab runs the game**, so keep it
 2. Choose:
    - **Mode:** Classic or the fishing mode (see below)
    - **Game length:** 3–30 minutes, or until you end it
-   - **Rank pupils by:** points/catch, correct answers, or accuracy
+   - **Rank pupils by:** points/catch, correct answers, or accuracy. Accuracy ranks pupils with 10 or more answers above everyone else, so one lucky answer cannot win.
    - **Shuffle answer order:** on by default, so neighbours' screens don't match
 3. Click **Open the lobby**. The board shows your site's address and a 6-digit code, and lobby music starts.
-4. Pupils go to your site, type the code and their first name, and their names appear on the board. Click a name to remove someone, e.g. a silly name; they can't rejoin that game.
+4. Pupils go to your site, type the code and their first name, and their names appear on the board. Click a name to remove someone, e.g. a silly name. That laptop and that name are then blocked for the rest of the game.
 5. Click **Start game** when everyone's in. The music changes to the game track.
 6. During the game:
    - **❚❚ Pause** freezes the timer and every pupil's screen, for when you need eyes on you. **▶ Resume** carries on.
-   - **Click a pupil's name** on the leaderboard to see every answer they've given, newest first.
+   - **Click a pupil's name** on the leaderboard to see every answer they've given, newest first. The same panel has **Let … join on another laptop**, for a pupil whose laptop has died: click it, and for 2 minutes he can join on a different laptop with the same name and keep his score.
    - The right-hand panel shows class accuracy and the trickiest questions so far, with the most common wrong answer for each.
    - **♪ On/Off** and the slider control the music, which plays from your laptop only.
 7. The game ends when time runs out, or when you click **End game**.
@@ -85,7 +85,7 @@ If you close the tab by accident, open **Host live game** on the same set within
 
 Both modes reward accuracy: a wrong answer resets the pupil's streak and pauses them for 2 seconds while the right answer is shown.
 
-| | Classic | Fishing mode |
+| | Classic (Certamen in Latin, Le Concours in French) | Fishing mode (Piscatus, La Pêche) |
 |---|---|---|
 | A right answer gives | 100 points × streak multiplier | A fish of random rarity and weight |
 | Streaks | ×1 (1–2 in a row), ×1.5 (3–4), ×2 (5–7), ×3 (8+) | Raise the lure level (1–4), which roughly doubles the chance of a rare fish |
@@ -100,9 +100,10 @@ Fish come in five tiers: Common, Uncommon, Rare, Epic and Legendary. To take luc
 - They join at your site with the code and a first name. Names pass through a profanity filter, and two pupils can't use the same name at once.
 - Each question appears when they click **Show question** or **Next question**. Questions come in a shuffled order and repeat until time runs out.
 - After each answer they see straight away whether they were right, with the right answer highlighted.
-- If their laptop refreshes or drops out, they rejoin automatically with their score. Typing the same name on another laptop also gets their score back.
+- When they join, the page changes from the Ludgrove look to the subject's look. Latin sets label the answers I to IV; the number keys 1 to 4 still work.
+- If their laptop refreshes or drops out, they rejoin automatically with their score. Moving to a different laptop needs the teacher's say-so (see above).
 - At the end they see their position, accuracy and best streak, plus each question they got wrong with the right answer.
 
 ## Pupil data
 
-Pupils' names, answers and scores are held only in the teacher's browser tab during a game, and are never saved online. They pass through the live-game service in transit without being stored. The only data stored online is teacher accounts and the question sets and folders teachers make. Download the results before closing the tab if you want to keep them.
+Pupils' names, answers and scores are held only on the teacher's laptop, and are never saved online. The browser keeps the last game for up to 3 hours so a closed tab can be reopened, then wipes it. They pass through the live-game service in transit without being stored. The only data stored online is teacher accounts and the question sets and folders teachers make. Download the results before closing the tab if you want to keep them.

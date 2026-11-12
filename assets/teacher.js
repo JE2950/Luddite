@@ -80,7 +80,7 @@ async function flushSave(set) {
 }
 function saveRow(set) {
   return sb.from('sets')
-    .update(hasTags ? { title: set.title, folder_id: set.folder_id, questions: set.questions, tags: set.tags || [] } : { title: set.title, folder_id: set.folder_id, questions: set.questions })
+    .update(hasTags ? { title: set.title, folder_id: set.folder_id, questions: set.questions, tags: set.tags || [], subject: set.subject || null } : { title: set.title, folder_id: set.folder_id, questions: set.questions })
     .eq('id', set.id);
 }
 async function flushAll() {
@@ -102,6 +102,7 @@ window.addEventListener('load', () => typeset(app));
 function renderSignIn(msg) {
   app.innerHTML = `<div class="gate"><form class="gate-card" id="signin">
     ${window.APP.logo()}
+    ${window.APP.schoolLine()}
     <h1 style="font-size:24px">Teacher sign-in</h1>
     <div class="field"><label for="email">School email</label><input class="in" id="email" type="email" autocomplete="username" required></div>
     <div class="field"><label for="password">Password</label><input class="in" id="password" type="password" autocomplete="current-password" required></div>
@@ -193,7 +194,7 @@ function render() {
 function matches(s, q) {
   if (!q) return true;
   q = q.toLowerCase().replace(/^#/, '');
-  return (s.title || '').toLowerCase().includes(q) || (s.tags || []).some(t => t.toLowerCase().includes(q)) || (!mine(s) && ownerLabel(s).toLowerCase().includes(q));
+  return (s.title || '').toLowerCase().includes(q) || THEME.label(s.subject).toLowerCase() === q || (s.tags || []).some(t => t.toLowerCase().includes(q)) || (!mine(s) && ownerLabel(s).toLowerCase().includes(q));
 }
 function setsIn(f) {
   if (f === 'mine') return sets.filter(mine);
@@ -260,7 +261,8 @@ function cardHTML(s) {
   </article>`;
 }
 
-const tagsHTML = s => (s.tags && s.tags.length) ? `<div class="tags">${s.tags.map(t => `<button class="tag-chip" data-act="tag" data-tag="${esc(t)}" title="Show sets tagged ${esc(t)}">${esc(t)}</button>`).join('')}</div>` : '';
+const subjChip = s => (THEME.def(s.subject) ? `<button class="tag-chip subj subj-${s.subject}" data-act="tag" data-tag="${esc(THEME.label(s.subject))}" title="Show ${esc(THEME.label(s.subject))} sets">${esc(THEME.label(s.subject))}</button>` : '');
+const tagsHTML = s => ((s.tags && s.tags.length) || THEME.def(s.subject)) ? `<div class="tags">${subjChip(s)}${(s.tags || []).map(t => `<button class="tag-chip" data-act="tag" data-tag="${esc(t)}" title="Show sets tagged ${esc(t)}">${esc(t)}</button>`).join('')}</div>` : '';
 
 /* ---------- change password ---------- */
 function renderAccount() {
@@ -379,6 +381,7 @@ function renderEditor() {
   <div class="ed-top">
     <div class="field"><label for="set-title">Set name</label><input id="set-title" class="title-in" data-field="title" value="${esc(s.title)}" placeholder="Untitled set" maxlength="80"></div>
     <div class="ed-row">
+      <div class="field"><label for="set-subject">Subject</label><select id="set-subject" data-field="subject"><option value="">None</option>${THEME.list().map(k => `<option value="${k}" ${s.subject === k ? 'selected' : ''}>${esc(THEME.label(k))}</option>`).join('')}</select></div>
       <div class="field"><label for="set-folder">Folder</label><select id="set-folder" data-field="folder">${opts}</select></div>
       ${hasTags ? `<div class="field"><label for="set-tags">Tags</label><input id="set-tags" class="in" data-field="tags" value="${esc((s.tags || []).join(', '))}" placeholder="e.g. Year 7, fractions"></div>` : ''}
       <button class="btn" data-act="play" data-id="${s.id}" ${ok ? '' : 'disabled'}>▶ Play solo</button>
@@ -510,6 +513,7 @@ function startGame(setId) {
   qs.forEach(q => (game.stats[q.id] = { seen: 0, right: 0, wrong: {} }));
   view = { ...view, name: 'play', setId };
   render();
+  THEME.takeover(s.subject, () => { if (view.name === 'play') render(); });
 }
 function nextQ() {
   if (!game.order.length) {
@@ -573,7 +577,7 @@ function answersHTML(q, done) {
   return `<div class="answers">${q.answers.map((a, j) => {
     let cls = `ans a${j}`;
     if (done) cls += j === q.correct ? ' right' : j === game.pick ? ' wrong' : ' dim';
-    return `<button class="${cls}" data-act="answer" data-i="${j}" ${done ? 'disabled' : ''}><span class="key">${j + 1}</span><span>${esc(a)}</span></button>`;
+    return `<button class="${cls}" data-act="answer" data-i="${j}" ${done ? 'disabled' : ''}><span class="key">${THEME.keyLabel(j)}</span><span>${esc(a)}</span></button>`;
   }).join('')}</div>`;
 }
 function playBodyHTML() {
@@ -701,7 +705,8 @@ app.addEventListener('click', async e => {
     case 'new-set': {
       t.disabled = true;
       const fid = !['mine', 'unfiled', 'school'].includes(view.folder) ? view.folder : null;
-      const s = await insertSet({ title: '', folder_id: fid, questions: [mkQ()] });
+      let subject = null; try { subject = localStorage.getItem(cfg.storagePrefix + '.lastSubject') || null; } catch (err) {}
+      const s = await insertSet({ title: '', folder_id: fid, questions: [mkQ()], subject: THEME.def(subject) ? subject : null });
       t.disabled = false;
       if (!s) return;
       view = { name: 'edit', setId: s.id, folder: view.folder }; ui = {}; render();
@@ -723,7 +728,8 @@ app.addEventListener('click', async e => {
       const copy = await insertSet({
         title: mine(s) ? (s.title || 'Untitled set') + ' (copy)' : (s.title || 'Untitled set'),
         folder_id: mine(s) ? s.folder_id : null,
-        questions: s.questions.map(x => ({ ...x, id: uid(), answers: [...x.answers] }))
+        questions: s.questions.map(x => ({ ...x, id: uid(), answers: [...x.answers] })),
+        tags: [...(s.tags || [])], subject: s.subject || null
       });
       if (copy) { toast(mine(s) ? 'Duplicated' : 'Copied to My sets'); render(); }
       else t.disabled = false;
@@ -783,7 +789,7 @@ app.addEventListener('click', async e => {
     case 'next': if (Date.now() >= (game.lockUntil || 0)) nextQ(); break;
     case 'end-game': endGame(); break;
     case 'again': { const back = view.returnTo; startGame(game.set.id); view.returnTo = back; break; }
-    case 'leave-play': stopTimer(); game = null; view = view.returnTo || { name: 'library', folder: 'mine' }; delete view.returnTo; ui = { search: ui.search }; render(); break;
+    case 'leave-play': stopTimer(); game = null; view = view.returnTo || { name: 'library', folder: 'mine' }; delete view.returnTo; ui = { search: ui.search }; render(); THEME.takeover(null, render); break;
   }
 });
 
@@ -854,6 +860,7 @@ app.addEventListener('change', e => {
   if (view.name !== 'edit') return;
   const set = getSet(view.setId), field = t.dataset.field;
   if (field === 'folder') { set.folder_id = t.value || null; queueSave(set); }
+  if (field === 'subject') { set.subject = t.value || null; try { localStorage.setItem(cfg.storagePrefix + '.lastSubject', set.subject || ''); } catch (err) {} queueSave(set); }
   if (field === 'correct') {
     const q = set.questions.find(x => x.id === t.closest('[data-qid]').dataset.qid);
     q.correct = +t.dataset.i; queueSave(set); refreshQ(q);

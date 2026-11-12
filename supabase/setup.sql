@@ -23,9 +23,13 @@ create table if not exists public.sets (
   title        text not null default '',
   questions    jsonb not null default '[]'::jsonb,
   tags         text[] not null default '{}',
+  subject      text check (subject in ('latin', 'french')),
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
+
+-- For databases made before sets had a subject
+alter table public.sets add column if not exists subject text;
 
 create index if not exists sets_owner_idx  on public.sets (owner);
 create index if not exists sets_folder_idx on public.sets (folder_id);

@@ -7,15 +7,19 @@ if (!window.APP.configured) return; // config.js shows the setup message
 const { esc, fmtTime, multFor, fmtMult, typeset } = LB;
 const sb = LB.client();
 const app = document.getElementById('app');
-const SESSION = window.APP.storagePrefix + '.pupil', TOKEN = window.APP.storagePrefix + '.token';
+const SESSION = window.APP.storagePrefix + '.pupil', KEYS = window.APP.storagePrefix + '.keys';
 
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem(k); } catch (e) {} }
 };
-let token = store.get(TOKEN);
-if (!token) { token = LB.rid(16); store.set(TOKEN, token); }
+// This browser's key pair. The public half identifies this pupil to the teacher's tab; the private half never leaves this laptop.
+let keys = store.get(KEYS);
+async function myKeys() {
+  if (!keys || !keys.pub || !keys.priv) { keys = await LB.kx.newPair(); store.set(KEYS, keys); }
+  return keys;
+}
 
 let S = { screen: 'join', code: '', name: '', score: 0, streak: 0, answered: 0, correct: 0 };
 let ch = null, retryT = null, tickT = null, waitT = null;
@@ -38,19 +42,24 @@ function stopRetry() { clearInterval(retryT); retryT = null; }
 
 async function join(code, name) {
   S = { ...S, screen: 'connecting', code, name, msg: '' }; render();
-  let settled = false, t = null;
+  let settled = false, t = null, k;
+  try { if (!LB.kx.ok) throw 0; k = await myKeys(); }
+  catch (e) { S.screen = 'join'; S.msg = 'This browser can’t join. Open the page with https:// at the start of the address, or try another browser.'; return render(); }
   const lobby = await subscribe(LB.lobbyChannel(code), {
-    joined: m => {
-      if (m.token !== token || settled) return;
+    joined: async m => {
+      if (m.to !== k.pub || settled) return;
+      if (!m.ok) { settled = true; clearTimeout(t); sb.removeChannel(lobby); S.screen = 'join'; S.msg = String(m.msg || 'Couldn’t join.'); return render(); }
+      let chan;
+      try { if (!LB.kx.validPub(m.hpub)) throw 0; chan = await LB.kx.secret(k.priv, m.hpub, code); } catch (e) { return; }
+      if (settled) return;
       settled = true; clearTimeout(t); sb.removeChannel(lobby);
-      if (!m.ok) { S.screen = 'join'; S.msg = m.msg; return render(); }
-      S.pid = m.pid; S.name = m.name;
-      store.set(SESSION, { code, pid: m.pid, name: m.name, at: Date.now() });
+      S.chan = chan; S.name = m.name;
+      store.set(SESSION, { code, chan, name: m.name, at: Date.now() });
       connect();
     }
   });
   if (!lobby) { S.screen = 'join'; S.msg = 'Couldn’t connect. Check the internet connection and try again.'; return render(); }
-  lobby.send({ type: 'broadcast', event: 'join', payload: { token, name } }).catch(() => {});
+  lobby.send({ type: 'broadcast', event: 'join', payload: { pub: k.pub, name } }).catch(() => {});
   t = setTimeout(() => {
     if (settled) return; settled = true; sb.removeChannel(lobby);
     S.screen = 'join'; S.msg = `No game found with code ${code}. Check the code on the board.`; render();
@@ -60,10 +69,10 @@ async function join(code, name) {
 async function connect() {
   S.screen = S.screen === 'join' ? 'connecting' : S.screen; render();
   if (ch) { sb.removeChannel(ch); ch = null; }
-  ch = await subscribe(LB.pupilChannel(S.code, S.pid), {
+  ch = await subscribe(LB.pupilChannel(S.code, S.chan), {
     state: onState, result: onResult,
     kicked: m => leave(m.cancelled ? 'Your teacher closed the game.' : 'Your teacher has removed you from this game.'),
-    replaced: () => leave('You joined this game on another device.')
+    replaced: () => leave('You joined this game on another laptop.')
   });
   if (!ch) { S.screen = 'lost'; return render(); }
   S.awaitingState = true;
@@ -77,11 +86,13 @@ function leave(msg) {
   store.del(SESSION);
   S = { screen: 'join', code: '', name: S.name || '', msg: msg || '', score: 0, streak: 0, answered: 0, correct: 0 };
   render();
+  THEME.takeover(null, render);   // back to the home look
 }
 
 /* ---------- messages from the teacher's screen ---------- */
 function onState(st) {
   if (S.awaitingState) { S.awaitingState = false; stopRetry(); clearTimeout(waitT); }
+  if ((st.subject || null) !== THEME.current) THEME.takeover(st.subject, render);   // the subject's look takes over
   Object.assign(S, { title: st.title, name: st.name, score: st.score, streak: st.streak, answered: st.answered, correct: st.correct, mode: st.mode, kg: st.kg || 0, lure: st.lure || 1 });
   S.frenzyUntil = st.frenzyIn ? Date.now() + st.frenzyIn : 0;
   S.paused = !!st.paused;
@@ -154,7 +165,7 @@ const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', '
 const fishing = () => S.mode === 'fishing';
 const lurePips = n => `<span class="flames lure" aria-hidden="true">${[1, 2, 3, 4].map(i => `<i class="${n >= i ? 'on' : ''}"></i>`).join('')}</span>`;
 function frenzyBar() {
-  return fishing() && S.frenzyUntil > Date.now() ? `<div class="frenzy-banner" role="status"><b>${esc(window.APP.modes.event)}!</b><span>Every catch weighs double for <span id="frenzy-left">${Math.ceil((S.frenzyUntil - Date.now()) / 1000)}</span>s</span></div>` : '';
+  return fishing() && S.frenzyUntil > Date.now() ? `<div class="frenzy-banner" role="status"><b>${esc(THEME.modes().event)}!</b><span>Every catch weighs double for <span id="frenzy-left">${Math.ceil((S.frenzyUntil - Date.now()) / 1000)}</span>s</span></div>` : '';
 }
 function hud() {
   if (fishing()) return `${frenzyBar()}<div class="hud pupil-hud fish-hud">
@@ -177,12 +188,13 @@ function answersHTML(done) {
     let cls = `ans a${j}`;
     if (done && r) cls += j === r.correctIndex ? ' right' : j === r.choice ? ' wrong' : ' dim';
     else if (S.screen === 'checking') cls += j === S.choice ? ' picked' : ' dim';
-    return `<button class="${cls}" data-act="answer" data-i="${j}" ${S.screen !== 'question' ? 'disabled' : ''}><span class="key">${j + 1}</span><span>${esc(a)}</span></button>`;
+    return `<button class="${cls}" data-act="answer" data-i="${j}" ${S.screen !== 'question' ? 'disabled' : ''}><span class="key">${THEME.keyLabel(j)}</span><span>${esc(a)}</span></button>`;
   }).join('')}</div>`;
 }
 function joinHTML() {
   return `<div class="gate"><form class="gate-card" id="join">
     ${LB.mark}
+    ${window.APP.schoolLine()}
     <h1 style="font-size:24px">Join a game</h1>
     <div class="field"><label for="code">Game code</label><input class="in code-in" id="code" inputmode="numeric" autocomplete="off" maxlength="6" placeholder="000000" value="${esc(S.code)}"></div>
     <div class="field"><label for="name">Your name</label><input class="in" id="name" autocomplete="off" maxlength="20" placeholder="First name" value="${esc(S.name)}"></div>
@@ -230,7 +242,7 @@ function render() {
           <span class="tier-chip">${t.name}</span>
           <div class="catch-fish">${LB.fishSVG(f.tier, f.shape, 220)}</div>
           <h2 class="catch-name">You caught ${/^[AEIOU]/.test(f.name) ? 'an' : 'a'} ${esc(f.name)}!</h2>
-          <div class="catch-kg">${LB.fmtKg(f.kg)}${f.doubled ? ` <span class="x2">×2 ${esc(window.APP.modes.event)}</span>` : ''}</div>
+          <div class="catch-kg">${LB.fmtKg(f.kg)}${f.doubled ? ` <span class="x2">×2 ${esc(THEME.modes().event)}</span>` : ''}</div>
           <p class="hint" style="margin:0">Streak ${r.streak} · next cast with lure level ${r.lure}</p>
           <button class="btn primary go" id="go" data-act="next" data-autofocus><span class="lbl">Next question</span><span class="bar"></span></button>
         </div></div>`;
@@ -249,7 +261,7 @@ function render() {
       const acc = f.answered ? Math.round(100 * f.correct / f.answered) : 0;
       h = `<div class="wrap play"><div class="stage center pop">
         <span class="qlabel">Game over · ${esc(S.title || '')}</span>
-        ${f.rank ? `<h1 style="font-size:clamp(32px,6vw,56px)">You came ${ordinal(f.rank)}</h1><p class="hint" style="margin:0">out of ${f.of} ${f.rankBy === 'points' ? '' : `(ranked by ${f.rankBy === 'correct' ? 'correct answers' : 'accuracy'})`}</p>` : '<h1>Game over</h1>'}
+        ${f.rank ? `<h1 style="font-size:clamp(32px,6vw,56px)">You came ${ordinal(f.rank)}</h1><p class="hint" style="margin:0">out of ${f.of} ${f.rankBy === 'points' ? '' : `(ranked by ${f.rankBy === 'correct' ? 'correct answers' : `accuracy, for pupils with ${LB.MIN_FOR_ACCURACY} or more answers`})`}</p>` : '<h1>Game over</h1>'}
         <div class="summary" style="max-width:640px">
           ${f.mode === 'fishing'
             ? `<div class="stat"><div class="k">Total catch</div><div class="v">${LB.fmtKg(f.kg || 0)}</div></div>`
@@ -302,8 +314,8 @@ document.addEventListener('keydown', e => {
 
 /* ---------- start: rejoin automatically after a refresh ---------- */
 const saved = store.get(SESSION);
-if (saved && Date.now() - saved.at < 3 * 3600e3) {
-  Object.assign(S, { code: saved.code, pid: saved.pid, name: saved.name, screen: 'connecting' });
+if (saved && saved.chan && Date.now() - saved.at < 3 * 3600e3) {
+  Object.assign(S, { code: saved.code, chan: saved.chan, name: saved.name, screen: 'connecting' });
   connect();
 } else render();
 })();

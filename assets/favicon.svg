@@ -1,6 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs>
-<clipPath id="ca"><circle cx="25" cy="39" r="14"/></clipPath>
-<clipPath id="cb"><circle cx="39" cy="25" r="14"/></clipPath>
-<mask id="gap" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><rect width="64" height="64" fill="#fff"/><circle cx="39" cy="25" r="17" fill="#000"/></mask></defs>
-<g mask="url(#gap)"><g clip-path="url(#ca)"><rect width="64" height="64" fill="#c98a00"/><circle cx="25" cy="35.5" r="14" fill="#ffb81c"/></g></g>
-<g clip-path="url(#cb)"><rect width="64" height="64" fill="#c98a00"/><circle cx="39" cy="21.5" r="14" fill="#ffb81c"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#002664"/><path d="M21 14h12v3h-3.5v27H41c2.2 0 3.4-1.6 4-6h3l-.8 12H21v-3h3.5V17H21z" fill="#fff"/></svg>

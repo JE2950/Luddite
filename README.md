@@ -1,10 +1,10 @@
-# Quiz Arena: setup guide
+# Ludus: setup guide
 
-Quiz Arena is a classroom quiz game, similar to Blooket. Teachers build sets of multiple-choice questions; pupils join a live game on their own laptops with a 6-digit code and their first name, and answer at their own pace while a leaderboard and class stats show on the projector. Pupils need no accounts, and nothing about them is stored online.
+Ludus is a classroom quiz game, similar to Blooket. Teachers build sets of multiple-choice questions; pupils join a live game on their own laptops with a 6-digit code and their first name, and answer at their own pace while a leaderboard and class stats show on the projector. Pupils need no accounts, and nothing about them is stored online.
 
 This guide gets your own copy running. It takes 30–45 minutes, needs no coding, and costs nothing (a custom web address is optional, at roughly £10 a year). Once it's running, **USER-GUIDE.md** explains day-to-day use.
 
-Your copy is completely separate: your own code, your own database and your own website. You can rename it to anything you like.
+This copy is set up for Ludgrove: the home pages use the school's navy and white, and each set can be tagged **Latin** or **French**. A tagged set takes on that subject's look, with a pixel takeover animation, as soon as a game starts. The name, subjects, colours and music are all in `assets/config.js` and `assets/style.css`.
 
 ## How it fits together
 
@@ -20,7 +20,8 @@ When you change a file on GitHub, Netlify republishes the site automatically wit
 - `index.html`: the pupil page (join a game)
 - `teacher.html`: the teacher area (sign-in, library, set editor)
 - `host.html`: the live-game screen for the projector
-- `assets/config.js`: **your settings, the only file you need to edit**
+- `assets/config.js`: **your settings, the only file you need to edit** (name, crest, subjects)
+- `assets/theme.js`: switches between the Ludgrove, Latin and French looks
 - `assets/`: styles, scripts, fonts, music, icons
 - `supabase/setup.sql`: the database setup, run once
 - `supabase/functions/quiz-admin/index.ts`: a small server function behind the Teachers admin page
@@ -37,11 +38,7 @@ Have this folder unzipped on your computer.
 
 ## Step 1: Put the code on GitHub
 
-1. On GitHub, click **+ → New repository**.
-2. Give it a short lowercase name, e.g. `quiz-arena`. Choose **Private** (Netlify works with private repositories), leave everything else off, and click **Create repository**.
-3. On the empty repository page, click the **uploading an existing file** link.
-4. Open the unzipped folder, select **everything inside it** (not the folder itself), and drag it onto the GitHub page. The sub-folders keep their structure.
-5. Wait for all files to finish uploading, then click **Commit changes**.
+The code already lives in the GitHub repository **JE2950/Luddite**, so there is nothing to upload. If you ever start again in a new repository, upload everything inside this folder (not the folder itself).
 
 Check that `index.html`, `teacher.html` and the `assets` folder are at the top level of the repository, not inside another folder.
 
@@ -134,7 +131,7 @@ If the site won't load at school, ask IT to allow:
 - your Supabase address, e.g. `abcdefgh.supabase.co`, including secure WebSockets (used for live games)
 
 A summary of the data protection position for IT, which you can copy:
-- **Pupils:** no accounts, logins or emails. They join with a game code and a first name, which passes through a profanity filter. Names and scores are held only in the teacher's browser tab during a game, and pass through the live-game service in transit without being stored.
+- **Pupils:** no accounts, logins or emails. They join with a game code and a first name, which passes through a profanity filter. Names, answers and scores are held on the teacher's laptop only: in the browser tab during a game, and in that browser's storage for up to 3 hours afterwards so a closed tab can be reopened. They pass through the live-game service in transit without being stored. Each pupil's traffic travels on a channel only that pupil's browser and the teacher's tab can work out, so pupils cannot read or send each other's answers.
 - **Stored online:** only teacher accounts (email and a hashed password) and the question sets and folders teachers make. They're held by Supabase in its London region, readable only by signed-in teachers.
 - **The website:** a static site served over HTTPS. No adverts, analytics or tracking, and all code, fonts and libraries are served from the site itself.
 
@@ -142,7 +139,9 @@ A summary of the data protection position for IT, which you can copy:
 
 - **Name, web address, mode names:** edit `assets/config.js` on GitHub and commit.
 - **Colours:** in `assets/style.css`, change the `--accent` and `--accent-deep` colours near the top (both the light and dark sets).
-- **Music:** replace the files in `assets/music` (`lobby.mp3`, `classic.mp3`, `fishing.mp3`) with your own MP3s, keeping the same names. The tracks loop, so pick ones without a long intro or fade-out. Browsers can keep the old tracks for up to a day.
+- **Crest:** upload the school crest as `assets/ludgrove-logo.png`. It appears on the join page, the sign-in page and the library. Until the file exists the pages show the name alone.
+- **Music:** each subject has its own folder, `assets/music/latin` and `assets/music/french`. Upload `lobby.mp3`, `classic.mp3` and `fishing.mp3` to each. Any track that is missing falls back to the default in `assets/music`. The tracks loop, so pick ones without a long intro or fade-out. Browsers can keep the old tracks for up to a day.
+- **Subjects:** the `subjects` block in `assets/config.js` holds each subject's name, mode names, fish names and takeover colours. Its colours and fonts are in `assets/style.css` under "Subject themes". A new subject also needs adding to the `subject in (...)` line of `supabase/setup.sql`.
 - **Add teachers:** use the **Teachers** page in the site. They sign in with the email and starting password you give them.
 
 ## Things to know about the free plans
@@ -167,5 +166,5 @@ A summary of the data protection position for IT, which you can copy:
 ## Credits
 
 - **Libraries:** MathJax 3 (maths display, Apache 2.0), SheetJS Community Edition (spreadsheets, Apache 2.0) and supabase-js (MIT).
-- **Fonts:** Bricolage Grotesque, Atkinson Hyperlegible and JetBrains Mono (SIL Open Font Licence).
+- **Fonts:** Libre Baskerville, Cinzel, EB Garamond, Playfair Display, Atkinson Hyperlegible and JetBrains Mono (SIL Open Font Licence).
 - **Music:** made with Suno, for classroom use.
