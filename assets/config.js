@@ -14,8 +14,8 @@ window.APP = {
 
   // From Supabase: Project Settings → Data API (Project URL) and → API Keys (Publishable key).
   // The publishable key is meant to be public; the database rules decide what it can do.
-  supabaseUrl: 'PASTE-YOUR-SUPABASE-PROJECT-URL-HERE',
-  supabaseKey: 'PASTE-YOUR-SUPABASE-PUBLISHABLE-KEY-HERE',
+  supabaseUrl: 'https://beymbzxkhowkgqmjpglr.supabase.co',
+  supabaseKey: 'sb_publishable_RDhTPrJJqX-f3yUH1JXfvg_2c4ou363',
 
   // Optional: your own web address. Leave both as '' if you're using the free netlify.app address.
   // Example: domain: 'myquiz.com', playHost: 'play.myquiz.com'
