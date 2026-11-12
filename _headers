@@ -1,0 +1,12 @@
+# Netlify headers. Library and font files never change under the same name (music rarely does),
+# so browsers can keep them instead of re-checking them on every visit.
+/assets/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+/assets/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+/assets/music/*
+  Cache-Control: public, max-age=86400
+/assets/favicon*
+  Cache-Control: public, max-age=604800
+/assets/apple-touch-icon.png
+  Cache-Control: public, max-age=604800
