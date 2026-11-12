@@ -234,10 +234,11 @@ function sprites(kind) {
   return null;
 }
 function drawSprite(ctx, sp, p, trip, big) {
-  const H = big ? 150 : 135;
+  const H = big ? 104 : 100;   // sprite height in runner units (the drawn runners are about this tall)
   const im = trip > 0.25 && trip < 0.65 && sp.fall ? sp.fall : sp.run[Math.sin(p) > 0 ? 0 : 1];
-  const w = H * im.width / im.height;
-  ctx.drawImage(im, -w / 2, -H, w, H);
+  const k = H / sp.run[0].height;                 // every frame at the running frame's scale
+  const w = im.width * k, h = im.height * k;
+  ctx.drawImage(im, -w / 2, -h, w, h);
 }
 
 /* Draw one runner. trip: 0 = running; 0..1 = tripping (fall, lie still, get up) */
