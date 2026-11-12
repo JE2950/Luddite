@@ -18,6 +18,7 @@ Done since: the Ludgrove background is now off-white cream (12 Nov).
 7. **Swap questions and answers.** An option on Quizlet import (and in the set editor) to turn the set round: term becomes answer, definition becomes question. Keep the duplicate-answer grouping working in both directions.
 8. **Pictures as questions or answers.** For example, guess the flag. A teacher can add an image to a question, or use images as the answer choices. Store images in Supabase Storage. Check upload size, and that pupil screens and the board both show them clearly.
 9. **Geography subject.** A third design, with its own:
+   - a Geography tag in the set editor's subject list (Work it out, Latin, French, Geography, None). This needs the Supabase subject check widened to include 'geography' (`supabase/setup.sql`), run in the SQL editor
    - colours and fonts
    - detection rules (place names, capitals, countries, flags)
    - game mode names
