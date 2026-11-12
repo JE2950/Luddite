@@ -13,7 +13,8 @@ const T = window.THEME = {
   modes: () => Object.assign({}, C.modes, (def(T.current) || {}).modes),
   keyLabel: j => { const k = (def(T.current) || {}).keys; return k && k[j] ? k[j] : String(j + 1); },
   fishNames: s => (def(s) || {}).fish || null,
-  music: (s, key) => { const m = (def(s) || {}).music; return typeof m === 'string' ? m : (m && m[key]) || null; },
+  // key is 'lobby', 'classic' or 'fishing'; a subject has a lobby track and one game track
+  music: (s, key) => { const m = (def(s) || {}).music; if (!m) return null; if (typeof m === 'string') return m; return key === 'lobby' ? m.lobby || null : m.game || m[key] || null; },
 
   /* Which subject a set belongs to. A subject chosen in the editor wins ('none' means no subject);
      with nothing chosen, the title, tags and questions decide. */
@@ -55,67 +56,50 @@ const T = window.THEME = {
     if (s) root.dataset.subject = s; else delete root.dataset.subject;
   },
 
-  /* Pixel takeover: squares in the new look's colours sweep across the screen, the look changes
-     underneath, then the squares clear. `mid` runs at the moment the look changes. */
+  /* Takeover: the subject's name appears, the new look's colours wash over the page from the centre,
+     the page changes underneath, the wash clears to reveal it, and the name fades away.
+     `mid` runs at the moment the look changes (it redraws the page in the new look). */
   takeover(s, mid) {
     s = def(s) ? s : null;
     if (s === T.current && !T._busy) { if (mid) mid(); return Promise.resolve(); }
     if (T._busy) { T._next = { s, mid }; return T._busy; }
-    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const cv = document.createElement('canvas');
-    const ctx = !still && cv.getContext && cv.getContext('2d');
-    if (!ctx) { T.apply(s); if (mid) mid(); return Promise.resolve(); }
+    const swap = () => { T.apply(s); try { if (mid) mid(); } catch (e) { console.error(e); } };
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches || !document.body) { swap(); return Promise.resolve(); }
 
-    const W = cv.width = innerWidth, H = cv.height = innerHeight;
-    cv.className = 'takeover'; cv.setAttribute('aria-hidden', 'true');
-    const size = Math.max(22, Math.round(Math.max(W, H) / 34));
-    const cols = Math.ceil(W / size), rows = Math.ceil(H / size);
-    const pal = (def(s) || C).pixels || ['#002664', '#ffffff'];
-    const cells = [];
-    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-      cells.push({ x, y, d: 0.6 * (x / cols) + 0.4 * Math.random(), c: pal[Math.floor(Math.random() * pal.length)] });
-    }
-    const banner = def(s) ? def(s).banner || def(s).label : C.name;
-    const IN = 620, HOLD = 420, OUT = 620, POP = 0.14;
-    document.body.appendChild(cv);
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const label = def(s) ? def(s).banner || def(s).label : (C.school || C.name);
+    const banner = document.createElement('div');
+    banner.className = 'takeover-banner to-' + (s || 'home');
+    banner.setAttribute('aria-hidden', 'true');
+    banner.innerHTML = `<span>${String(label).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</span>`;
+    // The banner's font is fixed for its whole life (set in style.css per subject), and loaded before it
+    // appears, so the text never changes size mid-animation.
+    const face = s === 'latin' ? 'Cinzel' : s === 'french' ? '"Playfair Display"' : '"Libre Baskerville"';
+    const fontReady = Promise.race([document.fonts ? document.fonts.load(`700 48px ${face}`, label) : null, wait(600)]).catch(() => {});
 
-    T._busy = new Promise(done => {
-      let t0 = null, swapped = false;
-      const swap = () => { if (swapped) return; swapped = true; T.apply(s); try { if (mid) mid(); } catch (e) { console.error(e); } };
-      const finish = () => {
-        swap(); cv.remove(); T._busy = null; done();
-        const n = T._next; T._next = null;
-        if (n && n.s !== T.current) T.takeover(n.s, n.mid); else if (n && n.mid) n.mid();
-      };
-      const safety = setTimeout(finish, IN + HOLD + OUT + 1500); // a hidden tab pauses animation frames
-      const frame = now => {
-        if (t0 == null) t0 = now;
-        const t = now - t0;
-        ctx.clearRect(0, 0, W, H);
-        if (t >= IN) swap();
-        const covering = t < IN, p = covering ? t / IN : (t - IN - HOLD) / OUT;
-        for (const c of cells) {
-          // k: how much of this square shows (0 to 1). Squares pop in left to right, then pop out the same way.
-          const k = covering ? (p * (1 + POP) - c.d) / POP : 1 - (p * (1 + POP) - c.d) / POP;
-          if (k <= 0) continue;
-          const e = size * Math.min(1, k), o = (size - e) / 2;
-          ctx.fillStyle = c.c;
-          ctx.fillRect(c.x * size + o, c.y * size + o, e + 0.5, e + 0.5);
-        }
-        if (t > IN * 0.7 && t < IN + HOLD + OUT * 0.25) {
-          const fs = Math.max(26, Math.min(W / (banner.length * 0.9), 92));
-          ctx.font = `700 ${fs}px ${getComputedStyle(root).getPropertyValue('--display') || 'serif'}`;
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          const tw = ctx.measureText(banner).width;
-          ctx.fillStyle = pal[3] || '#000';
-          ctx.fillRect(Math.round((W - tw) / 2 / size - 1) * size, Math.round((H / 2 - fs) / size) * size, Math.ceil(tw / size + 2) * size, Math.ceil(fs * 2 / size) * size);
-          ctx.fillStyle = pal[2] || '#fff';
-          ctx.fillText(banner, W / 2, Math.round((H / 2 - fs) / size) * size + Math.ceil(fs * 2 / size) * size / 2);
-        }
-        if (t < IN + HOLD + OUT) requestAnimationFrame(frame); else { clearTimeout(safety); finish(); }
-      };
-      requestAnimationFrame(frame);
-    });
+    T._busy = (async () => {
+      await fontReady;
+      document.body.appendChild(banner);
+      banner.getBoundingClientRect();
+      banner.classList.add('in');
+      await wait(300);
+      // The new look's background washes in around the name, the page changes underneath, then the wash clears
+      const veil = document.createElement('div');
+      veil.className = 'takeover-veil to-' + (s || 'home');
+      document.body.insertBefore(veil, banner);
+      veil.getBoundingClientRect(); veil.classList.add('in');
+      await wait(460); swap();
+      await wait(120); veil.classList.remove('in');
+      await wait(560); veil.remove();
+      await wait(180);
+      banner.classList.remove('in'); banner.classList.add('out');
+      await wait(400);
+      banner.remove();
+      T._busy = null;
+      const n = T._next; T._next = null;
+      if (n && n.s !== T.current) return T.takeover(n.s, n.mid);
+      if (n && n.mid) n.mid();
+    })();
     return T._busy;
   }
 };

@@ -512,6 +512,14 @@ function setupHTML() {
     </div></div></div>`;
 }
 
+/* QR code that opens the join page with this game's code filled in */
+function qrHTML() {
+  if (!window.qrcode) return '';
+  try {
+    const q = window.qrcode(0, 'M'); q.addData(window.APP.joinUrl + '?code=' + G.code); q.make();
+    return `<div><span class="qlabel">Or scan</span><div class="join-qr" role="img" aria-label="QR code for the join page">${q.createSvgTag({ cellSize: 4, margin: 0, scalable: true })}</div></div>`;
+  } catch (e) { return ''; }
+}
 function lobbyHTML() {
   const list = Object.values(G.pupils).sort((a, b) => a.joinedAt - b.joinedAt);
   return `<div class="wrap host">
@@ -519,6 +527,7 @@ function lobbyHTML() {
     <section class="join-banner">
       <div><span class="qlabel">Go to</span><div class="join-url">${esc(JOIN_URL)}</div></div>
       <div><span class="qlabel">Game code</span><div class="join-code">${esc(G.code)}</div></div>
+      ${qrHTML()}
     </section>
     <div class="main-head" style="margin-top:24px"><div><h1><span id="count">${list.length}</span> ${list.length === 1 ? 'pupil' : 'pupils'} joined</h1><p>Click a name to remove that pupil.</p></div>
       <div class="head-acts"><button class="btn primary big-go" data-act="start" ${list.length ? '' : 'disabled'}>Start game</button></div></div>

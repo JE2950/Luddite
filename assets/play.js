@@ -313,6 +313,8 @@ document.addEventListener('keydown', e => {
 });
 
 /* ---------- start: rejoin automatically after a refresh ---------- */
+// A QR code from the host screen opens this page with ?code=123456: fill it in and go to the name box
+{ const c = (new URLSearchParams(location.search).get('code') || '').replace(/\D/g, '').slice(0, 6); if (c.length === 6) S.code = c; if (location.search) history.replaceState(null, '', location.pathname); }
 const saved = store.get(SESSION);
 if (saved && saved.chan && Date.now() - saved.at < 3 * 3600e3) {
   Object.assign(S, { code: saved.code, chan: saved.chan, name: saved.name, screen: 'connecting' });

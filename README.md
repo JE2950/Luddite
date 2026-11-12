@@ -140,7 +140,7 @@ A summary of the data protection position for IT, which you can copy:
 - **Name, web address, mode names:** edit `assets/config.js` on GitHub and commit.
 - **Colours:** in `assets/style.css`, change the `--accent` and `--accent-deep` colours near the top (both the light and dark sets).
 - **Crest:** upload the school crest as `assets/ludgrove-logo.png`. It appears on the join page, the sign-in page and the library. Until the file exists the pages show the name alone.
-- **Music:** each subject has one track, `assets/music/latin.mp3` and `assets/music/french.mp3`, which plays in the lobby and carries on through the game. Replace either file to change it. Sets with no subject use `lobby.mp3`, `classic.mp3` and `fishing.mp3`. The tracks loop, so pick ones without a long intro or fade-out. Browsers can keep the old tracks for up to a day.
+- **Music:** each subject has a lobby track (`latin-lobby.mp3`, `french-lobby.mp3`), playing while pupils join, and a game track (`latin.mp3`, `french.mp3`) from Start to the end. Music plays from the host laptop only; pupils' laptops stay silent. Replace a file to change it. Sets with no subject use `lobby.mp3`, `classic.mp3` and `fishing.mp3`. The tracks loop, so pick ones without a long intro or fade-out. Browsers can keep the old tracks for up to a day.
 - **Subjects:** the `subjects` block in `assets/config.js` holds each subject's name, mode names, fish names and takeover colours. Its colours and fonts are in `assets/style.css` under "Subject themes". A new subject also needs adding to the `subject in (...)` line of `supabase/setup.sql`.
 - **Add teachers:** use the **Teachers** page in the site. They sign in with the email and starting password you give them.
 

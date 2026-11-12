@@ -33,9 +33,9 @@ window.APP = {
 
   // Subjects. A set takes on its subject's look, mode names, answer-key labels, fish and music
   // as soon as a game starts. Sets with no subject chosen have it worked out from their questions.
-  //   pixels: the colours of the squares in the takeover animation
-  //   music:  one MP3 per subject, played in the lobby and through the game.
-  //           Until the file exists, the default tracks in assets/music play.
+  //   pixels: the takeover colours (the third is the background the new look grows from)
+  //   music:  lobby plays while pupils join; game plays from Start until the game ends.
+  //           Music plays on the host laptop only. Missing files fall back to the tracks in assets/music.
   subjects: {
     latin: {
       label: 'Latin',
@@ -43,7 +43,7 @@ window.APP = {
       modes: { classic: 'Certamen', fishing: 'Piscatus', event: 'Aestus Neptuni' },
       keys: ['I', 'II', 'III', 'IV'],
       pixels: ['#8f1d1d', '#b8892b', '#f3ede1', '#2a1a12', '#6b2a6e', '#d9c9a3'],
-      music: 'assets/music/latin.mp3',
+      music: { lobby: 'assets/music/latin-lobby.mp3', game: 'assets/music/latin.mp3' },
       fish: [
         ['Sardina', 'Perca', 'Gobius', 'Scomber'],
         ['Mullus', 'Aurata', 'Lupus'],
@@ -57,7 +57,7 @@ window.APP = {
       banner: 'FRANÇAIS',
       modes: { classic: 'Le Concours', fishing: 'La Pêche', event: 'La Grande Marée' },
       pixels: ['#0055a4', '#ffffff', '#e1352b', '#14213d', '#f6f1e6', '#0055a4'],
-      music: 'assets/music/french.mp3',
+      music: { lobby: 'assets/music/french-lobby.mp3', game: 'assets/music/french.mp3' },
       fish: [
         ['Goujon', 'Perche', 'Gardon', 'Maquereau'],
         ['Truite', 'Brème', 'Bar'],
@@ -86,6 +86,8 @@ window.APP = {
   C.teacherUrl = C.onDomain ? 'https://' + C.domain + '/teacher.html' : 'teacher.html';
   // What the host screen tells pupils to type
   C.joinAddress = C.onDomain && C.playHost ? C.playHost : (location.host + location.pathname.replace(/[^/]*$/, '')).replace(/\/$/, '');
+  // The full join link, for the QR code on the host screen (a game code is added to it)
+  C.joinUrl = C.onDomain && C.playHost ? 'https://' + C.playHost + '/' : location.origin + location.pathname.replace(/[^/]*$/, '');
   // Page titles follow the app name
   document.title = document.title.replace('Ludus', C.name);
   // The logo: the school crest (when the file exists) and the name

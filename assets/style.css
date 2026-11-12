@@ -425,8 +425,26 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .tag-chip.subj-latin{background:#8f1d1d;border-color:#8f1d1d}
 .tag-chip.subj-french{background:#0055a4;border-color:#0055a4}
 
-/* The pixel takeover sits above everything while it runs */
-.takeover{position:fixed;inset:0;width:100vw;height:100vh;z-index:200;pointer-events:none;image-rendering:pixelated}
+/* ---------- Takeover (theme.js) ---------- */
+.takeover-banner,.takeover-veil{position:fixed;inset:0;z-index:300;pointer-events:none;display:grid;place-items:center}
+.takeover-banner span{display:inline-block;padding:.5em 1.1em;font-size:clamp(28px,6vw,72px);line-height:1;white-space:nowrap;
+  opacity:0;transform:translateY(10px);transition:opacity .38s ease,transform .38s cubic-bezier(.2,.8,.2,1)}
+.takeover-banner.in span{opacity:1;transform:none}
+.takeover-banner.out span{opacity:0;transform:translateY(-8px);transition-duration:.4s}
+.takeover-banner.to-latin span{font-family:"Cinzel",Georgia,serif;font-weight:700;letter-spacing:.12em;color:#5f0f0f;background:#fbf7ee;
+  border:2px solid #b8892b;box-shadow:inset 0 0 0 5px #fbf7ee,inset 0 0 0 6px #b8892b,0 18px 50px rgba(42,26,18,.25)}
+.takeover-banner.to-french span{font-family:"Playfair Display",Georgia,serif;font-weight:700;color:#14213d;background:#fff;border-radius:999px;
+  box-shadow:inset 0 -6px 0 #e1352b,inset 0 -12px 0 #fff,inset 0 -18px 0 #0055a4,0 18px 50px rgba(20,33,61,.22);padding-bottom:.7em}
+.takeover-banner.to-home span{font-family:"Libre Baskerville",Georgia,serif;font-weight:700;letter-spacing:.2em;text-transform:uppercase;font-size:clamp(20px,3.5vw,40px);
+  color:#fff;background:#002664;border-radius:10px;box-shadow:0 18px 50px rgba(0,38,100,.3)}
+.takeover-veil{opacity:0;transform:scale(.96);transition:opacity .52s cubic-bezier(.4,0,.2,1),transform .9s cubic-bezier(.2,.8,.2,1)}
+.takeover-veil.in{opacity:1;transform:none}
+.takeover-veil:not(.in){transition-duration:.62s,.62s}
+.takeover-veil.to-latin{background:radial-gradient(circle at 50% 50%,#fbf7ee 0,#efe7d6 55%,#e6dcc6 100%)}
+.takeover-veil.to-french{background:radial-gradient(circle at 50% 50%,#ffffff 0,#f6f1e6 60%,#ece6d8 100%)}
+.takeover-veil.to-home{background:radial-gradient(circle at 50% 50%,#ffffff 0,#f4f6fa 60%,#e8edf6 100%)}
+.takeover-banner{z-index:301}
+@media (prefers-reduced-motion: reduce){.takeover-banner,.takeover-veil{display:none}}
 :root[data-subject] .mark .crest,:root[data-subject] .school{display:none}
 
 /* ---------- Latin ---------- */
@@ -454,3 +472,7 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 :root[data-subject="french"] .ans .key{border-radius:50%}
 :root[data-subject="french"] .join-code{background:#fff;color:var(--accent);box-shadow:inset 0 0 0 4px var(--accent)}
 :root[data-subject="french"] .qlabel,:root[data-subject="french"] .stat .k{color:var(--accent)}
+
+/* QR code on the host's join screen */
+.join-qr{background:#fff;padding:10px;border-radius:var(--r);line-height:0;box-shadow:0 0 0 1px var(--line)}
+.join-qr svg{width:clamp(130px,16vw,200px);height:auto;display:block}
