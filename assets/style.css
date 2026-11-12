@@ -54,7 +54,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:24px}
 .mark{font-family:var(--display);font-weight:700;font-size:28px;display:flex}
 .mark{align-items:center;gap:.35em;letter-spacing:0}
-.mark .crest{height:1.25em;width:auto;display:block}
+/* the crest is white, so it sits on a navy tile */
+.mark .crest{height:1.5em;width:1.5em;object-fit:contain;display:block;background:#002664;border-radius:.3em;padding:.22em}
 .school{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.28em;text-transform:uppercase;color:var(--muted)}
 .chip{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:var(--sunk);color:var(--muted);border:1px solid var(--line)}
 .top .note{margin-left:auto;font-size:13px;color:var(--muted);max-width:42ch}
@@ -417,7 +418,7 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 :root:not([data-subject]) .gate{background:radial-gradient(900px 420px at 50% 0,rgba(0,38,100,.10),transparent 70%)}
 :root:not([data-subject]) .gate-card{border-top:4px solid var(--accent);box-shadow:0 18px 40px rgba(0,38,100,.10)}
 :root:not([data-subject]) .gate-card .mark{flex-direction:column;align-items:flex-start;gap:10px}
-:root:not([data-subject]) .gate-card .mark .crest{height:84px}
+:root:not([data-subject]) .gate-card .mark .crest{height:92px;width:92px;padding:16px;border-radius:14px}
 .gate-card .school{margin-bottom:-10px}
 .chip.subj,.tag-chip.subj{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .tag-chip.subj:hover{color:var(--on-accent);filter:brightness(1.15)}
