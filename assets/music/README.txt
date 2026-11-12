@@ -5,3 +5,5 @@ Music for live games. Plays from the host laptop only. Each track loops.
   french-lobby.mp3  French sets, while pupils join (Menu Mystere)
   french.mp3        French sets, during the game (Quiz Parisien)
   lobby.mp3, classic.mp3, fishing.mp3   sets with no subject, and the fallback
+  geography-lobby.mp3  Geography sets, while pupils join (Curious Pulse)   [Geography design not built yet]
+  geography.mp3        Geography sets, during the game (Curious Expedition)

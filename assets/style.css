@@ -1,8 +1,8 @@
 /* Layout: teacher library (folder rail + set grid) → set editor (stacked question cards with live maths preview) → pupil-view play screen (HUD bar + one big question card) */
 :root{
   /* Ludgrove: navy and white, the look of every page until a subject takes over */
-  --paper:#b8c9e1; --surface:#dce5f2; --sunk:#a8bbd8; --line:#8ea5c7;
-  --ink:#0b1b3f; --muted:#45506b;
+  --paper:#f3efe6; --surface:#fbfaf6; --sunk:#e8e2d6; --line:#d6cebf;
+  --ink:#0b1b3f; --muted:#56617c;
   --accent:#002664; --accent-deep:#001843; --on-accent:#ffffff;
   --good:#16936b; --good-soft:#d8f3e8; --bad:#c7392b; --bad-soft:#fbe1da;
   --a1:#b5372e; --a2:#1f5fae; --a3:#1f8a5c; --a4:#6d4aa8;
@@ -459,7 +459,7 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .takeover-veil:not(.is-in){transition-duration:.62s,.62s}
 .takeover-veil.to-latin{background:radial-gradient(circle at 50% 50%,#fbf7ee 0,#efe7d6 55%,#e6dcc6 100%)}
 .takeover-veil.to-french{background:radial-gradient(circle at 50% 50%,#ffffff 0,#f6f1e6 60%,#ece6d8 100%)}
-.takeover-veil.to-home{background:radial-gradient(circle at 50% 50%,#dce5f2 0,#b8c9e1 60%,#a8bbd8 100%)}
+.takeover-veil.to-home{background:radial-gradient(circle at 50% 50%,#fbfaf6 0,#f3efe6 60%,#e8e2d6 100%)}
 .takeover-banner{z-index:301}
 @media (prefers-reduced-motion: reduce){.takeover-banner,.takeover-veil{display:none}}
 :root[data-subject] .mark .crest,:root[data-subject] .school{display:none}
