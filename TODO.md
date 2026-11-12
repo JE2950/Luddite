@@ -21,7 +21,7 @@ Done since: the Ludgrove background is now off-white cream (12 Nov).
    - colours and fonts
    - detection rules (place names, capitals, countries, flags)
    - game mode names
-   - team names
+   - team names: Explorers, Navigators, Pioneers, Voyagers
    - fishing treasures, worth pounds (£)
    - music, already in the repo: `assets/music/geography-lobby.mp3` (Curious Pulse, lobby) and `assets/music/geography.mp3` (Curious Expedition, game)
    - runners
@@ -47,4 +47,4 @@ Two notes on the sheet:
 
 ## Still to decide
 
-- Geography team names. My suggestion: Explorers, Navigators, Pioneers, Voyagers.
+Nothing. Ready to build.
