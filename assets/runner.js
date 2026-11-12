@@ -2,9 +2,10 @@
    A right answer gives a burst of speed; a wrong answer trips him over and he gets back up.
    Latin: a man or woman in a toga, a gladiator, or (now and then) a charioteer.
    French: a mime in a beret, a chef with a frying pan, or a peasant in a garlic necklace.
+   Geography: explorers, a mountaineer, a polar explorer, a jungle explorer or a geologist; now and then a Land Rover or a camel.
    Sets with no subject get an athlete in Ludgrove navy.
    RUNNER.pick(subject) chooses a character; RUNNER.strip(subject, kind) shows one on its own;
-   RUNNER.race(container) draws several lanes for the host screen. Everything is drawn here: no image files. */
+   RUNNER.race(container) draws several lanes for the host screen. Pictures come from assets/runners. */
 (function () {
 'use strict';
 const TAU = Math.PI * 2;
@@ -13,61 +14,95 @@ const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CAST = {
   latin: ['toga-m', 'toga-f', 'gladiator'],
   french: ['mime', 'chef', 'peasant'],
+  geography: ['explorer-m', 'explorer-f', 'mountaineer', 'polar', 'jungle', 'geologist'],
   none: ['athlete']
 };
+const RARE = { latin: ['chariot'], geography: ['landrover', 'camel'] };     // turn up now and then
+const BIG = new Set(['chariot', 'landrover', 'camel']);
 function pick(subject) {
-  if (subject === 'latin' && Math.random() < 0.12) return 'chariot';
+  const rare = RARE[subject];
+  if (rare && Math.random() < 0.12) return rare[Math.floor(Math.random() * rare.length)];
   const list = CAST[subject] || CAST.none;
   return list[Math.floor(Math.random() * list.length)];
 }
 
-/* ---------- backgrounds ---------- */
+/* ---------- backgrounds ----------
+   Seen almost from above: the ground fills the picture, and only a band along the top edge shows the setting
+   (temples, a Paris street, mountains, trees). `band` is that band's height in pixels. */
 const SKY = {
-  latin: ['#f6d7a7', '#fbeed6'], french: ['#bfd9f2', '#eef5fb'], none: ['#dfe7f3', '#f4f6fa']
+  latin: ['#f6d7a7', '#fbeed6'], french: ['#bfd9f2', '#eef5fb'], geography: ['#bfe0ef', '#eef7f4'], none: ['#dfe7f3', '#f4f6fa']
 };
-function scene(ctx, w, h, subject, x) {
-  const sk = SKY[subject] || SKY.none;
-  const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, sk[0]); g.addColorStop(1, sk[1]);
-  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-  const ground = h * 0.78;
-  // far layer
+const GROUND = {
+  latin: ['#dcb984', '#cfa86f'], french: ['#a9abb0', '#97999f'], geography: ['#9cc27a', '#8bb46a'], none: ['#c0614f', '#ad5444']
+};
+function scene(ctx, w, h, subject, x, band) {
+  subject = SKY[subject] ? subject : 'none';
+  if (band == null) band = Math.min(h * 0.34, 64);
+  const gr = GROUND[subject];
+  // the ground, seen from above
+  ctx.fillStyle = gr[0]; ctx.fillRect(0, band, w, h - band);
+  groundTexture(ctx, w, h, subject, x, band);
+  // the setting along the top edge
   ctx.save();
+  ctx.beginPath(); ctx.rect(0, 0, w, band); ctx.clip();
+  const g = ctx.createLinearGradient(0, 0, 0, band); g.addColorStop(0, SKY[subject][0]); g.addColorStop(1, SKY[subject][1]);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, band);
+  const base = band, hh = band;
   if (subject === 'latin') {
-    ctx.fillStyle = '#e8c48f';
-    hills(ctx, w, ground - h * 0.12, h * 0.16, x * 0.12, 260);
-    // temples and cypresses
+    ctx.fillStyle = '#e8c48f'; hills(ctx, w, base - hh * 0.36, hh * 0.3, x * 0.12, 260);
     for (let i = -1; i < w / 220 + 2; i++) {
       const bx = i * 220 - ((x * 0.35) % 220);
-      if (((i + Math.floor(x * 0.35 / 220)) % 3 + 3) % 3 === 0) temple(ctx, bx + 30, ground, h * 0.42);
-      else cypress(ctx, bx + 90, ground, h * 0.5), cypress(ctx, bx + 128, ground, h * 0.38);
+      if (((i + Math.floor(x * 0.35 / 220)) % 3 + 3) % 3 === 0) temple(ctx, bx + 30, base, hh * 0.86);
+      else cypress(ctx, bx + 90, base, hh * 0.92), cypress(ctx, bx + 128, base, hh * 0.7);
     }
   } else if (subject === 'french') {
     ctx.fillStyle = '#c9dbea';
-    for (let i = -1; i < w / 520 + 2; i++) { const bx = i * 520 - ((x * 0.08) % 520); eiffel(ctx, bx + 300, ground, h * 0.72); }
+    for (let i = -1; i < w / 520 + 2; i++) { const bx = i * 520 - ((x * 0.08) % 520); eiffel(ctx, bx + 300, base, hh * 1.05); }
     for (let i = -1; i < w / 120 + 2; i++) {
       const k = i + Math.floor(x * 0.35 / 120), bx = i * 120 - ((x * 0.35) % 120);
-      house(ctx, bx, ground, 110, h * (0.34 + ((k * 37) % 5) * 0.03), k);
+      house(ctx, bx, base, 110, hh * (0.62 + ((k * 37) % 5) * 0.05), k);
     }
+  } else if (subject === 'geography') {
+    for (let i = -1; i < w / 340 + 2; i++) { const bx = i * 340 - ((x * 0.1) % 340); mountain(ctx, bx + 120, base, hh * 0.95, 150); mountain(ctx, bx + 250, base, hh * 0.7, 110); }
+    for (let i = -1; i < w / 90 + 2; i++) { const k = i + Math.floor(x * 0.35 / 90), bx = i * 90 - ((x * 0.35) % 90); if (((k % 4) + 4) % 4 !== 3) pine(ctx, bx + 20, base, hh * (0.42 + ((k * 13) % 3) * 0.1)); }
   } else {
-    ctx.fillStyle = '#cfd8e6';
-    hills(ctx, w, ground - h * 0.1, h * 0.14, x * 0.15, 300);
-    for (let i = -1; i < w / 260 + 2; i++) { const bx = i * 260 - ((x * 0.35) % 260); tree(ctx, bx + 60, ground, h * 0.36); }
+    ctx.fillStyle = '#cfd8e6'; hills(ctx, w, base - hh * 0.4, hh * 0.3, x * 0.15, 300);
+    for (let i = -1; i < w / 260 + 2; i++) { const bx = i * 260 - ((x * 0.35) % 260); tree(ctx, bx + 60, base, hh * 0.8); }
   }
   ctx.restore();
-  // track
-  const tg = subject === 'latin' ? ['#d9b27a', '#c99e63'] : subject === 'french' ? ['#a7a9ad', '#8e9196'] : ['#b55a4a', '#9e4b3d'];
-  ctx.fillStyle = tg[0]; ctx.fillRect(0, ground, w, h - ground);
-  ctx.fillStyle = tg[1]; ctx.fillRect(0, ground, w, 3);
-  if (subject === 'french') {   // cobbles
-    ctx.fillStyle = 'rgba(255,255,255,.18)';
-    for (let r = 0; r < 3; r++) for (let i = -1; i < w / 22 + 2; i++) {
-      const cx = i * 22 - (x % 22) + (r % 2) * 11, cy = ground + 8 + r * ((h - ground - 8) / 3);
-      ctx.beginPath(); ctx.ellipse(cx, cy, 8, 3, 0, 0, TAU); ctx.fill();
+  // the edge where the setting meets the ground
+  ctx.fillStyle = gr[1]; ctx.fillRect(0, band, w, 4);
+  ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(0, band + 4, w, 2);
+}
+function groundTexture(ctx, w, h, subject, x, band) {
+  ctx.save();
+  if (subject === 'latin') {          // raked arena sand
+    ctx.strokeStyle = 'rgba(150,110,60,.18)'; ctx.lineWidth = 2;
+    for (let y = band + 14; y < h; y += 16) { ctx.beginPath(); for (let px = -20; px <= w + 20; px += 20) ctx.lineTo(px - (x % 40), y + Math.sin((px + y) / 30) * 2); ctx.stroke(); }
+  } else if (subject === 'french') {  // cobbles
+    ctx.fillStyle = 'rgba(255,255,255,.16)';
+    for (let r = 0, y = band + 9; y < h + 10; r++, y += 13) for (let i = -1; i < w / 24 + 2; i++) {
+      ctx.beginPath(); ctx.ellipse(i * 24 - (x % 24) + (r % 2) * 12, y, 9, 4.5, 0, 0, TAU); ctx.fill();
     }
-  } else {
-    ctx.fillStyle = 'rgba(255,255,255,.55)';
-    for (let i = -1; i < w / 60 + 2; i++) ctx.fillRect(i * 60 - (x % 60), ground + (h - ground) * 0.5, 30, 3);
+  } else if (subject === 'geography') {   // a map: grass with grid squares and the odd contour
+    ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 1;
+    for (let gx = -(x % 60); gx < w; gx += 60) { ctx.beginPath(); ctx.moveTo(gx, band); ctx.lineTo(gx, h); ctx.stroke(); }
+    for (let gy = band + 30; gy < h; gy += 60) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(60,90,40,.22)'; ctx.lineWidth = 1.5;
+    for (let i = -1; i < w / 300 + 2; i++) { const cx = i * 300 - (x % 300) + 150; for (let r = 1; r <= 3; r++) { ctx.beginPath(); ctx.ellipse(cx, band + (h - band) * 0.55, 26 * r, 9 * r, 0, 0, TAU); ctx.stroke(); } }
+  } else {                            // running track
+    ctx.fillStyle = 'rgba(255,255,255,.14)';
+    for (let i = -1; i < w / 6 + 2; i++) for (let y = band + 6; y < h; y += 9) ctx.fillRect(i * 6 - (x % 6) + ((y / 9) % 2) * 3, y, 1.5, 1.5);
   }
+  ctx.restore();
+}
+function mountain(ctx, x, base, hh, wd) {
+  ctx.fillStyle = '#8fa5a0'; ctx.beginPath(); ctx.moveTo(x - wd, base); ctx.lineTo(x, base - hh); ctx.lineTo(x + wd, base); ctx.fill();
+  ctx.fillStyle = '#f4f8f8'; ctx.beginPath(); ctx.moveTo(x - wd * 0.28, base - hh * 0.72); ctx.lineTo(x, base - hh); ctx.lineTo(x + wd * 0.28, base - hh * 0.72); ctx.lineTo(x + wd * 0.1, base - hh * 0.78); ctx.lineTo(x - wd * 0.06, base - hh * 0.7); ctx.fill();
+}
+function pine(ctx, x, base, hh) {
+  ctx.fillStyle = '#3f6b45'; ctx.beginPath(); ctx.moveTo(x, base - hh); ctx.lineTo(x + hh * 0.3, base - hh * 0.1); ctx.lineTo(x - hh * 0.3, base - hh * 0.1); ctx.fill();
+  ctx.fillStyle = '#5b4a2a'; ctx.fillRect(x - 2, base - hh * 0.12, 4, hh * 0.12);
 }
 function hills(ctx, w, y, amp, off, wl) {
   ctx.beginPath(); ctx.moveTo(0, y + amp);
@@ -242,17 +277,19 @@ function drawSprite(ctx, sp, p, trip, big) {
 }
 
 /* Draw one runner. trip: 0 = running; 0..1 = tripping (fall, lie still, get up) */
+const DRAWN = new Set(['toga-m', 'toga-f', 'gladiator', 'mime', 'chef', 'peasant', 'athlete', 'chariot']);
 function drawRunner(ctx, kind, x, ground, scale, p, trip, dust) {
   const sp = sprites(kind);
+  if (!sp && !DRAWN.has(kind)) kind = 'athlete';     // until the picture has loaded
   ctx.save(); ctx.translate(x, ground); ctx.scale(scale, scale);
   // shadow
-  ctx.fillStyle = 'rgba(0,0,0,.15)'; ctx.beginPath(); ctx.ellipse(kind === 'chariot' ? 10 : 0, 2, kind === 'chariot' ? 70 : 24, 5, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,.15)'; ctx.beginPath(); ctx.ellipse(BIG.has(kind) ? 10 : 0, 2, BIG.has(kind) ? 70 : 24, 5, 0, 0, TAU); ctx.fill();
   if (trip > 0) {
     // fall forward (0-.25), lie (.25-.65), get up (.65-1)
     const f = trip < 0.25 ? trip / 0.25 : trip < 0.65 ? 1 : 1 - (trip - 0.65) / 0.35;
     const ease = f * f * (3 - 2 * f);
     ctx.translate(ease * 30, 0);
-    if (sp) { if (!(sp.fall && trip > 0.25 && trip < 0.65)) ctx.rotate(ease * (kind === 'chariot' ? 0.35 : 1.45)); drawSprite(ctx, sp, 0.4, trip, kind === 'chariot'); }
+    if (sp) { if (!(sp.fall && trip > 0.25 && trip < 0.65)) ctx.rotate(ease * (BIG.has(kind) ? 0.35 : 1.45)); drawSprite(ctx, sp, 0.4, trip, BIG.has(kind)); }
     else { ctx.rotate(ease * (kind === 'chariot' ? 0.35 : 1.45)); if (kind === 'chariot') chariot(ctx, 0.4); else person(ctx, kind, 0.4); }
     ctx.restore();
     if (trip > 0.15 && trip < 0.8) {   // stars
@@ -263,7 +300,7 @@ function drawRunner(ctx, kind, x, ground, scale, p, trip, dust) {
     return;
   }
   ctx.translate(0, -Math.abs(Math.sin(p)) * 4);
-  if (sp) drawSprite(ctx, sp, p, 0, kind === 'chariot');
+  if (sp) drawSprite(ctx, sp, p, 0, BIG.has(kind));
   else if (kind === 'chariot') chariot(ctx, p); else person(ctx, kind, p);
   ctx.restore();
   dust.forEach(d => { ctx.fillStyle = `rgba(160,140,110,${d.a})`; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, TAU); ctx.fill(); });
@@ -295,23 +332,26 @@ function stripEl() {
   if (!el) { el = document.createElement('div'); el.id = 'runner-strip'; el.setAttribute('aria-hidden', 'true'); el.innerHTML = '<canvas></canvas>'; document.body.insertBefore(el, document.getElementById('app')); }
   return el;
 }
+const phone = () => matchMedia('(max-width: 640px)').matches;
 function show(subject, kind) {
   subject = subject || 'none';
+  if (phone()) { hide(); return; }      // on a phone the answers need the room
   if (strip && strip.subject === subject && strip.ln.kind === kind) { strip.el.hidden = false; return; }
   hide();
   const el = stripEl(); el.hidden = false; el.dataset.subject = subject;
   const cv = el.querySelector('canvas'), ctx = cv.getContext('2d');
   strip = { el, cv, ctx, subject, ln: lane(kind || pick(subject)), x: 0, last: performance.now(), raf: 0 };
+  sprites(strip.ln.kind);
   const frame = now => {
     if (!strip || strip.cv !== cv) return;
     const s = strip, dt = Math.min(0.05, (now - s.last) / 1000); s.last = now;
     const dpr = Math.min(2, devicePixelRatio || 1), w = el.clientWidth, h = el.clientHeight;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const ground = h * 0.78, scale = h / 150, rx = Math.min(w * 0.3, 260);
+    const band = Math.round(h * 0.36), ground = h * 0.9, scale = h / 150, rx = Math.min(w * 0.3, 260);
     const trip = s.ln.step(dt, now, rx, ground, scale);
     s.x += dt * 140 * s.ln.speed;
-    scene(ctx, w, h, s.subject, s.x);
+    scene(ctx, w, h, s.subject, s.x, band);
     if (now < s.ln.boostUntil) { ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2; for (let i = 0; i < 5; i++) { const yy = h * (0.25 + i * 0.1); const xx = (rx - 40 - ((now / 3 + i * 53) % 120)); ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx - 40, yy); ctx.stroke(); } }
     drawRunner(ctx, s.ln.kind, rx, ground, scale, s.ln.phase, trip, s.ln.dust);
     if (!still()) s.raf = requestAnimationFrame(frame);
@@ -320,44 +360,62 @@ function show(subject, kind) {
 }
 function hide() { if (strip) { cancelAnimationFrame(strip.raf); strip.el.hidden = true; strip = null; } else { const el = document.getElementById('runner-strip'); if (el) el.hidden = true; } }
 
-/* ---------- the host's race: one lane per pupil, positions follow the scores ---------- */
+/* ---------- the host's race: one lane per pupil, positions follow the scores ----------
+   Lanes are strips of ground seen from above, with the setting along the top edge only.
+   R.full = true makes the lanes share out the container's height (present mode). */
 function race(container) {
   const cv = document.createElement('canvas'); container.appendChild(cv);
   const ctx = cv.getContext('2d');
-  const R = { lanes: new Map(), subject: 'none', x: 0, last: performance.now(), raf: 0, entries: [] };
+  const R = { lanes: new Map(), subject: 'none', x: 0, last: performance.now(), raf: 0, entries: [], full: false };
   R.set = (subject, entries) => {   // entries: [{ id, name, kind, value }], best first
     R.subject = subject || 'none'; R.entries = entries;
-    entries.forEach(e => { if (!R.lanes.has(e.id)) R.lanes.set(e.id, Object.assign(lane(e.kind), { pos: 0 })); });
+    entries.forEach(e => { if (!R.lanes.has(e.id)) { sprites(e.kind); R.lanes.set(e.id, Object.assign(lane(e.kind), { pos: 0 })); } });
   };
   R.boost = id => { const l = R.lanes.get(id); if (l) l.boost(); };
   R.trip = id => { const l = R.lanes.get(id); if (l) l.trip(); };
   R.stop = () => { cancelAnimationFrame(R.raf); cv.remove(); };
   const frame = now => {
     const dt = Math.min(0.05, (now - R.last) / 1000); R.last = now;
-    const dpr = Math.min(2, devicePixelRatio || 1), w = container.clientWidth, n = Math.max(1, R.entries.length), laneH = 58, h = n * laneH + 8;
-    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + 'px'; }
+    const dpr = Math.min(2, devicePixelRatio || 1), w = container.clientWidth, n = Math.max(1, R.entries.length);
+    const band = R.full ? Math.round(Math.min(110, Math.max(56, container.clientHeight * 0.12))) : 46;
+    const laneH = R.full ? Math.max(58, Math.min(170, Math.floor((container.clientHeight - band - 10) / n))) : 62;
+    const h = R.full ? container.clientHeight : band + n * laneH + 10;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    cv.style.height = h + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     R.x += dt * 90;
-    scene(ctx, w, h, R.subject, R.x);
+    scene(ctx, w, h, R.subject, R.x, band);
+    const scale = 0.62 * laneH / 100;                      // a runner stands about two thirds of a lane tall
+    const fs = Math.round(Math.max(14, Math.min(26, laneH * 0.24)));
+    ctx.font = `700 ${fs}px "Atkinson Hyperlegible", system-ui, sans-serif`;
+    const labels = R.entries.map((e, i) => `${i + 1}. ${e.name}`);
+    const labelW = Math.max(60, ...labels.map(t => ctx.measureText(t).width)) + 20;
     const top = Math.max(1, ...R.entries.map(e => e.value));
-    const start = 120, finish = w - 70;
-    ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillRect(finish + 20, 0, 4, h);   // finish line
+    const start = labelW + 40 * scale + 16, finish = w - 60 * scale - 30;
+    // lane lines and the finish line
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 2; ctx.setLineDash([14, 10]); ctx.lineDashOffset = R.x % 24;
+    for (let i = 1; i < n; i++) { const y = band + i * laneH + 6; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+    ctx.setLineDash([]);
+    for (let y = band + 6, k = 0; y < band + n * laneH + 6; y += 10, k++) { ctx.fillStyle = k % 2 ? '#1b1b22' : '#ffffff'; ctx.fillRect(finish + 40 * scale, y, 10, 10); ctx.fillStyle = k % 2 ? '#ffffff' : '#1b1b22'; ctx.fillRect(finish + 40 * scale + 10, y, 10, 10); }
     R.entries.forEach((e, i) => {
-      const l = R.lanes.get(e.id), ground = 8 + (i + 1) * laneH - 6;
+      const l = R.lanes.get(e.id); if (!l) return;
+      const ground = band + 6 + (i + 1) * laneH - laneH * 0.16;
       const target = start + (finish - start) * Math.max(0, e.value) / top;
-      l.pos += (target - l.pos) * Math.min(1, dt * 2.5); if (!l.pos) l.pos = start;
-      const trip = l.step(dt, now, l.pos, ground, 0.42);
-      ctx.fillStyle = 'rgba(0,0,0,.08)'; ctx.fillRect(0, ground, w, 1);
-      ctx.font = '700 14px "Atkinson Hyperlegible", system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-      ctx.fillStyle = 'rgba(255,255,255,.85)'; const tw = Math.min(104, ctx.measureText(e.name).width + 12); ctx.fillRect(6, ground - 28, tw, 22);
-      ctx.fillStyle = '#1b1b22'; ctx.fillText(`${i + 1}. ${e.name}`.slice(0, 16), 10, ground - 17);
-      drawRunner(ctx, l.kind, l.pos, ground, 0.42, l.phase, trip, l.dust);
+      if (!l.pos) l.pos = start;
+      l.pos += (target - l.pos) * Math.min(1, dt * 2.5);
+      const trip = l.step(dt, now, l.pos, ground, scale);
+      // the name, in a box that fits it
+      const tw = ctx.measureText(labels[i]).width + 16, bh = fs + 10, by = band + 6 + i * laneH + (laneH - bh) / 2;
+      ctx.fillStyle = 'rgba(255,255,255,.9)'; roundRect(ctx, 8, by, tw, bh, 6); ctx.fill();
+      ctx.fillStyle = '#1b1b22'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(labels[i], 16, by + bh / 2 + 1);
+      drawRunner(ctx, l.kind, l.pos, ground, scale, l.phase, trip, l.dust);
     });
     if (!still()) R.raf = requestAnimationFrame(frame);
   };
   R.raf = requestAnimationFrame(frame);
   return R;
 }
+function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
 window.RUNNER = { pick, show, hide, boost: () => strip && strip.ln.boost(), trip: () => strip && strip.ln.trip(), race, kinds: CAST, drawRunner };
 })();

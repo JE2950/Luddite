@@ -18,6 +18,7 @@ function tag() {
     if (el) { used.add(el); el.style.viewTransitionName = name; el.dataset.morph = name; }
   });
 }
+const GEO_PLACES = new RegExp('\\b(' + ['afghanistan','albania','algeria','andorra','angola','argentina','armenia','australia','austria','azerbaijan','bahamas','bangladesh','barbados','belarus','belgium','belize','benin','bhutan','bolivia','bosnia','botswana','brazil','bulgaria','burkina faso','burundi','cambodia','cameroon','canada','chad','chile','china','colombia','congo','costa rica','croatia','cuba','cyprus','czechia','czech republic','denmark','djibouti','dominican republic','ecuador','egypt','el salvador','england','eritrea','estonia','eswatini','ethiopia','fiji','finland','france','gabon','gambia','georgia','germany','ghana','greece','greenland','guatemala','guinea','guyana','haiti','honduras','hungary','iceland','india','indonesia','iran','iraq','ireland','israel','italy','jamaica','japan','jordan','kazakhstan','kenya','kosovo','kuwait','laos','latvia','lebanon','lesotho','liberia','libya','liechtenstein','lithuania','luxembourg','madagascar','malawi','malaysia','maldives','mali','malta','mauritania','mauritius','mexico','moldova','monaco','mongolia','montenegro','morocco','mozambique','myanmar','namibia','nepal','netherlands','new zealand','nicaragua','niger','nigeria','north korea','norway','oman','pakistan','panama','papua new guinea','paraguay','peru','philippines','poland','portugal','qatar','romania','russia','rwanda','saudi arabia','scotland','senegal','serbia','sierra leone','singapore','slovakia','slovenia','somalia','south africa','south korea','spain','sri lanka','sudan','suriname','sweden','switzerland','syria','taiwan','tajikistan','tanzania','thailand','togo','tonga','tunisia','turkey','turkmenistan','uganda','ukraine','united kingdom','united states','uruguay','uzbekistan','vanuatu','vatican','venezuela','vietnam','wales','yemen','zambia','zimbabwe','africa','asia','europe','antarctica','oceania','north america','south america','london','paris','berlin','madrid','rome','lisbon','dublin','edinburgh','cardiff','belfast','amsterdam','brussels','vienna','prague','warsaw','budapest','athens','oslo','stockholm','helsinki','copenhagen','reykjavik','moscow','kyiv','ankara','cairo','nairobi','pretoria','cape town','lagos','abuja','accra','addis ababa','tokyo','beijing','seoul','delhi','new delhi','mumbai','bangkok','jakarta','manila','canberra','sydney','wellington','ottawa','washington','new york','mexico city','buenos aires','brasilia','rio de janeiro','lima','santiago','bogota','caracas','havana','amazon','nile','thames','severn','danube','rhine','ganges','yangtze','mississippi','everest','alps','andes','himalayas','sahara','pennines','snowdon','ben nevis'].join('|') + ')\\b', 'g');
 const T = window.THEME = {
   current: null,
   def,
@@ -41,6 +42,7 @@ const T = window.THEME = {
     const head = [set.title || '', ...(set.tags || [])].join(' ').toLowerCase();
     if (/\blatin|\blatina|\bce latin|\bvocab(ulary)? latin/.test(head)) return 'latin';
     if (/\bfrench|fran[cç]ais/.test(head)) return 'french';
+    if (/\bgeog|\bflags?\b|capital cities|\bcountries\b|\bmap skills|\bcontinents?\b|\brivers?\b|\bmountains?\b/.test(head)) return 'geography';
     const qs = (set.questions || []).slice(0, 300);
     const text = qs.map(q => [q.q, ...(q.answers || [])].join(' ')).join(' \n ');
     if (!text.trim()) return null;
@@ -56,9 +58,15 @@ const T = window.THEME = {
     fr += 2 * count(/[éèêàçùâîôûëïœ]/g);
     fr += 2 * count(/\b(l|d|j|qu|c|n|s|m|t)['’][a-zéèêàâîôûh]/g);
     fr += count(/\b(le|la|les|un|une|des|du|je|tu|il|elle|nous|vous|ils|elles|sont|avec|pour|dans|mon|ma|mes|ton|ta|tes|son|sa|ses|très|aussi|mais|où|qui|quoi|chez|sur|sous|ce|cette|ces|au|aux|pas|bonjour|merci|oui|non)\b/g);
+    // Geography: countries, capitals, landforms, map and physical/human geography words, and flag pictures
+    let ge = 0;
+    ge += count(GEO_PLACES);
+    ge += count(/\b(capital|country|countries|continent|river|mountain|volcano|volcanic|glacier|glaciation|erosion|deposition|weathering|meander|delta|estuary|ox-bow|oxbow|tectonic|plate|earthquake|tsunami|climate|weather|rainfall|precipitation|latitude|longitude|equator|tropic|hemisphere|population|migration|urban|rural|settlement|biome|rainforest|desert|tundra|savanna|grid reference|contour|scale|compass|ordnance survey|flag|ocean|sea|lake|island|peninsula|coast|coastal|cliff|stack|arch|spit|longshore drift|source|mouth|tributary|confluence|watershed|drainage basin|hydrograph|flood|deforestation|sustainab\w*|fair trade|development|gdp|aid|tourism|national park|ecosystem)\b/g);
+    ge += 2 * qs.filter(q => q.image || (q.answerImages && q.answerImages.some(Boolean))).length;
     const n = Math.max(1, qs.length);
-    if (la >= 3 && la >= 2 * fr && la / n >= 0.3) return 'latin';
-    if (fr >= 3 && fr >= 2 * la && fr / n >= 0.3) return 'french';
+    if (la >= 3 && la >= 2 * fr && la >= 2 * ge && la / n >= 0.3) return 'latin';
+    if (fr >= 3 && fr >= 2 * la && fr >= ge && fr / n >= 0.3) return 'french';   // French vocab for countries is still French
+    if (ge >= 3 && ge >= 2 * la && ge >= 2 * fr && ge / n >= 0.3) return 'geography';
     return null;
   },
 
@@ -81,7 +89,7 @@ const T = window.THEME = {
 
     const wait = ms => new Promise(r => setTimeout(r, ms));
     // Load the new look's fonts first, so text doesn't change shape partway through
-    const face = s === 'latin' ? 'Cinzel' : s === 'french' ? '"Playfair Display"' : '"Libre Baskerville"';
+    const face = s === 'latin' ? 'Cinzel' : s === 'french' ? '"Playfair Display"' : s === 'geography' ? 'Bitter' : '"Libre Baskerville"';
     const fonts = document.fonts ? Promise.all([document.fonts.load(`700 48px ${face}`), document.fonts.load(`700 32px ${face}`)]) : null;
     const fontReady = Promise.race([fonts, wait(700)]).catch(() => {});
 

@@ -93,6 +93,10 @@ This lets you add colleagues and reset their passwords from inside the site. It 
 
 In Supabase, go to **SQL Editor → New query**, paste the whole of `supabase/assignments.sql` and click **Run** (accept the "destructive operations" warning). This adds assignments and revision folders. Until it has run, the **Assign** buttons stay hidden.
 
+## Step 6c: Turn on Geography and pictures
+
+In the SQL Editor, run the whole of `supabase/pictures.sql` the same way. It lets sets be tagged Geography and makes the `set-images` storage bucket that question and answer pictures go in. Until it has run, Geography sets can't be saved with the Geography tag and the picture buttons say pictures aren't switched on.
+
 ## Step 7: Publish the website on Netlify
 
 1. In Netlify, click **Add new site → Import an existing project → GitHub**, and allow access to your repository.

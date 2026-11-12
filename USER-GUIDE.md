@@ -2,6 +2,8 @@
 
 Ludus (or whatever you've renamed it) runs quick quiz games in class. You build sets of multiple-choice questions; pupils join a game on their own laptops with a 6-digit code and their first name, and everyone answers at their own pace. Pupils need no accounts, and nothing about them is stored online.
 
+Every page has a **?** button in the top corner (or press the **?** key). It walks you round that page one part at a time: Back and Next, or the arrow keys, and Esc to close. Each tour also runs once by itself the first time you open that page.
+
 In this guide, "your site" means your Netlify address or your own domain. If you set up a `play.` address, pupils use that.
 
 ## Signing in and accounts
@@ -34,9 +36,13 @@ Each set has these buttons:
 
 Sets save automatically as you type. Watch for **Saved** next to the logo.
 
-1. Open a folder (optional) and click **+ New set**. Give it a name, The subject decides the look, mode names and music of any game played with the set. Leave **Subject** on **Work it out** and the app reads the title, tags and questions: Latin dictionary entries, macrons and Latin words make it Latin; accents and French words make it French. The box shows what it worked out, e.g. "Latin (worked out)". Choose Latin, French or None to override it.
+1. Open a folder (optional) and click **+ New set**. Give it a name, The subject decides the look, mode names and music of any game played with the set. Leave **Subject** on **Work it out** and the app reads the title, tags and questions: Latin dictionary entries, macrons and Latin words make it Latin; accents and French words make it French; country names, capitals, rivers, mountains and geography words make it Geography. The box shows what it worked out, e.g. "Latin (worked out)". Choose Latin, French, Geography or None to override it.
 2. For each question, type the question and 2–4 answers, and tick the circle next to the right one. The **Pupil sees** preview shows exactly how it will look.
 3. Add **tags**, separated by commas (e.g. `Year 7, fractions`), to find the set later.
+
+**Pictures:** click **🖼 Add a picture** under a question to show a picture with it (a flag, a map, a diagram). The words become optional. Click **🖼** beside an answer to make that answer a picture. Pasting a picture's web address (ending .png, .jpg, .webp, .gif or .svg) into an answer box does the same, and so does putting the address in a cell of a pasted Excel row. Pictures are shrunk before they're stored, so a phone photo is fine. A guess-the-flag set is quickest as Excel rows: a flag's address in the Question column, then country names as the answers.
+
+**Swap questions and answers:** **⇄ Swap questions and answers** turns the whole set round, so each right answer becomes the question and the old question becomes its answer. The wrong answers come from the other questions. Run it again to swap back. Questions that share a right answer are combined, so no wrong answer is ever another right one. A picture question becomes a picture answer, so "Which country is this flag?" turns into "France: which flag?".
 
 **Maths:** wrap maths in dollar signs.
 
@@ -52,7 +58,7 @@ Sets save automatically as you type. Watch for **Saved** next to the logo.
 
 Click **Import questions**:
 - **Paste from Excel:** one question per row, in the columns *Question, Answer 1, Answer 2, Answer 3, Answer 4, Correct answer number (1–4)*. Answers 3 and 4 can be blank. Copy the rows in Excel and paste them into the box, then click **Check rows**. It lists any rows it skipped and why.
-- **Paste from Quizlet:** in Quizlet, open the set and choose **⋯ → Export**. Keep the default settings (tab between term and definition, new line between rows), click **Copy text** and paste it in. Choose whether questions show the term, the definition, or both (two questions per card), and how many answers each has. The wrong answers come from other cards in the same set, so a set needs at least 4 cards for 4 answers. Click **Check cards** to see the first question before adding.
+- **Paste from Quizlet:** in Quizlet, open the set and choose **⋯ → Export**. Keep the default settings (tab between term and definition, new line between rows), click **Copy text** and paste it in. Choose whether questions show the term, the definition (swapped), or both (two questions per card), and how many answers each has. Cards that share a word are combined: *domini* becomes one question whose answer is "genitive singular / nominative plural / vocative plural". The wrong answers come from other cards in the same set, so a set needs at least 4 cards for 4 answers. Click **Check cards** to see the first question before adding.
 - **Upload a file:** an .xlsx or .csv in that layout, or a Blooket spreadsheet import template exactly as Blooket gives it.
 
 Then choose **Add to the end of this set** or **Replace all questions**.
@@ -77,6 +83,7 @@ Use your laptop on the projector. **Your browser tab runs the game**, so keep it
    - **Click a pupil's name** on the leaderboard to see every answer they've given, newest first. The same panel has **Let … join on another laptop**, for a pupil whose laptop has died: click it, and for 2 minutes he can join on a different laptop with the same name and keep his score.
    - The right-hand panel shows class accuracy and the trickiest questions so far, with the most common wrong answer for each.
    - **♪ On/Off** and the slider control the music, which plays from your laptop only.
+   - **Present** (or the **P** key, in Classic mode) shows only the race, full screen, for the projector. Esc or **Back to dashboard** returns.
 7. The game ends when time runs out, or when you click **End game**.
 8. The results screen shows a podium, the full leaderboard and question stats. Two downloads:
    - **Download results:** a spreadsheet with four sheets: **Pupils**, **By pupil and question**, **Questions** and **Every answer**.
@@ -86,13 +93,13 @@ If you close the tab by accident, open **Host live game** on the same set within
 
 ## Teams
 
-In the host settings, choose **2 teams**, **3 teams** or **4 teams**. Pupils go into the smallest team as they join; **Shuffle teams** in the lobby mixes them up again. Each pupil's points (or treasure) count towards his team. The board shows the team totals above the leaderboard, each pupil sees his team on his screen, and the results and download include a **Teams** sheet. Team names follow the subject: Romani, Graeci, Galli and Carthaginienses for Latin; Les Bleus, Les Rouges, Les Verts and Les Jaunes for French.
+In the host settings, choose **2 teams**, **3 teams** or **4 teams**. Pupils go into the smallest team as they join; **Shuffle teams** in the lobby mixes them up again. Each pupil's points (or treasure) count towards his team. The board shows the team totals above the leaderboard, each pupil sees his team on his screen, and the results and download include a **Teams** sheet. Team names follow the subject: Romani, Graeci, Galli and Carthaginienses for Latin; Les Bleus, Les Rouges, Les Verts and Les Jaunes for French; Explorers, Navigators, Pioneers and Voyagers for Geography.
 
 ## The runner and the treasures
 
-- **Classic mode:** a character runs across the top of each pupil's screen. A right answer gives him a burst of speed; a wrong one trips him over. Latin sets give a man or woman in a toga, a gladiator, or now and then a charioteer; French sets give a mime, a chef with a frying pan or a peasant in a garlic necklace. On the board, the top six pupils (or the teams) race each other, placed by their scores.
-- **Fishing mode with a Latin or French set:** each right answer brings up a treasure instead of a fish, worth denarii or francs: from rusty swords and garlic bulbs up to the Golden Fleece and the Great Golden Cheese.
-- **Your own pictures:** put PNGs in `assets/runners` (see the note there) and they replace the drawn characters.
+- **Classic mode:** a character runs across the top of each pupil's screen. A right answer gives him a burst of speed; a wrong one trips him over. Latin sets give a man or woman in a toga, a gladiator, or now and then a charioteer. French sets give a mime, a chef with a frying pan or a peasant in a garlic necklace. Geography sets give an explorer, a mountaineer, a polar explorer, a jungle explorer or a geologist, and now and then a Land Rover or a camel. On the board, the top six pupils (or the teams) race each other, placed by their scores. On phones the runner stays off, so the question and answers fit on one screen.
+- **Fishing mode with a subject set:** each right answer brings up a treasure instead of a fish, worth denarii (Latin), francs (French) or pounds (Geography): from rusty swords, garlic bulbs and soggy maps up to the Golden Fleece, the Great Golden Cheese and the Golden Globe.
+- **The characters** are pictures in `assets/runners` (see the note there). Replace a file to change a character.
 
 ## Assignments and revision folders
 

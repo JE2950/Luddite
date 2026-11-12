@@ -66,12 +66,28 @@ window.APP = {
         [['Model Eiffel Tower', 'eiffel'], ['Golden croissant', 'croissant'], ['Royal crown', 'crown']],
         [['Sword of Joan of Arc', 'sword'], ['The Golden Snail', 'snail'], ['The Great Golden Cheese', 'cheese']]
       ] }
+    },
+    geography: {
+      label: 'Geography',
+      banner: 'GEOGRAPHY',
+      modes: { classic: 'Expedition', fishing: 'Deep Sea Dive', event: 'Monsoon' },
+      keys: ['N', 'E', 'S', 'W'],
+      pixels: ['#1f5f4a', '#c98a2b', '#2f7fb5', '#13342a', '#eef1e6', '#1f5f4a'],
+      music: { lobby: 'assets/music/geography-lobby.mp3', game: 'assets/music/geography.mp3' },
+      treasure: { unit: 'pounds', symbol: '£', items: [
+        [['Soggy map', 'map'], ['Broken compass', 'compass'], ['Old postcard', 'postcard'], ['Old penny', 'coin']],
+        [['Ammonite fossil', 'fossil'], ['School globe', 'globe'], ['Message in a bottle', 'bottle']],
+        [['Explorer’s telescope', 'telescope'], ['Gold nugget', 'nugget'], ['Quartz crystal', 'crystal']],
+        [['Pirate’s treasure chest', 'chest'], ['Meteorite', 'meteorite'], ['Golden compass', 'gcompass']],
+        [['Idol of the Lost City', 'idol'], ['The Great Diamond', 'diamond'], ['The Golden Globe', 'gglobe']]
+      ] }
     }
   },
   // Team names for team games, by subject, with each team's colour
   teams: {
     latin: [['Romani', '#8f1d1d'], ['Graeci', '#2d5a8c'], ['Galli', '#4f7a3f'], ['Carthaginienses', '#b8892b']],
     french: [['Les Bleus', '#0055a4'], ['Les Rouges', '#e1352b'], ['Les Verts', '#2e8b6e'], ['Les Jaunes', '#c9962a']],
+    geography: [['Explorers', '#1f5f4a'], ['Navigators', '#2f7fb5'], ['Pioneers', '#c98a2b'], ['Voyagers', '#a3402e']],
     none: [['Red', '#c7392b'], ['Blue', '#1f5fae'], ['Green', '#1f8a5c'], ['Gold', '#b8892b']]
   },
   // Takeover colours for the Ludgrove pages (used when a game ends and the page returns home).

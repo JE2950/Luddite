@@ -19,7 +19,7 @@ const chans = new Map();      // pid -> pupil channel
 let ui = { tab: 'board' };
 let tickTimer = null;
 
-const validQ = q => q && String(q.q || '').trim() && q.answers.filter(a => String(a).trim()).length >= 2 && String(q.answers[q.correct] ?? '').trim();
+const validQ = LB.validQ;
 
 /* ---------- persistence (this laptop only) ---------- */
 let saveT;
@@ -52,7 +52,7 @@ async function boot() {
   const questions = (data.questions || []).filter(validQ).map(q => {
     const seen = new Set([String(q.answers[q.correct]).trim().toLowerCase()]);
     const kept = q.answers.map((a, j) => [String(a), j]).filter(([a, j]) => a.trim() && (j === q.correct || !seen.has(a.trim().toLowerCase()) && seen.add(a.trim().toLowerCase())));
-    return { id: q.id, q: q.q, answers: kept.map(k => k[0]), correct: kept.findIndex(k => k[1] === q.correct) };
+    return { id: q.id, q: q.q, image: LB.safeSrc(q.image) || undefined, answers: kept.map(k => k[0]), correct: kept.findIndex(k => k[1] === q.correct) };
   });
   if (!questions.length) return fatal('This set has no finished questions', 'Add at least one question with two answers first.');
   G = {
@@ -130,7 +130,7 @@ function qPayload(p) {
   const q = qById(p.cur);
   if (!q) return null;
   const perm = p.perm && p.perm.length === q.answers.length ? p.perm : q.answers.map((_, i) => i);
-  return { seq: p.seq, q: q.q, answers: perm.map(i => q.answers[i]) };
+  return { seq: p.seq, q: q.q, image: q.image, answers: perm.map(i => q.answers[i]) };
 }
 function stateFor(p) {
   return {
@@ -345,7 +345,7 @@ function reviewFor(p) {
   // Each question the pupil got wrong at least once: their latest wrong answer and the right one
   const seen = new Map();
   (p.log || []).forEach(e => { if (!e.right) seen.set(e.qid, e.choice); });
-  return [...seen].slice(-30).map(([qid, choice]) => { const q = qById(qid); return q ? { q: q.q, yours: q.answers[choice], answer: q.answers[q.correct] } : null; }).filter(Boolean);
+  return [...seen].slice(-30).map(([qid, choice]) => { const q = qById(qid); return q ? { q: LB.qText(q), yours: LB.ansText(q.answers[choice]), answer: LB.ansText(q.answers[q.correct]) } : null; }).filter(Boolean);
 }
 function finalFor(p) {
   const list = ranked();
@@ -356,7 +356,7 @@ function questionRows() {
   return G.questions.map(q => {
     const st = G.qstats[q.id];
     const top = Object.entries(st.wrong).sort((a, b) => b[1] - a[1])[0];
-    return { q, st, pct: st.seen ? st.right / st.seen : null, topWrong: top ? { text: q.answers[top[0]], n: top[1] } : null };
+    return { q, st, pct: st.seen ? st.right / st.seen : null, topWrong: top ? { text: LB.ansText(q.answers[top[0]]), raw: q.answers[top[0]], n: top[1] } : null };
   });
 }
 /* One row per pupil per question they met: how often they saw it, got it right and got it wrong,
@@ -375,9 +375,9 @@ function pupilQuestionRows() {
     });
     G.questions.forEach(q => {
       const r = by.get(q.id); if (!r) return;
-      const wrongs = [...new Set(r.wrongAnswers)].map(i => q.answers[i]);
+      const wrongs = [...new Set(r.wrongAnswers)].map(i => LB.ansText(q.answers[i]));
       const result = r.wrong === 0 ? 'Right' : r.right === 0 ? 'Wrong' : 'Mixed';
-      rows.push({ Date: date, Set: G.title, Subject: subject, Pupil: p.name, Question: q.q, 'Correct answer': q.answers[q.correct],
+      rows.push({ Date: date, Set: G.title, Subject: subject, Pupil: p.name, Question: LB.qText(q), 'Correct answer': LB.ansText(q.answers[q.correct]),
         'Times asked': r.seen, 'Times right': r.right, 'Times wrong': r.wrong, Result: result,
         'Last attempt': r.last ? 'Right' : 'Wrong', 'Weakness': r.wrong > 0 ? 'Yes' : 'No', 'Their wrong answers': wrongs.join(' | ') });
     });
@@ -408,9 +408,9 @@ async function download() {
     ...(fish ? [p.catches, p.biggest ? `${p.biggest.name} (${LB.FISH_TIERS[p.biggest.tier].name})` : '', p.biggest ? (unit ? Math.round(p.biggest.kg * 10) : p.biggest.kg) : ''] : [])]));
   const qs = [['Question', 'Times answered', 'Correct %', 'Most common wrong answer', 'Times chosen', 'Answer 1', 'Answer 2', 'Answer 3', 'Answer 4', 'Correct answer']];
   questionRows().forEach(r => {
-    const counts = r.q.answers.map((a, j) => `${a} (${j === r.q.correct ? r.st.right : (r.st.wrong[j] || 0)})`);
+    const counts = r.q.answers.map((a, j) => `${LB.ansText(a)} (${j === r.q.correct ? r.st.right : (r.st.wrong[j] || 0)})`);
     while (counts.length < 4) counts.push('');
-    qs.push([r.q.q, r.st.seen, r.pct == null ? '' : Math.round(100 * r.pct), r.topWrong ? r.topWrong.text : '', r.topWrong ? r.topWrong.n : '', ...counts, r.q.answers[r.q.correct]]);
+    qs.push([LB.qText(r.q), r.st.seen, r.pct == null ? '' : Math.round(100 * r.pct), r.topWrong ? r.topWrong.text : '', r.topWrong ? r.topWrong.n : '', ...counts, LB.ansText(r.q.answers[r.q.correct])]);
   });
   const wb = XLSX.utils.book_new();
   const s1 = XLSX.utils.aoa_to_sheet(pupils); s1['!cols'] = [{ wch: 6 }, { wch: 22 }, { wch: 9 }, { wch: 10 }, { wch: 9 }, { wch: 11 }, { wch: 12 }, { wch: 11 }, { wch: 30 }, { wch: 15 }];
@@ -427,7 +427,7 @@ async function download() {
   XLSX.utils.book_append_sheet(wb, pq, 'By pupil and question');
   XLSX.utils.book_append_sheet(wb, s2, 'Questions');
   const log = [['Name', 'Question', 'Their answer', 'Correct answer', 'Right?']];
-  ranked().forEach(p => (p.log || []).forEach(e => { const q = qById(e.qid); if (q) log.push([p.name, q.q, q.answers[e.choice], q.answers[q.correct], e.right ? 'Yes' : 'No']); }));
+  ranked().forEach(p => (p.log || []).forEach(e => { const q = qById(e.qid); if (q) log.push([p.name, LB.qText(q), LB.ansText(q.answers[e.choice]), LB.ansText(q.answers[q.correct]), e.right ? 'Yes' : 'No']); }));
   const s3 = XLSX.utils.aoa_to_sheet(log); s3['!cols'] = [{ wch: 20 }, { wch: 50 }, { wch: 18 }, { wch: 18 }, { wch: 8 }];
   XLSX.utils.book_append_sheet(wb, s3, 'Every answer');
   const d = new Date(G.startedAt || Date.now());
@@ -506,19 +506,59 @@ function liveRender() {
 const rankLabels = () => ({ points: fishing() ? LB.catchLabel(G.subject) : 'Points', correct: 'Correct answers', accuracy: `Accuracy (${LB.MIN_FOR_ACCURACY}+ answers)` });
 
 /* Classic mode: the top pupils race across the top of the projector screen */
-let race = null;
+let race = null, presenting = false;
+/* Present mode: the race on its own, filling the screen, for the board */
+function setPresent(on) {
+  presenting = !!on && G.phase === 'playing' && !fishing();
+  document.body.classList.toggle('presenting', presenting);
+  const box = document.getElementById('race');
+  if (box) { box.querySelectorAll('.present-exit').forEach(b => b.remove()); }
+  if (presenting && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+  if (!presenting && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  updateRace();
+}
 function updateRace() {
   const show = G.phase === 'playing' && !fishing() && Object.keys(G.pupils).length > 0;
   let box = document.getElementById('race');
-  if (!show) { if (race) { race.stop(); race = null; } if (box) box.hidden = true; return; }
+  if (!show) { if (race) { race.stop(); race = null; } if (box) box.hidden = true; if (presenting) { presenting = false; document.body.classList.remove('presenting'); } return; }
   if (!box) { box = document.createElement('div'); box.id = 'race'; box.className = 'race'; box.setAttribute('aria-hidden', 'true'); document.body.insertBefore(box, app); }
   box.hidden = false;
   if (!race) race = RUNNER.race(box);
+  race.full = presenting;
+  if (presenting && !box.querySelector('.present-exit')) box.insertAdjacentHTML('beforeend', '<button class="present-exit" data-act="present-off" title="Back to the dashboard (Esc)">Back to dashboard</button>');
   if (G.settings.teams) {   // one runner per team
     G.teamRunners = G.teamRunners || teamDefs().map(() => RUNNER.pick(G.subject));
     race.set(G.subject, teamTotals().map(t => ({ id: 'team' + t.i, name: t.name, kind: G.teamRunners[t.i], value: t.total })));
-  } else race.set(G.subject, ranked().slice(0, 6).map(p => ({ id: p.pid, name: p.name, kind: p.runner || 'athlete', value: val(p) })));
+  } else race.set(G.subject, ranked().slice(0, presenting ? 10 : 6).map(p => ({ id: p.pid, name: p.name, kind: p.runner || 'athlete', value: val(p) })));
 }
+/* Guided tours for the host screen (the ? button) */
+const HOST_TOURS = {
+  setup: () => [
+    { sel: '.modes', title: 'Choose the game', text: `${THEME.modes().classic}: points for every right answer, more for a streak, and a race on the board. ${THEME.modes().fishing}: right answers bring up ${THEME.treasure(G.subject) ? 'treasures' : 'fish'}, rarer with a streak.` },
+    { sel: '#minutes', title: 'How long', text: 'The questions are shuffled for each pupil and repeat until the time is up. Until I end it leaves the game running until you press End game.' },
+    { sel: '#teams', title: 'Teams', text: 'Two to four teams. Boys join the smallest team as they arrive, and you can shuffle the teams in the lobby. Team totals add up each boy’s points. There is no shop and nothing to buy.' },
+    { sel: '#rankby', title: 'Ranking', text: 'Points, correct answers, or accuracy. Accuracy only ranks boys who have answered at least ten, so one lucky answer can’t win.' },
+    { sel: '[data-act="open"]', title: 'Open the lobby', text: 'Shows the address, the game code and a QR code for the board. Music plays from this laptop only.' }
+  ],
+  lobby: () => [
+    { sel: '.join-banner', title: 'Getting the boys in', text: 'They go to the address and type the code and their name, or scan the QR code. Each name appears below as they join.' },
+    { sel: '.team-cols, .main-head', title: 'Who has joined', text: 'Click a name to remove that pupil. With teams on, Shuffle teams mixes them again.' },
+    { sel: '.music', title: 'Music', text: 'Mute or turn it down here. It only plays from this laptop.' },
+    { sel: '[data-act="start"]', title: 'Start', text: 'Starts the game on every screen at once.' }
+  ],
+  playing: () => [
+    { sel: '#race', title: 'The race', text: 'The top six boys, or each team, race across the board. A right answer gives a burst of speed; a wrong one trips the runner over.' },
+    { sel: '[data-act="present"]', title: 'Present mode', text: 'Shows only the race, full screen, for the projector. Press P to switch it on or off, and Esc to come back.' },
+    { sel: '#board', title: 'Leaderboard', text: 'Click a name to see every answer that boy has given. The cross removes him from the game.' },
+    { sel: '#stats', title: 'Trickiest questions', text: 'The questions the class finds hardest, with the most common wrong answer. Useful for stopping the game and teaching that point.' },
+    { sel: '[data-act="pause"], [data-act="resume-game"]', title: 'Pause and end', text: 'Pause freezes every pupil’s screen so you have their attention. End game shows the podium and the results to download.' }
+  ],
+  ended: () => [
+    { sel: '.podium', title: 'Results', text: 'The podium, then every pupil. Click a name for his answers.' },
+    { sel: '[data-act="download"]', title: 'Download', text: 'The spreadsheet has a sheet by pupil and question, ready to load into another program to target each boy’s weak spots. The CSV holds the same rows.' }
+  ]
+};
+const tourKey = () => (G.phase === 'playing' ? 'playing' : G.phase === 'lobby' ? 'lobby' : G.phase === 'ended' ? 'ended' : 'setup');
 function render() {
   if (!G) return;
   if (G.phase === 'setup') app.innerHTML = setupHTML();
@@ -530,12 +570,13 @@ function render() {
   music.want(musicKey());
   typeset(app);
   autoScroll();
+  if (G.phase === 'setup') LB.tour.auto('host-setup', HOST_TOURS.setup);
 }
 
 function fishingRulesHTML() {
   const tr = THEME.treasure(G.subject);
   const pics = LB.FISH_TIERS.map((t, i) => tr && tr.items[i] ? LB.itemSVG(tr.items[i][0][1], i, 64) : LB.fishSVG(i, t.fish[0][1], 64));
-  const range = t => tr ? `${(t.min * 10).toLocaleString('en-GB')}–${(t.max * 10).toLocaleString('en-GB')}` : `${t.min}–${t.max} kg`;
+  const range = t => tr ? `${tr.symbol || ''}${(t.min * 10).toLocaleString('en-GB')}–${tr.symbol || ''}${(t.max * 10).toLocaleString('en-GB')}` : `${t.min}–${t.max} kg`;
   return `<div class="fish-tiers">${LB.FISH_TIERS.map((t, i) => `<div class="fish-tier">${pics[i]}<b style="color:${t.colour}">${t.name}</b><span>${range(t)}</span></div>`).join('')}</div>
     <p class="hint" style="margin:0;max-width:60ch">${tr ? `Every right answer brings up a treasure, worth ${esc(tr.unit)}.` : 'Every right answer catches a fish.'} A streak raises the pupil’s lure level (up to 4), which roughly doubles the chance of Rare or better. A wrong answer ${tr ? 'finds nothing' : 'catches nothing'}, resets the streak and pauses the pupil for 2 seconds. About every 3 minutes a 30-second ${esc(THEME.modes().event)} doubles every ${tr ? 'find' : 'catch'}.</p>`;
 }
@@ -549,7 +590,7 @@ function readSetup() {
 function setupHTML() {
   const r = ui.resume;
   return `<div class="wrap host">
-    <div class="toolbar"><a class="btn ghost small" href="teacher.html">← Library</a><span class="sp"></span>${LB.mark}</div>
+    <div class="toolbar"><a class="btn ghost small" href="teacher.html">← Library</a><span class="sp"></span>${LB.mark}${LB.helpButton()}</div>
     ${r ? `<div class="ro" style="margin-bottom:20px"><strong>Game ${esc(r.code)} is still open on this laptop</strong> (${Object.keys(r.pupils).length} pupils, ${r.phase === 'ended' ? 'finished' : r.phase === 'lobby' ? 'in the lobby' : 'in progress'}).
       <button class="btn small primary" data-act="resume">${r.phase === 'ended' ? 'Show its results' : 'Resume it'}</button><button class="btn small ghost" data-act="discard">Start fresh</button></div>` : ''}
     <div class="stage center"><div class="setup">
@@ -558,7 +599,7 @@ function setupHTML() {
       <p class="hint" style="margin:0">${G.questions.length} ${G.questions.length === 1 ? 'question' : 'questions'}, shuffled for each pupil and repeated until time is up.</p>
       <div class="modes" role="radiogroup" aria-label="Game mode">
         <button class="mode ${fishing() ? '' : 'on'}" role="radio" aria-checked="${!fishing()}" data-act="mode" data-mode="classic"><b>${esc(THEME.modes().classic)}</b><span>Points for every right answer, boosted by streaks.</span></button>
-        <button class="mode fishing ${fishing() ? 'on' : ''}" role="radio" aria-checked="${fishing()}" data-act="mode" data-mode="fishing"><b>${esc(THEME.modes().fishing)}</b><span>Right answers catch fish. Streaks bring rarer, heavier fish.</span></button>
+        <button class="mode fishing ${fishing() ? 'on' : ''}" role="radio" aria-checked="${fishing()}" data-act="mode" data-mode="fishing"><b>${esc(THEME.modes().fishing)}</b><span>${THEME.treasure(G.subject) ? 'Right answers bring up treasures. Streaks bring rarer, more valuable ones.' : 'Right answers catch fish. Streaks bring rarer, heavier fish.'}</span></button>
       </div>
       <div class="ed-row" style="justify-content:center">
         <div class="field"><label for="minutes">Game length</label><select id="minutes">${[3, 5, 10, 15, 20, 30, 0].map(m => `<option value="${m}" ${G.settings.minutes === m ? 'selected' : ''}>${m ? m + ' minutes' : 'Until I end it'}</option>`).join('')}</select></div>
@@ -584,7 +625,7 @@ function qrHTML() {
 function lobbyHTML() {
   const list = Object.values(G.pupils).sort((a, b) => a.joinedAt - b.joinedAt);
   return `<div class="wrap host">
-    <div class="toolbar"><button class="btn ghost small" data-act="cancel-lobby">← Cancel</button><span class="sp"></span>${musicHTML()}${G.subject ? `<span class="chip subj">${esc(THEME.label(G.subject))}</span>` : ''}<span class="chip">${esc(G.title)}</span></div>
+    <div class="toolbar"><button class="btn ghost small" data-act="cancel-lobby">← Cancel</button><span class="sp"></span>${musicHTML()}${G.subject ? `<span class="chip subj">${esc(THEME.label(G.subject))}</span>` : ''}<span class="chip">${esc(G.title)}</span>${LB.helpButton()}</div>
     <section class="join-banner">
       <div><span class="qlabel">Go to</span><div class="join-url">${esc(JOIN_URL)}</div></div>
       <div><span class="qlabel">Game code</span><div class="join-code">${esc(G.code)}</div></div>
@@ -635,11 +676,13 @@ function statsHTML() {
     </div>
     <h3 class="side-h">Trickiest questions so far</h3>
     ${rows.length ? `<div class="tricky">${rows.slice(0, 6).map(r => `<div class="tricky-row">
-      <div class="tricky-q">${esc(r.q.q)}</div>
+      <div class="tricky-q">${qMini(r.q)}</div>
       <div class="tricky-m"><div class="meter"><i style="width:${Math.round(100 * r.pct)}%"></i></div><span class="lb-num">${Math.round(100 * r.pct)}% of ${r.st.seen}</span></div>
-      ${r.topWrong ? `<div class="hint">Most common wrong answer: <strong>${esc(r.topWrong.text)}</strong> (${r.topWrong.n})</div>` : ''}
+      ${r.topWrong ? `<div class="hint">Most common wrong answer: <strong>${LB.ansHTML(r.topWrong.raw)}</strong> (${r.topWrong.n})</div>` : ''}
     </div>`).join('')}</div>` : '<p class="hint">Stats appear as pupils answer.</p>'}`;
 }
+/* A question in a list: its picture as a thumbnail, then its words */
+const qMini = q => `${q.image && LB.safeSrc(q.image) ? `<img class="q-thumb" src="${esc(LB.safeSrc(q.image))}" alt="">` : ''}${esc(q.q || (q.image ? '' : ''))}`;
 function playingHTML() {
   return `<div class="wrap host wide">
     ${G.paused ? `<div class="pause-banner" role="status"><b>Paused</b><span>Eyes on the board. Pupils’ screens are frozen.</span><button class="btn primary" data-act="resume-game">▶ Resume</button></div>` : ''}
@@ -648,12 +691,12 @@ function playingHTML() {
       ${LB.mark}
       <div class="host-code"><span class="qlabel">Join at ${esc(JOIN_URL)}</span><b>${esc(G.code)}</b></div>
       <span class="sp"></span>
-      ${musicHTML()}
+      ${musicHTML()}${LB.helpButton()}
       <div class="stat"><div class="k">Pupils</div><div class="v" id="count">${Object.keys(G.pupils).length}</div></div>
       <div class="stat"><div class="k">Time left</div><div class="v" id="host-time">${G.endAt ? fmtTime(G.endAt - Date.now()) : '∞'}</div></div>
       ${ui.confirmEnd
         ? `<span class="confirm">End the game for everyone? <button class="btn small danger" data-act="end">End game</button><button class="btn small ghost" data-act="no-end">Keep playing</button></span>`
-        : `<button class="btn ${G.paused ? 'primary' : ''}" data-act="${G.paused ? 'resume-game' : 'pause'}">${G.paused ? '▶ Resume' : '❚❚ Pause'}</button><button class="btn" data-act="ask-end">End game</button>`}
+        : `${!fishing() ? '<button class="btn" data-act="present" id="present-btn" title="Show only the race, full screen (P)">Present</button>' : ''}<button class="btn ${G.paused ? 'primary' : ''}" data-act="${G.paused ? 'resume-game' : 'pause'}">${G.paused ? '▶ Resume' : '❚❚ Pause'}</button><button class="btn" data-act="ask-end">End game</button>`}
     </div>
     ${kickConfirm()}
     <div class="host-grid">
@@ -676,7 +719,7 @@ function pupilDrawer() {
     <h3 class="side-h" style="margin-top:16px">Answers, newest first</h3>
     ${log.length ? `<ol class="plog">${log.map(e => { const q = qById(e.qid); if (!q) return ''; return `<li class="${e.right ? 'ok' : 'no'}">
         <span class="mk" aria-label="${e.right ? 'Right' : 'Wrong'}">${e.right ? '✓' : '✗'}</span>
-        <div><div class="plog-q">${esc(q.q)}</div><div class="hint">Answered <strong>${esc(q.answers[e.choice])}</strong>${e.right ? '' : ` · right answer <strong>${esc(q.answers[q.correct])}</strong>`}</div></div></li>`; }).join('')}</ol>`
+        <div><div class="plog-q">${esc(LB.qText(q))}</div><div class="hint">Answered <strong>${LB.ansHTML(q.answers[e.choice])}</strong>${e.right ? '' : ` · right answer <strong>${LB.ansHTML(q.answers[q.correct])}</strong>`}</div></div></li>`; }).join('')}</ol>`
       : '<p class="hint">No answers yet.</p>'}
     ${G.phase === 'playing' ? `<div class="ed-row" style="margin-top:12px">
       ${p.allowRejoinUntil > Date.now()
@@ -706,7 +749,7 @@ function endedHTML() {
     <div class="host-grid">
       <section style="min-width:0"><h2 class="side-h">Final leaderboard</h2>${boardHTML()}</section>
       <section style="min-width:0"><h2 class="side-h">Questions</h2><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Question</th><th>Seen</th><th>Correct</th><th>Most common wrong answer</th></tr></thead><tbody>
-        ${rows.map(r => `<tr><td>${esc(r.q.q)}</td><td class="num">${r.st.seen}</td><td class="num">${r.pct == null ? '–' : Math.round(100 * r.pct) + '%'}</td><td>${r.topWrong ? esc(r.topWrong.text) + ` <span class="hint">(${r.topWrong.n})</span>` : '<span class="hint">–</span>'}</td></tr>`).join('')}
+        ${rows.map(r => `<tr><td>${qMini(r.q)}</td><td class="num">${r.st.seen}</td><td class="num">${r.pct == null ? '–' : Math.round(100 * r.pct) + '%'}</td><td>${r.topWrong ? LB.ansHTML(r.topWrong.raw) + ` <span class="hint">(${r.topWrong.n})</span>` : '<span class="hint">–</span>'}</td></tr>`).join('')}
       </tbody></table></div></section>
     </div>
     <p class="hint" style="margin-top:20px">Click a name to see that pupil’s answers. Results are kept on this laptop only. Download them before closing if you want a copy.</p>
@@ -778,6 +821,8 @@ app.addEventListener('click', async e => {
     case 'kick': ui.kick = null; if (ui.pupil === t.dataset.id) ui.pupil = null; kick(t.dataset.id); break;
     case 'ask-end': ui.confirmEnd = true; render(); break;
     case 'pause': setPaused(true); break;
+    case 'help': LB.tour.start(HOST_TOURS[tourKey()]()); break;
+    case 'present': setPresent(true); break;
     case 'resume-game': setPaused(false); break;
     case 'pupil': ui.pupil = t.dataset.id; render(); break;
     case 'close-pupil': ui.pupil = null; render(); break;
@@ -792,7 +837,16 @@ app.addEventListener('click', async e => {
 });
 
 app.addEventListener('input', e => { if (e.target.id === 'music-vol') music.setVol(+e.target.value); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && ui.pupil) { ui.pupil = null; render(); } });
+document.addEventListener('keydown', e => {
+  if (LB.tour.open()) return;
+  if (e.key === '?' && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && G) { LB.tour.start(HOST_TOURS[tourKey()]()); return; }
+  if (e.key === 'Escape' && presenting) { setPresent(false); return; }
+  if (e.key === 'Escape' && ui.pupil) { ui.pupil = null; render(); }
+  const t = e.target.tagName;
+  if ((e.key === 'p' || e.key === 'P') && !/INPUT|TEXTAREA|SELECT/.test(t) && G && G.phase === 'playing' && !fishing()) setPresent(!presenting);
+});
+document.addEventListener('click', e => { if (e.target.closest('[data-act="present-off"]')) setPresent(false); });
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && presenting) setPresent(false); });
 
 boot();
 })();

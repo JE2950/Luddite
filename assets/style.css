@@ -41,6 +41,19 @@
   --question:"Playfair Display", Georgia, serif;
   --r:18px; --r-lg:26px; --btn-r:999px;
 }
+/* Geography: survey-map greens, sea blue and ochre; Bitter slab lettering like a map's place names */
+:root[data-subject="geography"]{
+  --paper:#e9eee1; --surface:#fbfcf8; --sunk:#dce3d1; --line:#bcc8aa;
+  --ink:#14271f; --muted:#53635a;
+  --accent:#1f5f4a; --accent-deep:#133d30; --on-accent:#ffffff;
+  --good:#2e8a4e; --good-soft:#dcefdc; --bad:#b8452e; --bad-soft:#f6dcd2;
+  --a1:#b8452e; --a2:#2f7fb5; --a3:#2e8a4e; --a4:#c98a2b;
+  --ochre:#c98a2b; --sea:#2f7fb5;
+  --display:"Bitter", Georgia, serif;
+  --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --question:"Bitter", Georgia, serif;
+  --r:8px; --r-lg:12px; --btn-r:6px;
+}
 *{box-sizing:border-box}
 html,body{min-height:100%}
 body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5;padding:0 16px}
@@ -424,6 +437,7 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .tag-chip.subj:hover{color:var(--on-accent);filter:brightness(1.15)}
 .tag-chip.subj-latin{background:#8f1d1d;border-color:#8f1d1d}
 .tag-chip.subj-french{background:#0055a4;border-color:#0055a4}
+.tag-chip.subj-geography{background:#1f5f4a;border-color:#1f5f4a}
 
 /* ---------- Takeover (theme.js) ---------- */
 /* Morph (like PowerPoint's): the logo, heading, main panel and main button glide and reshape into their new
@@ -442,6 +456,7 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
   background:linear-gradient(100deg,transparent 0 18%,var(--w1) 24% 34%,var(--w2) 34% 46%,var(--w3) 46% 58%,var(--w4) 58% 68%,transparent 76%)}
 .lx-wave.to-latin{--w1:#b8892b;--w2:#8f1d1d;--w3:#f3ede1;--w4:#2a1a12}
 .lx-wave.to-french{--w1:#0055a4;--w2:#ffffff;--w3:#e1352b;--w4:#14213d}
+.lx-wave.to-geography{--w1:#c98a2b;--w2:#1f5f4a;--w3:#e9eee1;--w4:#2f7fb5}
 .lx-wave.to-home{--w1:#002664;--w2:#ffffff;--w3:#dbe6f6;--w4:#0a3a86}
 .takeover-banner,.takeover-veil{position:fixed;inset:0;z-index:300;pointer-events:none;display:grid;place-items:center}
 .takeover-banner span{display:inline-block;padding:.5em 1.1em;font-size:clamp(28px,6vw,72px);line-height:1;white-space:nowrap;
@@ -459,6 +474,7 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .takeover-veil:not(.is-in){transition-duration:.62s,.62s}
 .takeover-veil.to-latin{background:radial-gradient(circle at 50% 50%,#fbf7ee 0,#efe7d6 55%,#e6dcc6 100%)}
 .takeover-veil.to-french{background:radial-gradient(circle at 50% 50%,#ffffff 0,#f6f1e6 60%,#ece6d8 100%)}
+.takeover-veil.to-geography{background:radial-gradient(circle at 50% 50%,#fbfcf8 0,#e9eee1 60%,#dce3d1 100%)}
 .takeover-veil.to-home{background:radial-gradient(circle at 50% 50%,#fbfaf6 0,#f3efe6 60%,#e8e2d6 100%)}
 .takeover-banner{z-index:301}
 @media (prefers-reduced-motion: reduce){.takeover-banner,.takeover-veil{display:none}}
@@ -490,6 +506,22 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 :root[data-subject="french"] .join-code{background:#fff;color:var(--accent);box-shadow:inset 0 0 0 4px var(--accent)}
 :root[data-subject="french"] .qlabel,:root[data-subject="french"] .stat .k{color:var(--accent)}
 
+/* ---------- Geography ---------- */
+/* A map's scale bar across the top, and faint contour lines over the page */
+:root[data-subject="geography"] body{background:
+  repeating-linear-gradient(90deg,var(--ink) 0 40px,#fbfcf8 40px 80px) top/100% 7px no-repeat,
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='300' viewBox='0 0 420 300'%3E%3Cg fill='none' stroke='%231f5f4a' stroke-opacity='.075' stroke-width='1.4'%3E%3Cpath d='M-20 60 C60 20 120 90 210 50 S360 10 440 60'/%3E%3Cpath d='M-20 90 C70 50 130 120 210 82 S350 45 440 92'/%3E%3Cpath d='M-20 120 C80 85 140 150 215 115 S345 80 440 125'/%3E%3Cpath d='M-20 210 C50 180 110 250 200 220 S330 170 440 215'/%3E%3Cpath d='M-20 240 C60 212 120 280 205 252 S335 205 440 248'/%3E%3Cellipse cx='300' cy='175' rx='46' ry='22'/%3E%3Cellipse cx='300' cy='175' rx='24' ry='11'/%3E%3C/g%3E%3C/svg%3E") 0 0/420px 300px,
+  var(--paper)}
+:root[data-subject="geography"] h1,:root[data-subject="geography"] .mark{font-weight:800}
+:root[data-subject="geography"] .stage,:root[data-subject="geography"] .gate-card,:root[data-subject="geography"] .join-banner{border:1.5px solid var(--accent);box-shadow:inset 0 0 0 4px var(--surface),inset 0 0 0 5px color-mix(in srgb,var(--accent) 45%,transparent),0 10px 26px rgba(20,39,31,.08)}
+:root[data-subject="geography"] .qtext{font-weight:700}
+:root[data-subject="geography"] .ans .key{border-radius:50%;font-family:var(--display);font-weight:800}
+:root[data-subject="geography"] .join-code{background:var(--surface);color:var(--accent);box-shadow:inset 0 0 0 3px var(--accent);background-image:linear-gradient(rgba(31,95,74,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(31,95,74,.08) 1px,transparent 1px);background-size:22px 22px}
+:root[data-subject="geography"] .qlabel,:root[data-subject="geography"] .stat .k{color:var(--accent)}
+:root[data-subject="geography"] .lb-row.top1{background:color-mix(in srgb,var(--ochre) 24%,transparent)}
+:root[data-subject="geography"] .pod1{border-color:var(--ochre);background:color-mix(in srgb,var(--ochre) 20%,var(--surface))}
+:root[data-subject="geography"] .flames i.on{background:var(--ochre)}
+
 /* QR code on the host's join screen */
 .join-qr{background:#fff;padding:10px;border-radius:var(--r);line-height:0;box-shadow:0 0 0 1px var(--line)}
 .join-qr svg{width:clamp(130px,16vw,200px);height:auto;display:block}
@@ -511,7 +543,12 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .race{max-width:1400px;margin:16px auto 0;border-radius:var(--r);overflow:hidden;box-shadow:0 0 0 1px var(--line)}
 .race[hidden]{display:none}
 .race canvas{display:block;width:100%}
-@media (max-width:640px){#runner-strip{height:90px}}
+/* Present mode: the race alone, filling the screen */
+body.presenting{overflow:hidden}
+body.presenting #app{display:none}
+body.presenting .race{position:fixed;inset:0;max-width:none;margin:0;border-radius:0;box-shadow:none;z-index:400;height:100vh}
+.present-exit{position:fixed;right:14px;bottom:14px;z-index:401;border:0;border-radius:999px;padding:8px 14px;font:inherit;font-size:13px;font-weight:700;background:rgba(0,0,0,.45);color:#fff;cursor:pointer;opacity:0;transition:opacity .3s}
+body.presenting .race:hover .present-exit,.present-exit:focus-visible{opacity:1}
 
 /* Teams */
 .team-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--team);margin-right:7px;vertical-align:middle}
@@ -524,3 +561,75 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .team-col h3{font-size:20px;margin-bottom:10px}
 .team-badge{display:inline-block;margin:0;padding:6px 14px;border-radius:999px;background:color-mix(in srgb,var(--team) 16%,transparent);border:2px solid var(--team);font-weight:700}
 .team-strip{margin-bottom:10px;padding:6px 14px;border-radius:var(--r);background:var(--team);color:#fff;font-weight:700;text-align:center}
+
+/* Phones: the question and every answer fit on one screen. The runner strip stays off (runner.js). */
+@media (max-width:640px){
+  body{padding:0 10px}
+  .wrap.play{padding-block:8px 10px}
+  .hud.pupil-hud{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:10px}
+  .hud.pupil-hud.fish-hud{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .pupil-hud .stat{padding:5px 7px}
+  .pupil-hud .stat .k{font-size:8.5px;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pupil-hud .stat .v{font-size:17px}
+  .pupil-hud .flames{display:none}
+  .wrap.play .stage{padding:16px 14px;gap:12px;min-height:0}
+  .wrap.play .qlabel{font-size:11px}
+  .wrap.play .qtext,:root[data-subject] .wrap.play .qtext{font-size:clamp(19px,5.6vw,24px);line-height:1.2}
+  .wrap.play .answers{gap:8px}
+  .wrap.play .ans,:root[data-subject] .wrap.play .ans{min-height:58px;padding:10px 12px;font-size:17px;gap:10px}
+  .wrap.play .ans .key{width:24px;height:24px;font-size:11px}
+  .wrap.play .stage > .hint{display:none}
+  .team-strip{margin-bottom:6px;padding:4px 10px;font-size:14px}
+}
+@media (max-width:640px) and (max-height:700px){
+  .wrap.play .ans,:root[data-subject] .wrap.play .ans{min-height:44px;padding:8px 10px;font-size:16px}
+  .wrap.play .stage{padding:12px}
+}
+
+/* Pictures in questions and answers */
+.q-img{display:block;max-width:100%;max-height:min(36vh,300px);margin:0 auto;border-radius:var(--r);object-fit:contain;background:#fff;box-shadow:0 0 0 1px var(--line)}
+.answers.pics .ans{flex-direction:column;justify-content:center;align-items:center;min-height:130px;position:relative;padding:12px}
+.answers.pics .ans .key{position:absolute;left:10px;top:10px}
+.ans-img{display:block;max-width:100%;max-height:120px;border-radius:6px;background:#fff;padding:4px;object-fit:contain;margin:0 auto}
+.va .ans-img,.ra .ans-img,.hint .ans-img,.tricky-q + * .ans-img,.tbl .ans-img,td .ans-img,li .ans-img{display:inline-block;max-height:34px;padding:2px;vertical-align:middle;margin:0}
+.pv-ans .ans-img{max-height:40px;padding:2px}
+.q-thumb{height:28px;max-width:56px;object-fit:contain;vertical-align:middle;margin-right:8px;border-radius:3px;background:#fff;box-shadow:0 0 0 1px var(--line)}
+.q-thumb.big{display:block;height:auto;max-height:110px;max-width:100%;margin:0 0 6px}
+.q-pic{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ans-in{display:flex;gap:6px;min-width:0}.ans-in input{flex:1;min-width:0}
+.ans-pic{display:flex;align-items:center;gap:10px;min-width:0}.ans-pic .ans-img{max-height:56px;margin:0}
+.pic-btn{padding-inline:8px}
+@media (max-width:640px){
+  .wrap.play .q-img{max-height:24vh}
+  .wrap.play .answers.pics{grid-template-columns:1fr 1fr}
+  .wrap.play .answers.pics .ans{min-height:96px}
+  .wrap.play .answers.pics .ans-img{max-height:78px}
+}
+
+/* Guided tour (after the Ludgrove Division Screen) */
+.help-btn{width:34px;height:34px;flex:none;border:1px solid var(--line);background:var(--surface);border-radius:50%;color:var(--ink);cursor:pointer;display:inline-grid;place-items:center;padding:0;vertical-align:middle}
+.help-btn:hover{border-color:var(--accent)}
+.help-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tour{position:fixed;inset:0;z-index:600;display:none}
+.tour.on{display:block}
+.tour-spot{position:fixed;border-radius:16px;border:2px solid #c2a463;box-shadow:0 0 0 9999px rgba(5,14,28,.74);transition:top .2s,left .2s,width .2s,height .2s;pointer-events:none}
+.tour-spot.hide{display:none}
+.tour-card{position:fixed;width:min(360px,86vw);background:#fbfaf7;color:#0b2140;border-radius:16px;padding:18px 20px 16px;box-shadow:0 22px 55px rgba(0,0,0,.45);transition:top .2s,left .2s;font-family:"Atkinson Hyperlegible",system-ui,sans-serif}
+.tour-step{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#6b7c93;font-weight:700}
+.tour-card h4{font-family:"Libre Baskerville",Georgia,serif;font-size:20px;font-weight:700;margin:6px 0 8px;line-height:1.2}
+.tour-text{font-size:14.5px;line-height:1.5;color:#33415a;margin:0}
+.tour-row{display:flex;gap:8px;margin-top:16px}
+.tour-row .btn{padding:8px 14px;font-size:13.5px}
+.tour-row [data-tour="end"]{margin-left:auto}
+@media (max-width:640px){
+  .wrap.play .hud{grid-template-columns:repeat(4,minmax(0,1fr)) !important;gap:6px;margin-bottom:10px}
+  .wrap.play .hud.fish-hud{grid-template-columns:repeat(3,minmax(0,1fr)) !important}
+  .wrap.play .hud .stat{padding:5px 7px}
+  .wrap.play .hud .stat .k{font-size:8.5px;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wrap.play .hud .stat .v{font-size:17px}
+  .wrap.play .hud .flames{display:none}
+  .wrap.play .hud > [data-a="finish"]{grid-column:1/-1;min-height:0;padding:5px 10px;font-size:13px}
+}
+.answers.pics .ans > span:last-child{display:flex;justify-content:center;align-items:center;width:100%;min-width:0}
+.answers.pics .ans-img{width:min(100%,220px);height:auto;max-height:104px}
+@media (max-width:640px){.wrap.play .answers.pics .ans-img{width:min(100%,140px);max-height:72px}.wrap.play .answers.pics .ans{min-height:92px;padding:8px}}

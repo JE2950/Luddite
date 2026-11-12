@@ -5,6 +5,19 @@
 const L = window.LB = {};
 
 L.esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/* Pictures. A picture answer is stored as "img:" + its web address, so it travels like any other answer.
+   A question's picture is q.image. Only https and data: addresses are shown. */
+L.isImg = a => /^img:/i.test(String(a || ''));
+L.safeSrc = u => (/^(https:\/\/|data:image\/|blob:)/i.test(String(u || '').trim()) ? String(u).trim() : '');
+L.imgOf = a => L.safeSrc(String(a).slice(4));
+L.ansHTML = a => L.isImg(a) ? `<img class="ans-img" src="${L.esc(L.imgOf(a))}" alt="Picture answer" draggable="false">` : L.esc(a);
+L.ansText = a => (L.isImg(a) ? '[picture]' : String(a ?? ''));
+L.qText = q => (q && String(q.q || '').trim()) || (q && q.image ? '[picture]' : '');
+L.qHTML = q => `${q.image && L.safeSrc(q.image) ? `<img class="q-img" src="${L.esc(L.safeSrc(q.image))}" alt="Picture for this question" draggable="false">` : ''}${String(q.q || '').trim() ? `<div class="qtext">${L.esc(q.q)}</div>` : ''}`;
+L.hasImgAnswers = q => (q.answers || []).some(L.isImg);
+L.validQ = q => !!(q && (String(q.q || '').trim() || L.safeSrc(q.image)) && (q.answers || []).filter(a => String(a).trim()).length >= 2 && String((q.answers || [])[q.correct] ?? '').trim());
+/* An image web address pasted where an answer goes becomes a picture answer */
+L.asAnswer = a => { const t = String(a ?? '').trim(); return /^https:\/\/\S+\.(png|jpe?g|gif|webp|svg)(\?\S*)?$/i.test(t) ? 'img:' + t : t; };
 L.rid = (n = 10) => { const a = new Uint8Array(n); crypto.getRandomValues(a); return Array.from(a, b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join(''); };
 L.shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 L.fmtTime = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
@@ -96,7 +109,12 @@ L.FRENZY_MS = 30000;
 L.fmtKg = kg => (Math.round(kg * 10) / 10).toLocaleString('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kg';
 /* What a catch is worth: kg of fish, or (for subject sets) denarii or francs. Internally the number is the same. */
 L.catchUnit = subject => { const tr = window.THEME && window.THEME.treasure(subject || (window.THEME && window.THEME.current)); return tr ? tr.unit : null; };
-L.fmtCatch = (v, subject) => { const u = L.catchUnit(subject); return u ? Math.round(v * 10).toLocaleString('en-GB') + ' ' + u : L.fmtKg(v); };
+L.fmtCatch = (v, subject) => {
+  const tr = window.THEME && window.THEME.treasure(subject || (window.THEME && window.THEME.current));
+  if (!tr) return L.fmtKg(v);
+  const n = Math.round(v * 10).toLocaleString('en-GB');
+  return tr.symbol ? tr.symbol + n : n + ' ' + tr.unit;      // £120, or 120 denarii
+};
 /* "You found a Greek vase!", "...the Golden Fleece!", "...Napoleon’s hat!" */
 L.catchPhrase = c => {
   const n = c.name;
@@ -129,6 +147,65 @@ L.fishSVG = (tier, shape, size = 120) => {
   </svg>`;
 };
 
+
+/* ---------- Guided tour (the "?" button), after the Ludgrove Division Screen's tour ----------
+   LB.tour.start(steps) runs one; LB.tour.auto(key, steps) runs it once per page per browser.
+   A step: { sel, title, text }. A step whose element isn't on screen sits in the middle with no spotlight. */
+L.tour = (() => {
+  let steps = [], i = 0, el = null;
+  const q = s => (s ? [...document.querySelectorAll(s)].find(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; }) : null);
+  function build() {
+    if (el) return el;
+    el = document.createElement('div'); el.className = 'tour'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-labelledby', 'tour-title');
+    el.innerHTML = `<div class="tour-spot"></div><div class="tour-card"><div class="tour-step"></div><h4 id="tour-title"></h4><p class="tour-text"></p>
+      <div class="tour-row"><button class="btn" data-tour="back">Back</button><button class="btn primary" data-tour="next">Next</button><button class="btn" data-tour="end">Close</button></div></div>`;
+    el.addEventListener('click', e => { const b = e.target.closest('[data-tour]'); if (!b) return; const a = b.dataset.tour; if (a === 'back') step(-1); else if (a === 'next') step(1); else stop(); });
+    document.addEventListener('keydown', e => {
+      if (!el || !el.classList.contains('on')) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stop(); }
+      else if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); step(1); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); step(-1); }
+    }, true);
+    addEventListener('resize', () => { if (el.classList.contains('on')) place(); });
+    document.body.appendChild(el);
+    return el;
+  }
+  function show() {
+    const st = steps[i];
+    el.querySelector('.tour-step').textContent = `Step ${i + 1} of ${steps.length}`;
+    el.querySelector('#tour-title').textContent = st.title;
+    el.querySelector('.tour-text').textContent = st.text;
+    el.querySelector('[data-tour="back"]').disabled = i === 0;
+    el.querySelector('[data-tour="next"]').textContent = i === steps.length - 1 ? 'Finish' : 'Next';
+    const t = q(st.sel); if (t) t.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    setTimeout(place, 90);
+    el.querySelector('[data-tour="next"]').focus({ preventScroll: true });
+  }
+  function place() {
+    const st = steps[i], t = q(st.sel), spot = el.querySelector('.tour-spot'), card = el.querySelector('.tour-card');
+    const vw = innerWidth, vh = innerHeight, cw = card.offsetWidth, ch = card.offsetHeight;
+    if (!t) { spot.classList.add('hide'); card.style.left = Math.round((vw - cw) / 2) + 'px'; card.style.top = Math.round((vh - ch) / 2) + 'px'; return; }
+    spot.classList.remove('hide');
+    const r = t.getBoundingClientRect(), pad = 8;
+    Object.assign(spot.style, { left: Math.round(r.left - pad) + 'px', top: Math.round(r.top - pad) + 'px', width: Math.round(r.width + pad * 2) + 'px', height: Math.round(r.height + pad * 2) + 'px' });
+    let top = r.bottom + 18;
+    if (top + ch > vh - 12) top = Math.max(12, r.top - ch - 18);
+    if (top + ch > vh - 12) top = Math.max(12, (vh - ch) / 2);
+    const left = Math.max(12, Math.min(vw - cw - 12, r.left + r.width / 2 - cw / 2));
+    card.style.left = Math.round(left) + 'px'; card.style.top = Math.round(top) + 'px';
+  }
+  function step(d) { const n = i + d; if (n < 0) return; if (n >= steps.length) return stop(); i = n; show(); }
+  function stop() { if (el) el.classList.remove('on'); document.documentElement.classList.remove('touring'); }
+  function start(list) { steps = (list || []).filter(Boolean); if (!steps.length) return; i = 0; build().classList.add('on'); document.documentElement.classList.add('touring'); show(); }
+  function auto(key, list) {
+    const k = 'quizapp.tour.' + key;
+    try { if (localStorage.getItem(k)) return; localStorage.setItem(k, '1'); } catch (e) { return; }
+    setTimeout(() => start(typeof list === 'function' ? list() : list), 600);
+  }
+  return { start, auto, stop, open: () => !!(el && el.classList.contains('on')) };
+})();
+L.helpButton = (title = 'Guided tour (?)') => `<button class="help-btn" data-act="help" title="${L.esc(title)}" aria-label="Guided tour"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.2-2.8 4"/><path d="M12 17.4h.01"/></svg></button>`;
+
 /* Treasure drawings (viewBox 100 x 70). Each sits on a soft glow in its tier's colour. */
 const IT = {
   sword: '<path d="M18 52 L70 14 L76 18 L26 58 Z" fill="#a9763f"/><path d="M30 50 l-8 -10 M34 47 l-6 -12" stroke="#7a4a24" stroke-width="3"/><rect x="12" y="50" width="16" height="6" rx="2" transform="rotate(-37 20 53)" fill="#5b3a1e"/><circle cx="10" cy="60" r="4" fill="#5b3a1e"/><circle cx="52" cy="30" r="3" fill="#7a3a1a" opacity=".6"/>',
@@ -160,6 +237,21 @@ const IT = {
   eiffel: '<path d="M50 4 l4 16 q4 22 22 46 h-10 q-8 -12 -16 -12 q-8 0 -16 12 h-10 q18 -24 22 -46z" fill="#7a5a3a"/><rect x="36" y="34" width="28" height="4" fill="#5b3a1e"/><rect x="42" y="22" width="16" height="3" fill="#5b3a1e"/>',
   croissant: '<path d="M14 46 q6 -30 36 -30 q30 0 36 30 q-8 -6 -14 -4 q-4 -12 -22 -12 q-18 0 -22 12 q-6 -2 -14 4z" fill="#e0b84a"/><path d="M34 22 l6 16 M50 16 v20 M66 22 l-6 16" stroke="#b8892b" stroke-width="3"/>',
   crown: '<path d="M18 54 l-4 -34 l18 14 l18 -24 l18 24 l18 -14 l-4 34z" fill="#e0b84a"/><rect x="18" y="54" width="64" height="8" fill="#b8892b"/><circle cx="50" cy="40" r="5" fill="#e1352b"/><circle cx="32" cy="44" r="4" fill="#0055a4"/><circle cx="68" cy="44" r="4" fill="#0055a4"/>',
+  map: '<path d="M14 14 l22 6 l28 -6 l22 6 v40 l-22 -6 l-28 6 l-22 -6z" fill="#e8d9a8"/><path d="M36 20 v40 M64 14 v40" stroke="#c9b27a" stroke-width="2"/><path d="M22 46 q10 -14 22 -6 t22 -12" stroke="#a3402e" stroke-width="2.5" stroke-dasharray="4 3" fill="none"/><path d="M64 24 l8 8 M72 24 l-8 8" stroke="#a3402e" stroke-width="3"/><path d="M14 54 q8 4 14 -2 q6 6 14 2" stroke="#7fa7c4" stroke-width="3" fill="none" opacity=".7"/>',
+  compass: '<circle cx="50" cy="36" r="26" fill="#8a6a3a"/><circle cx="50" cy="36" r="21" fill="#f2ead2"/><path d="M50 18 l5 18 l-5 18 l-5 -18z" fill="#c7392b"/><path d="M50 36 l5 0 l-5 18 l-5 -18z" fill="#3a3f4a"/><path d="M34 22 l30 28" stroke="#fff" stroke-width="2" opacity=".8"/><path d="M30 46 l10 -6 l-4 10" stroke="#5b4a2a" stroke-width="1.5" fill="none"/>',
+  postcard: '<rect x="14" y="14" width="72" height="46" rx="3" fill="#f6efd9" transform="rotate(-6 50 37)"/><rect x="62" y="18" width="16" height="18" fill="#2f7fb5" transform="rotate(-6 50 37)"/><path d="M22 30 h30 M22 38 h26 M22 46 h30" stroke="#8a7a5a" stroke-width="2" transform="rotate(-6 50 37)"/><circle cx="66" cy="34" r="7" fill="none" stroke="#a3402e" stroke-width="1.5" transform="rotate(-6 50 37)"/>',
+  fossil: '<circle cx="50" cy="36" r="26" fill="#a8a29a"/><path d="M50 36 m0 -4 a4 4 0 1 1 -4 4 a8 8 0 1 1 8 8 a12 12 0 1 1 -12 -12 a16 16 0 1 1 16 16 a20 20 0 1 1 -20 -20" stroke="#6f6a62" stroke-width="2.5" fill="none"/>',
+  globe: '<rect x="44" y="58" width="12" height="6" fill="#6b4a2a"/><rect x="34" y="62" width="32" height="5" rx="2" fill="#6b4a2a"/><path d="M24 34 a26 26 0 0 1 52 0" stroke="#b8892b" stroke-width="3" fill="none" transform="rotate(20 50 34)"/><circle cx="50" cy="34" r="22" fill="#2f7fb5"/><path d="M36 22 q8 -4 12 4 q-2 8 6 10 q2 10 -6 14 q-6 -6 -10 -2 q-6 -10 -2 -16z M58 18 q10 4 12 14 q-6 2 -10 -4z" fill="#5fa04a"/>',
+  bottle: '<path d="M30 30 h34 q12 0 12 10 v6 q0 10 -12 10 h-34 q-12 0 -12 -10 v-6 q0 -10 12 -10z" fill="#9ad0c4" opacity=".8" transform="rotate(-14 50 43)"/><rect x="76" y="34" width="12" height="10" rx="2" fill="#8a5a34" transform="rotate(-14 50 43)"/><rect x="30" y="38" width="32" height="10" rx="2" fill="#f2ead2" transform="rotate(-14 50 43)"/><path d="M34 41 h22 M34 45 h18" stroke="#a89a7a" stroke-width="1.5" transform="rotate(-14 50 43)"/>',
+  telescope: '<path d="M14 46 l58 -26 l6 12 l-58 26z" fill="#c9a24a"/><path d="M70 18 l12 -5 l7 15 l-12 5z" fill="#b8892b"/><path d="M30 39 l4 9 M52 29 l4 9" stroke="#8a6a2a" stroke-width="3"/><path d="M40 56 l-10 12 M44 54 l4 14" stroke="#5b3a1e" stroke-width="3"/>',
+  nugget: '<path d="M22 46 q-4 -18 12 -24 q8 -10 22 -6 q16 -2 22 12 q8 12 -2 22 q-10 10 -28 8 q-20 0 -26 -12z" fill="#e0b84a"/><path d="M36 30 q6 -4 12 0 M56 40 q6 -2 10 4 M40 48 q4 2 8 0" stroke="#fff3c4" stroke-width="3" fill="none"/><path d="M60 22 q8 4 10 12" stroke="#b8892b" stroke-width="2" fill="none"/>',
+  crystal: '<path d="M30 62 l-6 -24 l8 -18 l8 18 l-2 24z" fill="#b89ad9"/><path d="M42 62 l-2 -30 l10 -24 l10 24 l-2 30z" fill="#9d7cc9"/><path d="M58 62 l2 -22 l10 -14 l6 16 l-6 20z" fill="#c4aee3"/><path d="M50 8 l0 54 M32 20 l0 42" stroke="#fff" stroke-width="1.5" opacity=".6"/><rect x="20" y="60" width="62" height="6" rx="3" fill="#8a7a6a"/>',
+  chest: '<path d="M18 30 q0 -16 32 -16 q32 0 32 16z" fill="#8a5a34"/><rect x="18" y="30" width="64" height="32" fill="#a9763f"/><path d="M18 30 h64 M18 44 h64" stroke="#5b3a1e" stroke-width="3"/><rect x="44" y="34" width="12" height="14" rx="2" fill="#e0b84a"/><path d="M30 26 l4 -8 l6 6 l6 -8 l6 8 l6 -6 l4 8" fill="#ffd34d"/><rect x="22" y="30" width="5" height="32" fill="#b8892b"/><rect x="73" y="30" width="5" height="32" fill="#b8892b"/>',
+  meteorite: '<path d="M8 10 l30 18 M14 6 l26 18 M4 18 l30 14" stroke="#f2b705" stroke-width="3" opacity=".6"/><path d="M36 30 q4 -12 18 -10 q16 -2 20 12 q6 14 -6 22 q-12 8 -24 2 q-14 -6 -8 -26z" fill="#4a4540"/><circle cx="52" cy="34" r="4" fill="#2a2622"/><circle cx="64" cy="46" r="3" fill="#2a2622"/><path d="M44 46 q6 4 12 0" stroke="#e07a2a" stroke-width="2" fill="none"/>',
+  gcompass: '<circle cx="50" cy="36" r="27" fill="#c9a24a"/><circle cx="50" cy="36" r="22" fill="#fff6d6"/><path d="M50 16 l6 20 l-6 20 l-6 -20z" fill="#c7392b"/><path d="M50 36 l6 0 l-6 20 l-6 -20z" fill="#b8892b"/><path d="M50 14 v4 M50 54 v4 M28 36 h4 M68 36 h4" stroke="#8a6a2a" stroke-width="2"/><circle cx="50" cy="7" r="4" fill="none" stroke="#c9a24a" stroke-width="3"/>',
+  idol: '<rect x="30" y="58" width="40" height="8" fill="#8a6a2a"/><path d="M36 58 v-22 q0 -24 14 -24 q14 0 14 24 v22z" fill="#e0b84a"/><circle cx="44" cy="30" r="3" fill="#2fa36b"/><circle cx="56" cy="30" r="3" fill="#2fa36b"/><path d="M44 42 h12 M40 50 h20" stroke="#b8892b" stroke-width="3"/><path d="M36 22 l-6 -6 M64 22 l6 -6" stroke="#e0b84a" stroke-width="4"/>',
+  diamond: '<path d="M24 26 l12 -14 h28 l12 14 l-26 36z" fill="#bfe6f6"/><path d="M24 26 h52 M36 12 l6 14 l8 36 M64 12 l-6 14 l-8 36 M42 26 l8 -14 l8 14" stroke="#7fc0dc" stroke-width="1.8" fill="none"/><path d="M38 18 l4 6" stroke="#fff" stroke-width="2"/>',
+  gglobe: '<rect x="36" y="60" width="28" height="6" rx="2" fill="#8a6a2a"/><rect x="47" y="54" width="6" height="8" fill="#b8892b"/><path d="M22 30 a28 28 0 0 1 56 0" stroke="#b8892b" stroke-width="3" fill="none" transform="rotate(20 50 30)"/><circle cx="50" cy="30" r="22" fill="#e0b84a"/><path d="M36 18 q8 -4 12 4 q-2 8 6 10 q2 10 -6 14 q-6 -6 -10 -2 q-6 -10 -2 -16z M58 14 q10 4 12 14 q-6 2 -10 -4z" fill="#c9962a"/>',
   cheese: '<path d="M12 50 l52 -34 l26 20 v18 h-78z" fill="#f2c94c"/><path d="M12 50 h78 v14 h-78z" fill="#e0b13a"/><circle cx="40" cy="56" r="4" fill="#c9962a"/><circle cx="62" cy="40" r="5" fill="#e0b13a"/><circle cx="74" cy="56" r="3" fill="#c9962a"/>'
 };
 L.itemSVG = (icon, tier, size = 120) => {

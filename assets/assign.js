@@ -24,11 +24,12 @@ let G = null;        // the current play
 let tickT = null, saveT = null;
 
 const pupilName = () => `${me.first} ${me.initial}`;
-const validQ = q => q && String(q.q || '').trim() && (q.answers || []).filter(a => String(a).trim()).length >= 2 && String((q.answers || [])[q.correct] ?? '').trim();
+const validQ = LB.validQ;
+const rq = q => `${q.image && LB.safeSrc(q.image) ? `<img class="q-thumb" src="${esc(LB.safeSrc(q.image))}" alt="">` : ''}${esc(q.q || '')}`;
 const cleanSet = s => ({ ...s, questions: (s.questions || []).filter(validQ).map(q => {
   const seen = new Set([String(q.answers[q.correct]).trim().toLowerCase()]);
   const kept = q.answers.map((a, j) => [String(a), j]).filter(([a, j]) => a.trim() && (j === q.correct || !seen.has(a.trim().toLowerCase()) && seen.add(a.trim().toLowerCase())));
-  return { id: q.id, q: q.q, answers: kept.map(k => k[0]), correct: kept.findIndex(k => k[1] === q.correct) };
+  return { id: q.id, q: q.q, image: LB.safeSrc(q.image) || undefined, answers: kept.map(k => k[0]), correct: kept.findIndex(k => k[1] === q.correct) };
 }) });
 const fishing = () => A && A.mode === 'fishing';
 const modes = () => THEME.modes();
@@ -161,10 +162,10 @@ function hud() {
 }
 function answersHTML(done) {
   const { q, perm } = G.cur;
-  return `<div class="answers">${perm.map((i, j) => {
+  return `<div class="answers ${LB.hasImgAnswers(q) ? 'pics' : ''}">${perm.map((i, j) => {
     let cls = `ans a${j}`;
     if (done) cls += i === q.correct ? ' right' : j === G.pick ? ' wrong' : ' dim';
-    return `<button class="${cls}" data-a="answer" data-i="${j}" ${done ? 'disabled' : ''}><span class="key">${THEME.keyLabel(j)}</span><span>${esc(q.answers[i])}</span></button>`;
+    return `<button class="${cls}" data-a="answer" data-i="${j}" ${done ? 'disabled' : ''}><span class="key">${THEME.keyLabel(j)}</span><span>${LB.ansHTML(q.answers[i])}</span></button>`;
   }).join('')}</div>`;
 }
 function setsHTML() {
@@ -203,7 +204,7 @@ function render() {
           <div class="stat"><div class="k">Plays</div><div class="v">${st.plays}</div></div>
           <div class="stat"><div class="k">Best</div><div class="v">${fishing() ? LB.fmtCatch(st.best) : st.best.toLocaleString('en-GB')}</div></div>
           <div class="stat"><div class="k">Accuracy</div><div class="v">${st.acc == null ? '–' : st.acc + '%'}</div></div></div>` : ''}
-        ${st.weak.length ? `<div class="review"><h2 class="side-h">Questions to practise (they come up more often)</h2><ol>${st.weak.slice(0, 8).map(q => `<li><div class="rq">${esc(q.q)}</div><div class="ra"><span class="right">Answer: ${esc(q.answers[q.correct])}</span></div></li>`).join('')}</ol></div>` : ''}
+        ${st.weak.length ? `<div class="review"><h2 class="side-h">Questions to practise (they come up more often)</h2><ol>${st.weak.slice(0, 8).map(q => `<li><div class="rq">${rq(q)}</div><div class="ra"><span class="right">Answer: ${LB.ansHTML(q.answers[q.correct])}</span></div></li>`).join('')}</ol></div>` : ''}
         <button class="btn primary big-go" data-a="go" data-autofocus>Play</button></div></div>`;
       break;
     }
@@ -219,14 +220,14 @@ function render() {
           : `<div class="verdict bad pop"><div><h3>${fishing() ? LB.missText() : 'Not quite'}</h3><p>The right answer is highlighted.${G.lost > 1 ? ` Streak of ${G.lost} lost.` : ''}</p></div>`;
         verdict += `<button class="btn primary go ${locked ? 'locking' : ''}" id="go" data-a="next" ${locked ? 'disabled' : 'data-autofocus'}><span class="lbl">${locked ? 'Wait a moment…' : 'Next question'}</span><span class="bar"></span></button></div>`;
       }
-      h = `<div class="wrap play">${hud()}<div class="stage pop"><span class="qlabel">Question ${G.answered + (done ? 0 : 1)}</span><div class="qtext">${esc(G.cur.q.q)}</div>${answersHTML(done)}
+      h = `<div class="wrap play">${hud()}<div class="stage pop"><span class="qlabel">Question ${G.answered + (done ? 0 : 1)}</span>${LB.qHTML(G.cur.q)}${answersHTML(done)}
         ${done ? verdict : `<span class="hint">Click an answer, or press 1–${G.cur.perm.length}</span>`}</div></div>`;
       break;
     }
     case 'over': {
       const acc = G.answered ? Math.round(100 * G.correct / G.answered) : 0;
       const wrong = new Map(); G.log.forEach(e => { if (!e.right) wrong.set(e.qid, e.choice); });
-      const review = [...wrong].map(([qid, c]) => { const q = G.set.questions.find(x => x.id === qid); return q ? { q: q.q, yours: q.answers[c], answer: q.answers[q.correct] } : null; }).filter(Boolean);
+      const review = [...wrong].map(([qid, c]) => { const q = G.set.questions.find(x => x.id === qid); return q ? { q, yours: q.answers[c], answer: q.answers[q.correct] } : null; }).filter(Boolean);
       h = `<div class="wrap play"><div class="stage center pop">
         <span class="qlabel">Finished · ${esc(G.set.title || '')}</span>
         <div class="hero-n">${fishing() ? LB.fmtCatch(G.kg) : G.score.toLocaleString('en-GB')}</div><span class="hint">${fishing() ? (LB.catchUnit() ? 'found' : 'caught') : 'points'}</span>
@@ -234,7 +235,7 @@ function render() {
           <div class="stat"><div class="k">Correct</div><div class="v">${G.correct}/${G.answered}</div></div>
           <div class="stat"><div class="k">Accuracy</div><div class="v">${acc}%</div></div>
           <div class="stat"><div class="k">Best streak</div><div class="v">${G.best}</div></div></div>
-        ${review.length ? `<div class="review"><h2 class="side-h">Questions to look at again</h2><ol>${review.map(r => `<li><div class="rq">${esc(r.q)}</div><div class="ra"><span class="yours">You said: ${esc(r.yours)}</span><span class="right">Answer: ${esc(r.answer)}</span></div></li>`).join('')}</ol></div>` : (G.answered ? '<p class="hint" style="margin:0">No questions wrong.</p>' : '')}
+        ${review.length ? `<div class="review"><h2 class="side-h">Questions to look at again</h2><ol>${review.map(r => `<li><div class="rq">${rq(r.q)}</div><div class="ra"><span class="yours">You said: ${LB.ansHTML(r.yours)}</span><span class="right">Answer: ${LB.ansHTML(r.answer)}</span></div></li>`).join('')}</ol></div>` : (G.answered ? '<p class="hint" style="margin:0">No questions wrong.</p>' : '')}
         <p class="hint" id="saved-note" style="margin:0">${G.answered ? 'Saving…' : ''}</p>
         <div class="ed-row" style="justify-content:center"><button class="btn primary" data-a="go" data-autofocus>Play again</button>${A.sets.length > 1 ? '<button class="btn" data-a="back">Choose another set</button>' : ''}</div>
       </div></div>`;

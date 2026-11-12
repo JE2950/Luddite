@@ -41,7 +41,9 @@ const getSet = id => sets.find(s => s.id === id);
 const mine = s => me && s.owner === me.id;
 const folderName = id => (folders.find(f => f.id === id) || {}).name || 'Unfiled';
 const hasDupes = q => { const ks = q.answers.map(a => String(a).trim().toLowerCase()).filter(Boolean); return new Set(ks).size < ks.length; };
-const validQ = q => q.q.trim() && q.answers.filter(a => String(a).trim()).length >= 2 && String(q.answers[q.correct] ?? '').trim();
+const validQ = q => LB.validQ(q);
+const ansIn = a => LB.asAnswer(a);    // an image address pasted as an answer becomes a picture
+const qIn = (text, q) => { const t = String(text || '').trim(); if (/^(img:)?https:\/\/\S+\.(png|jpe?g|gif|webp|svg)(\?\S*)?$/i.test(t)) { q.image = t.replace(/^img:/i, ''); q.q = ''; } return q; };
 const ownerLabel = s => (s.owner_email || '').split('@')[0] || 'a teacher';
 
 /* ---------- feedback ---------- */
@@ -180,7 +182,7 @@ function header() {
     ${window.APP.logo()}
     <span class="chip">Teacher</span>
     <span class="saved" id="saved">Saved</span>
-    <span class="who">${hasAssign ? `<button class="btn small ${['assignments', 'assignment'].includes(view.name) ? '' : 'ghost'}" data-act="assignments">Assignments${assignments.length ? ` (${assignments.length})` : ''}</button>` : ''} ${esc(me.email)}${isAdmin ? ' <button class="btn small ghost" data-act="admin">Teachers</button>' : ''} <button class="btn small ghost" data-act="account">Password</button> <button class="btn small ghost" data-act="sign-out">Sign out</button></span>
+    <span class="who">${hasAssign ? `<button class="btn small ${['assignments', 'assignment'].includes(view.name) ? '' : 'ghost'}" data-act="assignments">Assignments${assignments.length ? ` (${assignments.length})` : ''}</button>` : ''} ${esc(me.email)}${isAdmin ? ' <button class="btn small ghost" data-act="admin">Teachers</button>' : ''} <button class="btn small ghost" data-act="account">Password</button> <button class="btn small ghost" data-act="sign-out">Sign out</button> ${LB.helpButton('Show me round this page (?)')}</span>
   </header>`;
 }
 function render() {
@@ -193,12 +195,42 @@ function render() {
   else if (view.name === 'assignments') app.innerHTML = `<div class="wrap">${header()}${renderAssignments()}</div>`;
   else if (view.name === 'assignment') app.innerHTML = `<div class="wrap">${header()}${renderAssignment()}</div>`;
   else if (view.name === 'assign-new') app.innerHTML = `<div class="wrap">${header()}${renderAssignNew()}</div>`;
-  else if (view.name === 'play') app.innerHTML = `<div class="wrap">${renderPlay()}</div>`;
+  else if (view.name === 'play') app.innerHTML = `<div class="wrap play">${renderPlay()}</div>`;
   typeset(app);
   const f = app.querySelector('[data-autofocus]'); if (f) f.focus();
+  if (TOURS[view.name]) LB.tour.auto('teacher-' + view.name, () => TOURS[view.name]());
 }
 
-/* ---------- library ---------- */
+/* ---------- guided tours, one per page (the ? button) ---------- */
+const TOURS = {
+  library: () => [
+    { sel: '.rail', title: 'Your library', text: 'My sets holds everything you have made. Unfiled is anything not yet in a folder. Other teachers’ sets lets you play or copy what colleagues have made. Your own folders sit underneath; + New folder adds one.' },
+    { sel: '#search', title: 'Find a set', text: 'Type part of a name or a tag. A subject works too: type Latin, French or Geography. In Other teachers’ sets you can also search by teacher.' },
+    { sel: '[data-act="new-set"]', title: 'Make a set', text: 'Opens an empty set in the editor. Type questions in, or paste them from Excel or Quizlet. It saves as you go.' },
+    { sel: '.card', title: 'Each set', text: 'Host live game runs it on the board with the class joining on their laptops. Play solo tries it yourself. Assign gives pupils a code to play it on their own. The coloured label shows the subject, which sets the look, music, runners and treasures.' },
+    { sel: '[data-act="assignments"]', title: 'Assignments', text: 'Every code you have handed out, with each pupil’s plays, scores and the questions they keep getting wrong. Open a folder and use Share for revision to give pupils a choice of sets.' },
+    { sel: '[data-act="help"]', title: 'Help on every page', text: 'Each page has its own short tour. Press this button, or the ? key, whenever you want it again. Arrow keys move through it and Esc closes it.' }
+  ],
+  edit: () => [
+    { sel: '#set-title', title: 'Name the set', text: 'Pupils see this name on the board and in revision folders.' },
+    { sel: '#set-subject', title: 'Subject', text: 'Latin, French or Geography gives the game that subject’s look, music, runners and fishing treasures. Leave it on the first option and Ludus works the subject out from the questions. None keeps the Ludgrove look.' },
+    { sel: '.q', title: 'A question', text: 'Type the question, then two to four answers. The round button marks the right one. If two answers are the same, a warning appears, because pupils would only see one of them.' },
+    { sel: '.q-pic, .pic-btn', title: 'Pictures', text: 'Add a picture to the question, or press the picture button beside an answer to make that answer a picture. Pasting a picture’s web address into an answer box does the same. Use it for flags, maps and diagrams.' },
+    { sel: '[data-act="toggle-import"]', title: 'Import questions', text: 'Paste rows from Excel, paste a Quizlet export, or upload a spreadsheet. With Quizlet you choose which way round the questions go, and cards that share a word are combined so no wrong answer is ever another right one.' },
+    { sel: '[data-act="ask-swap"]', title: 'Swap questions and answers', text: 'Turns the whole set round: each right answer becomes the question and the question becomes its answer. Run it again to swap back.' },
+    { sel: '.q-prev', title: 'What pupils see', text: 'A preview of the question as it will look on a pupil’s screen, with the right answer marked.' },
+    { sel: '[data-act="host-link"], [data-act="play"]', title: 'Use it', text: 'Host live game runs it with the class. Play solo lets you try it first.' }
+  ],
+  assignments: () => [
+    { sel: '.tbl, .empty', title: 'Your codes', text: 'Each row is a code pupils use to play on their own. Click a title to see the results. To make a new one, click Assign on a set, or open a folder and click Share for revision.' }
+  ],
+  assignment: () => [
+    { sel: '.join-banner', title: 'How pupils get in', text: 'Pupils go to the address, type the code, then their first name and the first letter of their surname. Scanning the QR code fills the code in for them.' },
+    { sel: '[data-act="print-card"]', title: 'Print it', text: 'Print poster gives one large sheet for the wall. Print slips gives eight small ones to a page to cut up and hand out. Both take on the set’s subject design.' },
+    { sel: '.tbl', title: 'Results', text: 'One row per pupil: plays, best score, accuracy and how many questions they still get wrong. Click a name to see those questions.' },
+    { sel: '[data-act="toggle-open"]', title: 'Close or reopen', text: 'Closing stops new plays on this code and keeps the results. Delete removes the code and every saved play.' }
+  ]
+};
 function matches(s, q) {
   if (!q) return true;
   q = q.toLowerCase().replace(/^#/, '');
@@ -416,7 +448,7 @@ function renderAssignment() {
     return `<tr><td><button class="title-link" data-act="pupil-row" data-name="${esc(p.name.toLowerCase())}"><b>${esc(p.name)}</b></button></td><td class="num">${p.plays}</td>
       <td class="num">${fish ? LB_fmtKg(p.best) : p.best.toLocaleString('en-GB')}</td><td class="num">${p.correct}/${p.answered}</td>
       <td class="num">${p.answered ? Math.round(100 * p.correct / p.answered) + '%' : '–'}</td><td class="num">${weak.length}</td><td>${p.last ? fmtDay(p.last) : ''}</td></tr>
-      ${open ? `<tr><td colspan="7" style="background:var(--sunk)">${weak.length ? `<b>Questions to practise</b><ul style="margin:6px 0 0;padding-left:20px">${weak.map(r => { const q = qFor(r.set_id, r.qid); return q ? `<li>${esc(q.q)}: <span class="hint">right ${r.right}, wrong ${r.wrong}; answer ${esc(q.answers[q.correct])}${r.wrongs.length ? `; put ${esc([...new Set(r.wrongs)].map(i => q.answers[i]).join(', '))}` : ''}</span></li>` : ''; }).join('')}</ul>` : 'No weak questions.'}</td></tr>` : ''}`;
+      ${open ? `<tr><td colspan="7" style="background:var(--sunk)">${weak.length ? `<b>Questions to practise</b><ul style="margin:6px 0 0;padding-left:20px">${weak.map(r => { const q = qFor(r.set_id, r.qid); return q ? `<li>${esc(LB.qText(q))}: <span class="hint">right ${r.right}, wrong ${r.wrong}; answer ${LB.ansHTML(q.answers[q.correct])}${r.wrongs.length ? `; put ${[...new Set(r.wrongs)].map(i => LB.ansHTML(q.answers[i])).join(', ')}` : ''}</span></li>` : ''; }).join('')}</ul>` : 'No weak questions.'}</td></tr>` : ''}`;
   }).join('');
   return `<div class="toolbar"><button class="btn ghost small" data-act="assignments">← Assignments</button></div>
   <div class="main-head"><div><span class="qlabel">${a.set_id ? 'Assignment' : 'Revision folder'} · ${esc(asgTarget(a).title || 'Untitled set')}${a.due_at ? ' · due ' + fmtDay(a.due_at) : ''}</span><h1>${esc(a.title || asgTarget(a).title)}</h1></div>
@@ -448,8 +480,8 @@ function assignmentCSV(a) {
   const rows = [];
   pupilSummaries(a).forEach(p => [...p.per.values()].forEach(r => {
     const q = qFor(r.set_id, r.qid), s = getSet(r.set_id); if (!q) return;
-    rows.push([String(lastBy.get(p.name.toLowerCase()) || '').slice(0, 10), a.title, s.title || 'Untitled set', THEME.label(THEME.subjectFor(s)), p.name, q.q, q.answers[q.correct],
-      r.seen, r.right, r.wrong, r.wrong === 0 ? 'Right' : r.right === 0 ? 'Wrong' : 'Mixed', r.last ? 'Right' : 'Wrong', r.wrong > 0 ? 'Yes' : 'No', [...new Set(r.wrongs)].map(i => q.answers[i]).join(' | ')]);
+    rows.push([String(lastBy.get(p.name.toLowerCase()) || '').slice(0, 10), a.title, s.title || 'Untitled set', THEME.label(THEME.subjectFor(s)), p.name, LB.qText(q), LB.ansText(q.answers[q.correct]),
+      r.seen, r.right, r.wrong, r.wrong === 0 ? 'Right' : r.right === 0 ? 'Wrong' : 'Mixed', r.last ? 'Right' : 'Wrong', r.wrong > 0 ? 'Yes' : 'No', [...new Set(r.wrongs)].map(i => LB.ansText(q.answers[i])).join(' | ')]);
   }));
   const cell = v => { v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const csv = '﻿' + [cols.join(','), ...rows.map(r => r.map(cell).join(','))].join('\r\n');
@@ -458,23 +490,44 @@ function assignmentCSV(a) {
   el.download = `${cfg.name} - ${(a.title || 'assignment').replace(/[\\/:*?"<>|]/g, '')} - by pupil and question.csv`;
   document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(el.href), 2000);
 }
-/* Printable poster (one per page) or slips (eight per page) with the QR code, code and address */
+/* Printable poster (one per page) or slips (eight per page) with the QR code, code and address,
+   in the look of the set's subject (Latin, French, Geography), or Ludgrove navy for anything else */
+function asgSubject(a) {
+  if (a.set_id) return THEME.subjectFor(getSet(a.set_id) || {});
+  const tally = {}; sets.filter(s => s.folder_id === a.folder_id && mine(s)).forEach(s => { const k = THEME.subjectFor(s); if (k) tally[k] = (tally[k] || 0) + 1; });
+  return Object.keys(tally).sort((x, y) => tally[y] - tally[x])[0] || null;
+}
+const PRINT_LOOK = {
+  latin: { face: '"Cinzel", Georgia, serif', body: '"EB Garamond", Georgia, serif', ink: '#2a1a12', accent: '#8f1d1d', soft: '#b8892b',
+    css: `.c{border:2px solid #b8892b;box-shadow:inset 0 0 0 3px #fff,inset 0 0 0 4px #b8892b;border-radius:1mm}.c.big{border:2px solid #b8892b;padding:12mm}h1{letter-spacing:.04em}.stripe{height:4mm;background:repeating-linear-gradient(90deg,#b8892b 0 9mm,#fff 9mm 11mm,#8f1d1d 11mm 20mm,#fff 20mm 22mm)}` },
+  french: { face: '"Playfair Display", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#14213d', accent: '#0055a4', soft: '#e1352b',
+    css: `.c{border:none;border-radius:5mm;box-shadow:0 0 0 1.5px #c9cfdc;overflow:hidden;padding-top:7mm;position:relative}.c::before{content:"";position:absolute;left:0;right:0;top:0;height:2.5mm;background:linear-gradient(90deg,#0055a4 0 33.3%,#fff 33.3% 66.6%,#e1352b 66.6%)}.c.big{box-shadow:none}h1{font-weight:900}.stripe{height:4mm;background:linear-gradient(90deg,#0055a4 0 33.3%,#fff 33.3% 66.6%,#e1352b 66.6%)}` },
+  geography: { face: '"Bitter", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#14271f', accent: '#1f5f4a', soft: '#c98a2b',
+    css: `.c{border:1.5px solid #1f5f4a;box-shadow:inset 0 0 0 2.5px #fff,inset 0 0 0 3.5px #9fbcae;border-radius:2mm}.c.big{padding:12mm}h1{font-weight:800}.stripe{height:3mm;background:repeating-linear-gradient(90deg,#14271f 0 12mm,#fff 12mm 24mm);box-shadow:0 0 0 .4mm #14271f}` },
+  none: { face: '"Libre Baskerville", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#0b1b3f', accent: '#002664', soft: '#9aa3bb',
+    css: `.c{border:1.5px dashed #9aa3bb;border-radius:4mm}.c.big{border:none}.stripe{height:3mm;background:#002664}` }
+};
 function printCard(a, slips) {
   const link = pupilLink(a), title = esc(a.title || asgTarget(a).title || '');
-  const one = big => `<div class="c ${big ? 'big' : ''}"><div class="logo">${esc(cfg.school || '')} · ${esc(cfg.name)}</div><h1>${title}</h1>
+  const subj = asgSubject(a), L = PRINT_LOOK[subj] || PRINT_LOOK.none;
+  const base = location.href.replace(/[^/]*([?#].*)?$/, '');
+  const crest = !subj && cfg.crest ? `<img class="crest" src="${esc(base + cfg.crest)}" alt="">` : '';
+  const one = big => `<div class="c ${big ? 'big' : ''}">${big ? '<div class="stripe"></div>' : ''}${crest && big ? crest : ''}<div class="logo">${esc(cfg.school || '')} · ${esc(cfg.name)}${subj ? ' · ' + esc(THEME.label(subj)) : ''}</div><h1>${title}</h1>
     <div class="qr">${qrSVG(link, big ? 8 : 3)}</div>
     <ol><li>Go to <b>${esc(cfg.joinAddress)}</b></li><li>Type the code <b class="code">${esc(a.code)}</b></li><li>Type your first name and the first letter of your surname</li></ol>
     ${a.due_at ? `<p class="due">Due ${esc(new Date(a.due_at).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }))}</p>` : ''}</div>`;
   const w = window.open('', '_blank');
   if (!w) return toast('Your browser blocked the print window. Allow pop-ups for this site and try again.', true);
-  w.document.write(`<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><title>${title} – ${esc(a.code)}</title><style>
-    @page{size:A4;margin:12mm} *{box-sizing:border-box} body{margin:0;font-family:Georgia,"Times New Roman",serif;color:#0b1b3f}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:6mm} .c{border:1.5px dashed #9aa3bb;border-radius:4mm;padding:5mm;break-inside:avoid;text-align:center}
-    .c.big{border:none;padding:10mm 0;margin-top:10mm} .logo{font:700 10px/1.4 Arial,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#56617c}
-    h1{font-size:18px;margin:2mm 0 3mm} .big h1{font-size:36px;margin:4mm 0 8mm} .qr svg{width:32mm;height:32mm} .big .qr svg{width:90mm;height:90mm}
-    ol{text-align:left;margin:3mm auto 0;padding-left:5mm;max-width:80mm;font-size:12px;line-height:1.6} .big ol{font-size:22px;max-width:150mm;margin-top:10mm}
-    .code{font-family:"Courier New",monospace;font-size:1.3em;letter-spacing:.12em} .due{font-size:12px;margin:2mm 0 0} .big .due{font-size:20px}
-  </style></head><body>${slips ? `<div class="grid">${Array.from({ length: 8 }, () => one(false)).join('')}</div>` : one(true)}<script>window.onload=()=>setTimeout(()=>window.print(),200)<\/script></body></html>`);
+  w.document.write(`<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><title>${title} – ${esc(a.code)}</title><link rel="stylesheet" href="${esc(base)}assets/fonts.css"><style>
+    @page{size:A4;margin:12mm} *{box-sizing:border-box} body{margin:0;font-family:${L.body};color:${L.ink};-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:6mm} .c{padding:5mm;break-inside:avoid;text-align:center}
+    .c.big{padding:10mm 4mm;margin-top:6mm} .logo{font:700 10px/1.4 Arial,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:${L.accent}}
+    .stripe{margin:-10mm -4mm 8mm} .crest{display:block;width:22mm;height:22mm;margin:0 auto 4mm;padding:3mm;background:#002664;border-radius:3mm}
+    h1{font-family:${L.face};font-size:18px;margin:2mm 0 3mm;color:${L.ink}} .big h1{font-size:36px;margin:4mm 0 8mm} .qr svg{width:32mm;height:32mm} .big .qr svg{width:90mm;height:90mm}
+    ol{text-align:left;margin:3mm auto 0;padding-left:5mm;max-width:80mm;font-size:12px;line-height:1.6} .big ol{font-size:22px;max-width:150mm;margin-top:10mm} ol b{color:${L.accent}}
+    .code{font-family:"Courier New",monospace;font-size:1.3em;letter-spacing:.12em} .due{font-size:12px;margin:2mm 0 0;color:${L.accent}} .big .due{font-size:20px}
+    ${L.css}
+  </style></head><body>${slips ? `<div class="grid">${Array.from({ length: 8 }, () => one(false)).join('')}</div>` : one(true)}<script>window.onload=()=>{(document.fonts?document.fonts.ready:Promise.resolve()).then(()=>setTimeout(()=>window.print(),250))}<\/script></body></html>`);
   w.document.close();
 }
 
@@ -499,8 +552,8 @@ function renderView() {
   <div class="toolbar"><label class="tog-row"><input type="checkbox" id="show-answers" ${show ? 'checked' : ''}> Show answers</label></div>
   <ol class="view-list">${s.questions.map((q, i) => `<li class="view-q ${validQ(q) ? '' : 'warn'}">
       <span class="q-num">Q${i + 1}</span>
-      <div class="view-body"><div class="pv-q">${esc(q.q) || '<span class="hint">No question text</span>'}</div>
-        <div class="view-ans">${q.answers.map((a, j) => String(a).trim() ? `<div class="va ${show && j === q.correct ? 'c' : ''}"><span class="tag t${j}">${j + 1}</span><span>${esc(a)}</span>${show && j === q.correct ? '<b class="tick">✓</b>' : ''}</div>` : '').join('')}</div></div>
+      <div class="view-body"><div class="pv-q">${q.image ? `<img class="q-thumb big" src="${esc(LB.safeSrc(q.image))}" alt="">` : ''}${esc(q.q) || (q.image ? '' : '<span class="hint">No question text</span>')}</div>
+        <div class="view-ans">${q.answers.map((a, j) => String(a).trim() ? `<div class="va ${show && j === q.correct ? 'c' : ''}"><span class="tag t${j}">${j + 1}</span><span>${LB.ansHTML(a)}</span>${show && j === q.correct ? '<b class="tick">✓</b>' : ''}</div>` : '').join('')}</div></div>
     </li>`).join('')}</ol>`;
 }
 
@@ -511,7 +564,7 @@ async function exportSet(s) {
   s.questions.filter(validQ).forEach(q => {
     const kept = q.answers.map((a, j) => [String(a), j]).filter(([a]) => a.trim());
     const ans = kept.map(k => k[0]); while (ans.length < 4) ans.push('');
-    rows.push([q.q, ...ans, kept.findIndex(k => k[1] === q.correct) + 1]);
+    rows.push([q.q || q.image || '', ...ans, kept.findIndex(k => k[1] === q.correct) + 1]);
   });
   const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = [{ wch: 50 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 10 }];
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Questions');
@@ -541,6 +594,9 @@ function renderEditor() {
   </div>
   <div class="toolbar">
     <button class="btn" data-act="toggle-import">${ui.importOpen ? 'Close import' : '⇩ Import questions'}</button>
+    ${ok >= 2 ? (ui.confirmSwap
+      ? `<span class="confirm">Turn every question round, so each right answer becomes the question? <button class="btn small primary" data-act="swap">Swap</button><button class="btn small ghost" data-act="no-swap">Cancel</button></span>`
+      : `<button class="btn" data-act="ask-swap" title="Each right answer becomes the question, and each question becomes its answer">⇄ Swap questions and answers</button>`) : ''}
     <span class="sp"></span>
     <span class="hint">Maths: wrap it in dollar signs, e.g. <code>$\\frac{3}{4}$</code>, <code>$x^2$</code>, <code>$\\sqrt{50}$</code></span>
   </div>
@@ -554,17 +610,20 @@ function renderQ(q, i, total) {
   const rows = q.answers.map((a, j) => `
     <div class="ans-row ${q.correct === j ? 'correct' : ''}">
       <label class="pick" for="c-${q.id}-${j}" title="Mark as correct answer"><input type="radio" id="c-${q.id}-${j}" name="cor-${q.id}" data-field="correct" data-i="${j}" ${q.correct === j ? 'checked' : ''}><span class="tag t${j}">${j + 1}</span></label>
-      <label class="sr" for="a-${q.id}-${j}">Answer ${j + 1}</label><input type="text" id="a-${q.id}-${j}" data-field="ans" data-i="${j}" value="${esc(a)}" placeholder="Answer ${j + 1}">
+      ${LB.isImg(a)
+        ? `<div class="ans-pic">${LB.ansHTML(a)}<button class="btn ghost small" data-act="ans-pic-clear" data-i="${j}">Use words instead</button></div>`
+        : `<div class="ans-in"><label class="sr" for="a-${q.id}-${j}">Answer ${j + 1}</label><input type="text" id="a-${q.id}-${j}" data-field="ans" data-i="${j}" value="${esc(a)}" placeholder="Answer ${j + 1}"><button class="btn ghost small pic-btn" data-act="ans-pic" data-i="${j}" title="Use a picture for answer ${j + 1}" aria-label="Use a picture for answer ${j + 1}">🖼</button></div>`}
       ${q.answers.length > 2 ? `<button class="btn ghost small" data-act="rm-ans" data-i="${j}" aria-label="Remove answer ${j + 1}">✕</button>` : '<span></span>'}
     </div>`).join('');
   return `<article class="q ${bad ? 'warn' : ''}" data-qid="${q.id}">
     <div class="q-edit">
-      <div class="q-head"><span class="q-num">Q${i + 1}</span>${bad ? '<span class="q-warn">Needs a question and at least 2 answers</span>' : dup ? '<span class="q-warn">Two answers are the same: pupils will only see one</span>' : ''}<span class="sp"></span>
+      <div class="q-head"><span class="q-num">Q${i + 1}</span>${bad ? '<span class="q-warn">Needs a question (or a picture) and at least 2 answers</span>' : dup ? '<span class="q-warn">Two answers are the same: pupils will only see one</span>' : ''}<span class="sp"></span>
         <button class="btn ghost small" data-act="up" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
         <button class="btn ghost small" data-act="down" ${i === total - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
         <button class="btn ghost small danger" data-act="rm-q" aria-label="Delete question">Delete</button></div>
       <label class="sr" for="qt-${q.id}">Question text</label>
-      <textarea id="qt-${q.id}" data-field="q" rows="2" placeholder="Type the question">${esc(q.q)}</textarea>
+      <textarea id="qt-${q.id}" data-field="q" rows="2" placeholder="${q.image ? 'Words to go with the picture (optional)' : 'Type the question'}">${esc(q.q)}</textarea>
+      <div class="q-pic">${q.image ? `<img class="q-thumb big" src="${esc(LB.safeSrc(q.image))}" alt="Question picture"><button class="btn ghost small" data-act="q-pic-clear">Remove picture</button>` : `<button class="btn ghost small" data-act="q-pic">🖼 Add a picture</button>`}</div>
       ${rows}
       ${q.answers.length < 4 ? `<button class="btn ghost small" data-act="add-ans" style="align-self:flex-start">+ Add answer</button>` : ''}
     </div>
@@ -572,8 +631,8 @@ function renderQ(q, i, total) {
   </article>`;
 }
 function previewHTML(q) {
-  return `<span class="lab">Pupil sees</span><div class="pv-q">${esc(q.q) || '<span style="color:var(--muted)">Question text</span>'}</div>
-    <div class="pv-ans">${q.answers.map((a, j) => `<div class="t${j} ${q.correct === j ? 'c' : ''}"><span>${esc(a) || '…'}</span></div>`).join('')}</div>`;
+  return `<span class="lab">Pupil sees</span><div class="pv-q">${q.image ? `<img class="q-thumb big" src="${esc(LB.safeSrc(q.image))}" alt="">` : ''}${esc(q.q) || (q.image ? '' : '<span style="color:var(--muted)">Question text</span>')}</div>
+    <div class="pv-ans">${q.answers.map((a, j) => `<div class="t${j} ${q.correct === j ? 'c' : ''}"><span>${LB.isImg(a) ? LB.ansHTML(a) : esc(a) || '…'}</span></div>`).join('')}</div>`;
 }
 function refreshQ(q) {
   const card = app.querySelector(`[data-qid="${q.id}"]`); if (!card) return;
@@ -602,7 +661,7 @@ function renderImport() {
       <p class="hint" style="margin:0">In Quizlet, open the set, choose <b>⋯ → Export</b>, leave the settings as they are (Tab between term and definition, New line between rows), click <b>Copy text</b> and paste it here. Each card becomes a question; the wrong answers come from other cards in the set.</p>
       <div class="ed-row">
         <div class="field"><label for="ql-dir">Questions show</label><select id="ql-dir">
-          ${[['term', 'Term → pick the definition'], ['def', 'Definition → pick the term'], ['both', 'Both ways (two questions per card)']].map(([v, l]) => `<option value="${v}" ${(ui.qlDir || 'term') === v ? 'selected' : ''}>${l}</option>`).join('')}
+          ${[['term', 'Term → pick the definition'], ['def', 'Swapped: definition → pick the term'], ['both', 'Both ways (two questions per card)']].map(([v, l]) => `<option value="${v}" ${(ui.qlDir || 'term') === v ? 'selected' : ''}>${l}</option>`).join('')}
         </select></div>
         <div class="field"><label for="ql-n">Answers per question</label><select id="ql-n">
           ${[4, 3, 2].map(n => `<option value="${n}" ${(ui.qlN || 4) === n ? 'selected' : ''}>${n}</option>`).join('')}
@@ -626,7 +685,7 @@ function renderImport() {
     ${r ? `<div class="result">
       <strong>${r.questions.length ? `Found ${r.questions.length} ${r.questions.length === 1 ? 'question' : 'questions'}${r.mode === 'blooket' ? ' (Blooket template)' : r.mode === 'quizlet' ? ` from ${r.cards} Quizlet cards` : ''}.` : 'No questions found.'}</strong>
       ${r.warnings.length ? `<ul>${r.warnings.slice(0, 12).map(w => `<li>${esc(w)}</li>`).join('')}${r.warnings.length > 12 ? `<li>…and ${r.warnings.length - 12} more</li>` : ''}</ul>` : ''}
-      ${r.mode === 'quizlet' && r.questions.length ? `<div class="hint">First question: <b>${esc(r.questions[0].q)}</b> with answers ${r.questions[0].answers.map((a, j) => j === r.questions[0].correct ? `<b>${esc(a)}</b> ✓` : esc(a)).join(', ')}</div>` : ''}
+      ${r.mode === 'quizlet' && r.questions.length ? `<div class="hint">First question: <b>${esc(LB.qText(r.questions[0]))}</b> with answers ${r.questions[0].answers.map((a, j) => j === r.questions[0].correct ? `<b>${LB.ansHTML(a)}</b> ✓` : LB.ansHTML(a)).join(', ')}</div>` : ''}
       ${r.questions.length ? `<div class="ed-row"><button class="btn primary small" data-act="imp-add">Add to the end of this set</button><button class="btn small" data-act="imp-replace">Replace all questions</button></div>` : ''}
     </div>` : ''}
   </section>`;
@@ -646,7 +705,7 @@ function rowsToQuestions(rows) {
       const ci = pairs.findIndex(p => p[0] === nums[0]);
       if (ci < 0) { warnings.push(`Row ${rowNo}: skipped, the correct answer number is missing or points to a blank answer.`); return; }
       if (nums.length > 1) warnings.push(`Row ${rowNo}: listed several correct answers; kept answer ${nums[0]} only.`);
-      questions.push(mkQ(text, pairs.map(p => p[1]), ci));
+      questions.push(qIn(text, mkQ(text, pairs.map(p => ansIn(p[1])), ci)));
     });
     return { questions, warnings, mode: 'blooket' };
   }
@@ -662,10 +721,10 @@ function rowsToQuestions(rows) {
     if (pairs.length > 4) { warnings.push(`Row ${rowNo}: skipped, more than 4 answers.`); return; }
     const ci = pairs.findIndex(p => p[0] === Number(corr));
     if (ci < 0) { warnings.push(`Row ${rowNo}: skipped, correct answer ${corr} is blank.`); return; }
-    const d = dedupeAnswers(pairs.map(p => p[1]), ci);
+    const d = dedupeAnswers(pairs.map(p => ansIn(p[1])), ci);
     if (d.dropped) warnings.push(`Row ${rowNo}: the same answer appeared twice; the copy was removed.`);
     if (d.answers.length < 2) { warnings.push(`Row ${rowNo}: skipped, needs at least 2 different answers.`); return; }
-    questions.push(mkQ(text, d.answers, d.correct));
+    questions.push(qIn(text, mkQ(text, d.answers, d.correct)));
   });
   return { questions, warnings, mode: 'simple' };
 }
@@ -684,7 +743,7 @@ function parseQuizlet(text, dir, n) {
     if (i < 0) { warnings.push(`Line ${k + 1}: skipped, no tab between the term and the definition.`); return; }
     const term = line.slice(0, i).trim(), def = line.slice(i + w).trim();
     if (!term || !def) { warnings.push(`Line ${k + 1}: skipped, the term or definition is blank.`); return; }
-    cards.push({ term, def });
+    cards.push({ term: ansIn(term), def: ansIn(def) });
   });
   if (cards.length < 2) return { questions: [], warnings: warnings.concat(['A Quizlet set needs at least 2 cards to make wrong answers from.']), mode: 'quizlet', cards: cards.length };
   // A form can belong to several cards (domini: genitive singular, nominative plural, vocative plural).
@@ -700,7 +759,7 @@ function parseQuizlet(text, dir, n) {
     const right = g.all.join(' / '), bad = new Set(g.all.map(key));
     const wrong = shuffle(pool.filter(x => !bad.has(key(x)) && key(x) !== key(right)).filter((x, i, a) => a.findIndex(y => key(y) === key(x)) === i)).slice(0, n - 1);
     const answers = shuffle([right, ...wrong]);
-    return mkQ(g.show, answers, answers.indexOf(right));
+    return LB.isImg(g.show) ? Object.assign(mkQ('', answers, answers.indexOf(right)), { image: LB.imgOf(g.show) }) : mkQ(g.show, answers, answers.indexOf(right));
   };
   const questions = [], byTerm = group('term', 'def'), byDef = group('def', 'term');
   // Wrong answers for "show the term" are other definitions; a group's combined answer is offered whole
@@ -713,6 +772,70 @@ function parseQuizlet(text, dir, n) {
   if (distinct < n) warnings.push(`Only ${distinct} different answers, so some questions have fewer than ${n} answers.`);
   return { questions, warnings, mode: 'quizlet', cards: cards.length };
 }
+/* Swap questions and answers for a whole set. Each right answer becomes the question; the old question becomes
+   its right answer; wrong answers come from the other questions. Questions that share a right answer are
+   combined, as on Quizlet import, so no wrong answer is ever another right one. A picture question becomes a picture answer. */
+function swapSet(set) {
+  const cards = set.questions.filter(validQ).map(q => ({ term: q.image ? 'img:' + q.image : q.q.trim(), def: String(q.answers[q.correct]).trim(), n: q.answers.filter(a => String(a).trim()).length }));
+  if (cards.length < 2) return { questions: [] };
+  const n = Math.max(2, Math.min(4, Math.max(...cards.map(c => c.n))));
+  const key = x => x.trim().toLowerCase();
+  const m = new Map();
+  cards.forEach(c => { const k = key(c.def); const g = m.get(k) || { show: c.def, all: [] }; if (!g.all.some(x => key(x) === key(c.term))) g.all.push(c.term); m.set(k, g); });
+  const groups = [...m.values()], pool = groups.map(g => g.all.length === 1 ? g.all[0] : g.all.join(' / '));
+  const questions = groups.map((g, gi) => {
+    const right = pool[gi], bad = new Set(g.all.map(key));
+    const wrong = shuffle(pool.filter((x, i) => i !== gi && !bad.has(key(x)))).slice(0, n - 1);
+    const answers = shuffle([right, ...wrong]);
+    const q = mkQ(LB.isImg(g.show) ? '' : g.show, answers, answers.indexOf(right));
+    if (LB.isImg(g.show)) q.image = LB.imgOf(g.show);
+    return q;
+  });
+  return { questions, merged: cards.length - groups.length };
+}
+
+/* Pictures: shrink on this laptop (longest side 640px), then store in Supabase Storage (bucket set-images) */
+const IMG_BUCKET = 'set-images';
+function pickPicture(set, q, where) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0]; if (!f) return;
+    if (!/^image\//.test(f.type)) return toast('That file is not a picture.', true);
+    toast('Adding the picture…');
+    try {
+      const url = await uploadPicture(f);
+      if (where === 'q') q.image = url; else q.answers[where] = 'img:' + url;
+      queueSave(set); render();
+    } catch (err) {
+      console.error(err);
+      toast(/bucket|not found|policy|row-level/i.test(String(err && err.message)) ? 'Pictures aren’t switched on yet: run supabase/pictures.sql in Supabase (see the README).' : 'Couldn’t add the picture. Check your connection and try again.', true);
+    }
+  };
+  inp.click();
+}
+async function shrink(file, max = 640) {
+  const url = URL.createObjectURL(file);
+  try {
+    const im = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    if (/svg/.test(file.type) && file.size < 300000) return { blob: file, ext: 'svg', type: 'image/svg+xml' };
+    const k = Math.min(1, max / Math.max(im.naturalWidth || max, im.naturalHeight || max));
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round((im.naturalWidth || max) * k)); c.height = Math.max(1, Math.round((im.naturalHeight || max) * k));
+    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+    const blob = await new Promise(ok => c.toBlob(ok, 'image/webp', 0.86));
+    if (blob && blob.type === 'image/webp') return { blob, ext: 'webp', type: 'image/webp' };
+    const png = await new Promise(ok => c.toBlob(ok, 'image/png'));
+    return { blob: png, ext: 'png', type: 'image/png' };
+  } finally { URL.revokeObjectURL(url); }
+}
+async function uploadPicture(file) {
+  const { blob, ext, type } = await shrink(file);
+  if (blob.size > 2_000_000) throw new Error('too big');
+  const path = `${me.id}/${uid()}${uid()}.${ext}`;
+  const { error } = await sb.storage.from(IMG_BUCKET).upload(path, blob, { contentType: type, cacheControl: '31536000', upsert: false });
+  if (error) throw error;
+  return sb.storage.from(IMG_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
 /* Remove an answer that repeats another (ignoring case and spaces), keeping the right one */
 function dedupeAnswers(answers, correct) {
   const k = x => String(x).trim().toLowerCase(), right = k(answers[correct]), seen = new Set([right]);
@@ -795,10 +918,10 @@ function renderPlayBody() {
   const f = b.querySelector('[data-autofocus]'); if (f) f.focus();
 }
 function answersHTML(q, done) {
-  return `<div class="answers">${q.answers.map((a, j) => {
+  return `<div class="answers ${LB.hasImgAnswers(q) ? 'pics' : ''}">${q.answers.map((a, j) => {
     let cls = `ans a${j}`;
     if (done) cls += j === q.correct ? ' right' : j === game.pick ? ' wrong' : ' dim';
-    return `<button class="${cls}" data-act="answer" data-i="${j}" ${done ? 'disabled' : ''}><span class="key">${THEME.keyLabel(j)}</span><span>${esc(a)}</span></button>`;
+    return `<button class="${cls}" data-act="answer" data-i="${j}" ${done ? 'disabled' : ''}><span class="key">${THEME.keyLabel(j)}</span><span>${LB.ansHTML(a)}</span></button>`;
   }).join('')}</div>`;
 }
 function playBodyHTML() {
@@ -818,7 +941,7 @@ function playBodyHTML() {
     return hud() + `<div class="stage center pop"><span class="qlabel">Question ${g.answered + 1}</span><button class="btn primary big-go" data-act="show-q" data-autofocus>Show question</button><span class="hint">or press Enter</span></div>`;
   }
   if (g.phase === 'question') {
-    return hud() + `<div class="stage pop"><span class="qlabel">Question ${g.answered + 1}</span><div class="qtext">${esc(g.cur.q)}</div>${answersHTML(g.cur, false)}<span class="hint">Click an answer, or press 1–${g.cur.answers.length}</span></div>`;
+    return hud() + `<div class="stage pop"><span class="qlabel">Question ${g.answered + 1}</span>${LB.qHTML(g.cur)}${answersHTML(g.cur, false)}<span class="hint">Click an answer, or press 1–${g.cur.answers.length}</span></div>`;
   }
   if (g.phase === 'feedback') {
     const right = g.pick === g.cur.correct;
@@ -826,7 +949,7 @@ function playBodyHTML() {
     const verdict = right
       ? `<div class="verdict good pop"><div><h3>Correct! +${g.lastGain}</h3><p>Streak ${g.streak} · ${fmtMult(multFor(g.streak))}</p></div>`
       : `<div class="verdict bad pop"><div><h3>Not quite</h3><p>The answer is highlighted.${g.lostStreak > 1 ? ` Streak of ${g.lostStreak} lost.` : ''}</p></div>`;
-    return hud() + `<div class="stage"><span class="qlabel">Question ${g.answered}</span><div class="qtext">${esc(g.cur.q)}</div>${answersHTML(g.cur, true)}
+    return hud() + `<div class="stage"><span class="qlabel">Question ${g.answered}</span>${LB.qHTML(g.cur)}${answersHTML(g.cur, true)}
       ${verdict}<button class="btn primary go ${locked ? 'locking' : ''}" id="go" data-act="next" ${locked ? 'disabled' : 'data-autofocus'}><span class="lbl">${locked ? 'Wait a moment…' : 'Next question'}</span><span class="bar"></span></button></div></div>`;
   }
   if (g.phase === 'over') {
@@ -834,7 +957,7 @@ function playBodyHTML() {
     const rows = g.qs.map(q => {
       const st = g.stats[q.id], pct = st.seen ? Math.round(100 * st.right / st.seen) : null;
       const topWrong = Object.entries(st.wrong).sort((a, b) => b[1] - a[1])[0];
-      return `<tr><td>${esc(q.q)}</td><td class="num">${st.seen}</td><td class="num">${pct == null ? '–' : pct + '%'}</td><td>${pct == null ? '' : `<div class="meter"><i style="width:${pct}%"></i></div>`}</td><td>${topWrong ? esc(q.answers[topWrong[0]]) : '<span style="color:var(--muted)">–</span>'}</td></tr>`;
+      return `<tr><td>${q.image ? `<img class="q-thumb" src="${esc(LB.safeSrc(q.image))}" alt="">` : ''}${esc(q.q)}</td><td class="num">${st.seen}</td><td class="num">${pct == null ? '–' : pct + '%'}</td><td>${pct == null ? '' : `<div class="meter"><i style="width:${pct}%"></i></div>`}</td><td>${topWrong ? LB.ansHTML(q.answers[topWrong[0]]) : '<span style="color:var(--muted)">–</span>'}</td></tr>`;
     }).join('');
     return `<div class="stage pop">
       <div style="display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap"><div><span class="qlabel">Game over · ${esc(g.set.title || 'Untitled set')}</span><div class="hero-n">${g.score.toLocaleString('en-GB')}</div><span class="hint">points</span></div>
@@ -894,6 +1017,7 @@ app.addEventListener('click', async e => {
   const card = t.closest('[data-qid]');
   const q = card && set ? set.questions.find(x => x.id === card.dataset.qid) : null;
   switch (act) {
+    case 'help': if (TOURS[view.name]) LB.tour.start(TOURS[view.name]()); break;
     case 'host-link': e.preventDefault(); await flushAll(); location.href = t.href; break;
     case 'sign-out': await flushAll(); await sb.auth.signOut(); break;
     case 'forgot': renderForgot(); break;
@@ -1001,6 +1125,19 @@ app.addEventListener('click', async e => {
       q.answers.push(''); queueSave(set); render();
       { const el = document.getElementById(`a-${q.id}-${q.answers.length - 1}`); if (el) el.focus(); }
       break;
+    case 'ask-swap': ui.confirmSwap = true; render(); break;
+    case 'no-swap': ui.confirmSwap = false; render(); break;
+    case 'swap': {
+      ui.confirmSwap = false;
+      const r = swapSet(set);
+      if (!r.questions.length) { toast('Nothing to swap: the set needs at least 2 finished questions.', true); render(); break; }
+      set.questions = r.questions; queueSave(set); render();
+      toast(`Swapped: ${r.questions.length} ${r.questions.length === 1 ? 'question' : 'questions'}${r.merged ? `. ${r.merged} shared a right answer, so their questions are now one answer` : ''}`);
+      break;
+    }
+    case 'q-pic': case 'ans-pic': pickPicture(set, q, act === 'q-pic' ? 'q' : +t.dataset.i); break;
+    case 'q-pic-clear': delete q.image; queueSave(set); render(); break;
+    case 'ans-pic-clear': q.answers[+t.dataset.i] = ''; queueSave(set); render(); { const el = document.getElementById(`a-${q.id}-${t.dataset.i}`); if (el) el.focus(); } break;
     case 'rm-ans': {
       const j = +t.dataset.i; q.answers.splice(j, 1);
       if (q.correct === j) q.correct = 0; else if (q.correct > j) q.correct--;
@@ -1080,7 +1217,10 @@ app.addEventListener('input', e => {
   const card = t.closest('[data-qid]'); if (!card) return;
   const q = set.questions.find(x => x.id === card.dataset.qid);
   if (field === 'q') q.q = t.value;
-  if (field === 'ans') q.answers[+t.dataset.i] = t.value;
+  if (field === 'ans') {
+    q.answers[+t.dataset.i] = t.value;
+    if (LB.isImg(ansIn(t.value))) { q.answers[+t.dataset.i] = ansIn(t.value); queueSave(set); render(); return; }   // pasted an image address
+  }
   queueSave(set); refreshQ(q);
 });
 
@@ -1117,6 +1257,7 @@ app.addEventListener('change', e => {
 });
 
 document.addEventListener('keydown', e => {
+  if (e.key === '?' && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '') && !LB.tour.open() && TOURS[view.name]) { e.preventDefault(); LB.tour.start(TOURS[view.name]()); return; }
   if (view.name !== 'play' || !game) return;
   const tag = document.activeElement && document.activeElement.tagName;
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
