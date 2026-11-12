@@ -89,6 +89,10 @@ This lets you add colleagues and reset their passwords from inside the site. It 
 2. Name it exactly `quiz-admin` (or match whatever `adminFunction` says in `config.js`).
 3. Delete the sample code, paste in the whole of `supabase/functions/quiz-admin/index.ts`, and click **Deploy**.
 
+## Step 6b: Turn on assignments
+
+In Supabase, go to **SQL Editor → New query**, paste the whole of `supabase/assignments.sql` and click **Run** (accept the "destructive operations" warning). This adds assignments and revision folders. Until it has run, the **Assign** buttons stay hidden.
+
 ## Step 7: Publish the website on Netlify
 
 1. In Netlify, click **Add new site → Import an existing project → GitHub**, and allow access to your repository.
@@ -131,8 +135,9 @@ If the site won't load at school, ask IT to allow:
 - your Supabase address, e.g. `abcdefgh.supabase.co`, including secure WebSockets (used for live games)
 
 A summary of the data protection position for IT, which you can copy:
-- **Pupils:** no accounts, logins or emails. They join with a game code and a first name, which passes through a profanity filter. Names, answers and scores are held on the teacher's laptop only: in the browser tab during a game, and in that browser's storage for up to 3 hours afterwards so a closed tab can be reopened. They pass through the live-game service in transit without being stored. Each pupil's traffic travels on a channel only that pupil's browser and the teacher's tab can work out, so pupils cannot read or send each other's answers.
-- **Stored online:** only teacher accounts (email and a hashed password) and the question sets and folders teachers make. They're held by Supabase in its London region, readable only by signed-in teachers.
+- **Pupils (live games):** no accounts, logins or emails. They join with a game code and a first name, which passes through a profanity filter. Names, answers and scores are held on the teacher's laptop only: in the browser tab during a game, and in that browser's storage for up to 3 hours afterwards so a closed tab can be reopened. They pass through the live-game service in transit without being stored. Each pupil's traffic travels on a channel only that pupil's browser and the teacher's tab can work out, so pupils cannot read or send each other's answers.
+- **Pupils (assignments and revision folders):** no accounts. For each play, the pupil's first name and surname initial (as typed), the score and each answer are stored in Supabase (London), readable only by the teacher who set the assignment. Pupils reach them only through three database functions that check the code. Deleting an assignment deletes its plays.
+- **Stored online:** teacher accounts (email and a hashed password) and the question sets and folders teachers make. They're held by Supabase in its London region, readable only by signed-in teachers.
 - **The website:** a static site served over HTTPS. No adverts, analytics or tracking, and all code, fonts and libraries are served from the site itself.
 
 ## Changing things later

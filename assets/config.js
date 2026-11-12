@@ -20,8 +20,8 @@ window.APP = {
   // Optional: your own web address. Leave both as '' if you're using the free netlify.app address.
   // Example: domain: 'myquiz.com', playHost: 'play.myquiz.com'
   // (teachers then use myquiz.com, pupils use play.myquiz.com)
-  domain: '',
-  playHost: '',
+  domain: 'playludus.co.uk',
+  playHost: 'playludus.co.uk',
 
   // Names of the game modes and the double-weight event in the fishing mode,
   // used for sets with no subject.
@@ -85,9 +85,10 @@ window.APP = {
   C.playUrl = C.onDomain && C.playHost ? 'https://' + C.playHost + '/' : './';
   C.teacherUrl = C.onDomain ? 'https://' + C.domain + '/teacher.html' : 'teacher.html';
   // What the host screen tells pupils to type
-  C.joinAddress = C.onDomain && C.playHost ? C.playHost : (location.host + location.pathname.replace(/[^/]*$/, '')).replace(/\/$/, '');
+  // Pupils are always told the play address when there is one, whichever address the teacher is using
+  C.joinAddress = C.playHost ? C.playHost : (location.host + location.pathname.replace(/[^/]*$/, '')).replace(/\/$/, '');
   // The full join link, for the QR code on the host screen (a game code is added to it)
-  C.joinUrl = C.onDomain && C.playHost ? 'https://' + C.playHost + '/' : location.origin + location.pathname.replace(/[^/]*$/, '');
+  C.joinUrl = C.playHost ? 'https://' + C.playHost + '/' : location.origin + location.pathname.replace(/[^/]*$/, '');
   // Page titles follow the app name
   document.title = document.title.replace('Ludus', C.name);
   // The logo: the school crest (when the file exists) and the name

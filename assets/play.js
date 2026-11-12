@@ -196,7 +196,7 @@ function joinHTML() {
     ${LB.mark}
     ${window.APP.schoolLine()}
     <h1 style="font-size:24px">Join a game</h1>
-    <div class="field"><label for="code">Game code</label><input class="in code-in" id="code" inputmode="numeric" autocomplete="off" maxlength="6" placeholder="000000" value="${esc(S.code)}"></div>
+    <div class="field"><label for="code">Game code</label><input class="in code-in" id="code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="6" placeholder="Code" value="${esc(S.code)}"></div>
     <div class="field"><label for="name">Your name</label><input class="in" id="name" autocomplete="off" maxlength="20" placeholder="First name" value="${esc(S.name)}"></div>
     <p class="err" id="join-msg" role="alert">${esc(S.msg || '')}</p>
     <button class="btn primary">Join</button>
@@ -288,11 +288,14 @@ function render() {
 app.addEventListener('submit', e => {
   e.preventDefault();
   if (e.target.id !== 'join') return;
-  const code = document.getElementById('code').value.replace(/\D/g, '');
+  const typed = document.getElementById('code').value.replace(/\s/g, '').toUpperCase();
   const raw = document.getElementById('name').value;
-  S.code = code; S.name = raw;
   const msg = document.getElementById('join-msg');
-  if (code.length !== 6) { msg.textContent = 'The game code has 6 digits.'; return; }
+  // A 5-character code with letters is an assignment or revision folder, played on your own
+  if (window.ASSIGN && ASSIGN.isCode(typed)) { S.screen = 'assign'; return ASSIGN.start(typed, raw); }
+  const code = typed.replace(/\D/g, '');
+  S.code = code; S.name = raw;
+  if (code.length !== 6) { msg.textContent = 'Check the code: live games have 6 numbers, assignments have 5 letters and numbers.'; return; }
   const chk = LB.checkName(raw);
   if (!chk.ok) { msg.textContent = chk.msg; return; }
   join(code, chk.name);
@@ -314,8 +317,12 @@ document.addEventListener('keydown', e => {
 
 /* ---------- start: rejoin automatically after a refresh ---------- */
 // A QR code from the host screen opens this page with ?code=123456: fill it in and go to the name box
-{ const c = (new URLSearchParams(location.search).get('code') || '').replace(/\D/g, '').slice(0, 6); if (c.length === 6) S.code = c; if (location.search) history.replaceState(null, '', location.pathname); }
-const saved = store.get(SESSION);
+{ const c = (new URLSearchParams(location.search).get('code') || '').replace(/\D/g, '').slice(0, 6); if (c.length === 6) S.code = c; }
+// A QR code or link for an assignment opens it straight away (?a=CODE)
+const assignCode = (new URLSearchParams(location.search).get('a') || '').toUpperCase();
+if (location.search) history.replaceState(null, '', location.pathname);
+const saved = assignCode ? null : store.get(SESSION);
+if (assignCode && window.ASSIGN && ASSIGN.isCode(assignCode)) { S.screen = 'assign'; ASSIGN.start(assignCode, ''); } else
 if (saved && saved.chan && Date.now() - saved.at < 3 * 3600e3) {
   Object.assign(S, { code: saved.code, chan: saved.chan, name: saved.name, screen: 'connecting' });
   connect();

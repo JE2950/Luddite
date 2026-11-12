@@ -30,6 +30,8 @@ let hasTags = true;         // false until the tags column exists in the databas
 let isAdmin = false;        // can add teachers and set passwords
 let folders = [];
 let sets = [];
+let assignments = [];       // this teacher's assignments and revision folders
+let hasAssign = true;       // false until supabase/assignments.sql has been run
 let view = { name: 'library', folder: 'mine' };
 let ui = {};
 let game = null;
@@ -165,6 +167,8 @@ async function loadLibrary() {
   folders = f.data;
   sb.from('admins').select('user_id').eq('user_id', me.id).maybeSingle().then(r => { isAdmin = !!(r && r.data); if (isAdmin && view.name !== 'play') render(); }, () => {});
   hasTags = s.data.length ? 'tags' in s.data[0] : hasTags;
+  const asg = await sb.from('assignments').select('*').order('created_at', { ascending: false });
+  hasAssign = !asg.error; assignments = asg.error ? [] : asg.data;
   sets = s.data.map(x => ({ ...x, questions: Array.isArray(x.questions) ? x.questions : [], tags: Array.isArray(x.tags) ? x.tags : [] }));
   render();
 }
@@ -175,7 +179,7 @@ function header() {
     ${window.APP.logo()}
     <span class="chip">Teacher</span>
     <span class="saved" id="saved">Saved</span>
-    <span class="who">${esc(me.email)}${isAdmin ? ' <button class="btn small ghost" data-act="admin">Teachers</button>' : ''} <button class="btn small ghost" data-act="account">Password</button> <button class="btn small ghost" data-act="sign-out">Sign out</button></span>
+    <span class="who">${hasAssign ? `<button class="btn small ${['assignments', 'assignment'].includes(view.name) ? '' : 'ghost'}" data-act="assignments">Assignments${assignments.length ? ` (${assignments.length})` : ''}</button>` : ''} ${esc(me.email)}${isAdmin ? ' <button class="btn small ghost" data-act="admin">Teachers</button>' : ''} <button class="btn small ghost" data-act="account">Password</button> <button class="btn small ghost" data-act="sign-out">Sign out</button></span>
   </header>`;
 }
 function render() {
@@ -185,6 +189,9 @@ function render() {
   else if (view.name === 'view') app.innerHTML = `<div class="wrap">${header()}${renderView()}</div>`;
   else if (view.name === 'account') app.innerHTML = `<div class="wrap">${header()}${renderAccount()}</div>`;
   else if (view.name === 'admin') app.innerHTML = `<div class="wrap">${header()}${renderAdmin()}</div>`;
+  else if (view.name === 'assignments') app.innerHTML = `<div class="wrap">${header()}${renderAssignments()}</div>`;
+  else if (view.name === 'assignment') app.innerHTML = `<div class="wrap">${header()}${renderAssignment()}</div>`;
+  else if (view.name === 'assign-new') app.innerHTML = `<div class="wrap">${header()}${renderAssignNew()}</div>`;
   else if (view.name === 'play') app.innerHTML = `<div class="wrap">${renderPlay()}</div>`;
   typeset(app);
   const f = app.querySelector('[data-autofocus]'); if (f) f.focus();
@@ -223,6 +230,7 @@ function renderLibrary() {
   } else head += `<h1>${esc(curName)}</h1>`;
   head += `<p>${f === 'school' ? 'View or play any set, or copy it into your own sets to edit it.' : `${list.length} ${list.length === 1 ? 'set' : 'sets'}${ui.search ? ' matching your search' : ''}`}</p></div><div class="head-acts">`;
   head += `<label class="sr" for="search">Search sets</label><input class="in search" id="search" type="search" placeholder="${f === 'school' ? 'Search by name, tag or teacher' : 'Search by name or tag'}" value="${esc(ui.search || '')}">`;
+  if (isFolder && ui.renaming !== f && hasAssign) head += `<button class="btn small" data-act="assign-new" data-folder="${f}">Share for revision</button>`;
   if (isFolder && ui.renaming !== f) head += `<button class="btn small ghost" data-act="rename-folder">Rename</button><button class="btn small ghost danger" data-act="ask-del-folder">Delete folder</button>`;
   if (f !== 'school') head += `<button class="btn primary" data-act="new-set">+ New set</button>`;
   head += `</div></div>`;
@@ -246,6 +254,7 @@ function cardHTML(s) {
   let acts;
   if (ui.confirmSet === s.id) acts = `<div class="confirm">Delete this set for good? <button class="btn small danger" data-act="del-set" data-id="${s.id}">Delete</button><button class="btn small ghost" data-act="cancel">Keep</button></div>`;
   else acts = `<div class="acts">${ok ? `<a class="btn small primary" href="host.html?set=${encodeURIComponent(s.id)}">Host live game</a>` : '<button class="btn small primary" disabled>Host live game</button>'}<button class="btn small" data-act="play" data-id="${s.id}" ${ok ? '' : 'disabled'}>▶ Play solo</button>`
+    + (hasAssign && ok ? `<button class="btn small" data-act="assign-new" data-id="${s.id}">Assign</button>` : '')
     + `<button class="btn small" data-act="view" data-id="${s.id}">View</button>`
     + (own ? `<button class="btn small" data-act="edit" data-id="${s.id}">Edit</button>` : '')
     + `</div><div class="acts minor"><button class="btn small ghost" data-act="dup" data-id="${s.id}">${own ? 'Duplicate' : 'Copy to my sets'}</button>`
@@ -328,6 +337,144 @@ function renderAdmin() {
         ? `<span class="confirm">Remove ${esc(u.email)}? Their sets and folders are deleted too. <button class="btn small danger" data-act="admin-remove" data-id="${u.id}">Remove</button><button class="btn small ghost" data-act="admin-cancel">Keep</button></span>`
         : `<button class="btn small" data-act="admin-pw" data-id="${u.id}" data-email="${esc(u.email)}">Set new password</button>${u.you ? '' : ` <button class="btn small ghost danger" data-act="admin-ask-remove" data-id="${u.id}">Remove</button>`}`}</td></tr>`).join('')}
   </tbody></table></div>` : ''}`;
+}
+
+/* ---------- assignments and revision folders ---------- */
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no I, O, 0 or 1, so codes read clearly
+const newCode = () => { const a = new Uint32Array(5); crypto.getRandomValues(a); return Array.from(a, n => CODE_CHARS[n % CODE_CHARS.length]).join(''); };
+const pupilLink = a => cfg.joinUrl + '?a=' + a.code;
+const asgTarget = a => a.set_id ? (getSet(a.set_id) || { title: 'A deleted set', questions: [] }) : { title: folderName(a.folder_id) };
+const asgSets = a => a.set_id ? [getSet(a.set_id)].filter(Boolean) : sets.filter(s => s.folder_id === a.folder_id && mine(s));
+const fmtDay = d => new Date(d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const qrSVG = (text, cell = 4) => { try { const q = window.qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: cell, margin: 0, scalable: true }); } catch (e) { return ''; } };
+
+function renderAssignNew() {
+  const set = view.setId && getSet(view.setId), isFolder = !!view.folderId;
+  const name = isFolder ? folderName(view.folderId) : (set && set.title) || 'Untitled set';
+  const n = isFolder ? sets.filter(s => s.folder_id === view.folderId && mine(s)).length : 0;
+  return `<div class="toolbar"><button class="btn ghost small" data-act="back">← All sets</button></div>
+  <form class="panel-form wide" id="assign-form">
+    <h1>${isFolder ? 'Share a folder for revision' : 'Set an assignment'}</h1>
+    <p class="hint" style="margin:0">${isFolder ? `Pupils choose from the ${n} ${n === 1 ? 'set' : 'sets'} in <b>${esc(name)}</b>, including any you add later, and replay them as often as they like.` : `Pupils play <b>${esc(name)}</b> on their own, as often as they like.`} They sign in with a code and their first name and surname initial. Every play is saved for you to see.</p>
+    <div class="ed-row">
+      <div class="field" style="flex:2;min-width:220px"><label for="as-title">Title pupils see</label><input class="in" id="as-title" maxlength="80" value="${esc(isFolder && !/revision/i.test(name) ? name + ' revision' : name)}" style="width:100%"></div>
+      <div class="field"><label for="as-mode">Mode</label><select id="as-mode"><option value="classic">${esc(window.APP.modes.classic)}</option><option value="fishing">${esc(window.APP.modes.fishing)}</option></select></div>
+      <div class="field"><label for="as-min">Each round</label><select id="as-min">${[3, 5, 10, 15, 0].map(m => `<option value="${m}" ${m === 5 ? 'selected' : ''}>${m ? m + ' minutes' : 'Until they finish'}</option>`).join('')}</select></div>
+      <div class="field"><label for="as-due">Due (optional)</label><input class="in" id="as-due" type="date"></div>
+    </div>
+    <p class="err" id="as-err"></p>
+    <div class="ed-row"><button class="btn primary" id="as-btn">Create code</button></div>
+  </form>`;
+}
+async function createAssignment() {
+  const btn = document.getElementById('as-btn'), err = document.getElementById('as-err');
+  btn.disabled = true; btn.textContent = 'Creating…';
+  const due = document.getElementById('as-due').value;
+  const row = { title: document.getElementById('as-title').value.trim(), mode: document.getElementById('as-mode').value, minutes: +document.getElementById('as-min').value,
+    due_at: due ? new Date(due + 'T18:00:00').toISOString() : null, set_id: view.setId || null, folder_id: view.folderId || null };
+  for (let i = 0; i < 5; i++) {
+    const { data, error } = await sb.from('assignments').insert({ ...row, code: newCode() }).select('*').single();
+    if (!error) { assignments.unshift(data); view = { name: 'assignment', id: data.id }; ui = {}; render(); loadResults(); return; }
+    if (!/duplicate|unique/i.test(error.message)) { console.error(error); err.textContent = 'Couldn’t create the code. Check your connection and try again.'; break; }
+  }
+  btn.disabled = false; btn.textContent = 'Create code';
+}
+
+function renderAssignments() {
+  return `<div class="toolbar"><button class="btn ghost small" data-act="back">← All sets</button></div>
+  <div class="main-head"><div><h1>Assignments</h1><p>Codes pupils use to play on their own. To make one, click <b>Assign</b> on a set, or open a folder and click <b>Share for revision</b>.</p></div></div>
+  ${assignments.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Title</th><th>Code</th><th>What</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody>
+    ${assignments.map(a => `<tr><td><button class="title-link" data-act="assignment" data-id="${a.id}"><b>${esc(a.title || asgTarget(a).title)}</b></button></td>
+      <td class="num"><b>${esc(a.code)}</b></td><td>${a.set_id ? 'Set: ' : 'Revision folder: '}${esc(asgTarget(a).title || 'Untitled set')}</td>
+      <td>${a.due_at ? fmtDay(a.due_at) : '<span class="hint">–</span>'}</td><td>${a.open ? 'Open' : '<span class="hint">Closed</span>'}</td>
+      <td style="text-align:right"><button class="btn small" data-act="assignment" data-id="${a.id}">Results</button></td></tr>`).join('')}
+  </tbody></table></div>` : '<div class="empty"><h2>No assignments yet</h2><p>Click <b>Assign</b> on any set to make one.</p></div>'}`;
+}
+
+/* Results: one row per pupil, built from every play on this code */
+function pupilSummaries(a) {
+  const by = new Map();
+  (ui.attempts || []).forEach(t => {
+    const key = t.pupil.toLowerCase();
+    const p = by.get(key) || { name: t.pupil, plays: 0, best: 0, answered: 0, correct: 0, last: null, per: new Map() };
+    p.plays++; p.best = Math.max(p.best, Number(t.score) || 0); p.answered += t.answered; p.correct += t.correct;
+    if (!p.last || t.updated_at > p.last) p.last = t.updated_at;
+    (t.log || []).forEach(e => { const k = t.set_id + '|' + e.qid; const r = p.per.get(k) || { set_id: t.set_id, qid: e.qid, seen: 0, right: 0, wrong: 0, wrongs: [], last: null }; r.seen++; if (e.right) r.right++; else { r.wrong++; r.wrongs.push(e.choice); } r.last = e.right; p.per.set(k, r); });
+    by.set(key, p);
+  });
+  return [...by.values()].sort((x, y) => x.name.localeCompare(y.name));
+}
+const qFor = (setId, qid) => { const s = getSet(setId); return s && s.questions.find(q => q.id === qid); };
+function renderAssignment() {
+  const a = assignments.find(x => x.id === view.id);
+  if (!a) { view = { name: 'assignments' }; return renderAssignments(); }
+  const link = pupilLink(a), ps = pupilSummaries(a), fish = a.mode === 'fishing';
+  const rows = ps.map(p => {
+    const weak = [...p.per.values()].filter(r => r.wrong > 0 && r.wrong >= r.right);
+    const open = ui.openPupil === p.name.toLowerCase();
+    return `<tr><td><button class="title-link" data-act="pupil-row" data-name="${esc(p.name.toLowerCase())}"><b>${esc(p.name)}</b></button></td><td class="num">${p.plays}</td>
+      <td class="num">${fish ? LB_fmtKg(p.best) : p.best.toLocaleString('en-GB')}</td><td class="num">${p.correct}/${p.answered}</td>
+      <td class="num">${p.answered ? Math.round(100 * p.correct / p.answered) + '%' : '–'}</td><td class="num">${weak.length}</td><td>${p.last ? fmtDay(p.last) : ''}</td></tr>
+      ${open ? `<tr><td colspan="7" style="background:var(--sunk)">${weak.length ? `<b>Questions to practise</b><ul style="margin:6px 0 0;padding-left:20px">${weak.map(r => { const q = qFor(r.set_id, r.qid); return q ? `<li>${esc(q.q)}: <span class="hint">right ${r.right}, wrong ${r.wrong}; answer ${esc(q.answers[q.correct])}${r.wrongs.length ? `; put ${esc([...new Set(r.wrongs)].map(i => q.answers[i]).join(', '))}` : ''}</span></li>` : ''; }).join('')}</ul>` : 'No weak questions.'}</td></tr>` : ''}`;
+  }).join('');
+  return `<div class="toolbar"><button class="btn ghost small" data-act="assignments">← Assignments</button></div>
+  <div class="main-head"><div><span class="qlabel">${a.set_id ? 'Assignment' : 'Revision folder'} · ${esc(asgTarget(a).title || 'Untitled set')}${a.due_at ? ' · due ' + fmtDay(a.due_at) : ''}</span><h1>${esc(a.title || asgTarget(a).title)}</h1></div>
+    <div class="head-acts"><button class="btn" data-act="print-card" data-id="${a.id}">Print poster</button><button class="btn" data-act="print-slips" data-id="${a.id}">Print slips</button>
+      <button class="btn" data-act="toggle-open" data-id="${a.id}">${a.open ? 'Close' : 'Reopen'}</button><button class="btn ghost danger" data-act="ask-del-asg">Delete</button></div></div>
+  ${ui.confirmAsg ? `<div class="confirm" style="margin-bottom:16px">Delete this code and all ${(ui.attempts || []).length} saved plays? <button class="btn small danger" data-act="del-asg" data-id="${a.id}">Delete</button><button class="btn small ghost" data-act="cancel-asg">Keep</button></div>` : ''}
+  <section class="join-banner" style="margin-bottom:20px">
+    <div><span class="qlabel">Go to</span><div class="join-url">${esc(cfg.joinAddress)}</div></div>
+    <div><span class="qlabel">Code</span><div class="join-code">${esc(a.code)}</div></div>
+    <div><span class="qlabel">Or scan</span><div class="join-qr">${qrSVG(link)}</div></div>
+  </section>
+  <p class="hint">Direct link: <a href="${esc(link)}" target="_blank" rel="noopener">${esc(link)}</a> ${a.open ? '' : '· <b>Closed:</b> pupils can’t open this code until you reopen it.'}</p>
+  <div class="main-head" style="margin-top:24px"><div><h2 style="font-size:24px">Results</h2><p>${ui.attempts == null ? 'Loading…' : `${ps.length} ${ps.length === 1 ? 'pupil' : 'pupils'}, ${ui.attempts.length} ${ui.attempts.length === 1 ? 'play' : 'plays'}. Click a name to see the questions he keeps getting wrong.`}</p></div>
+    <div class="head-acts"><button class="btn small" data-act="refresh-results">Refresh</button><button class="btn small primary" data-act="asg-csv" ${ps.length ? '' : 'disabled'}>⇩ Pupil weaknesses (CSV)</button></div></div>
+  ${ps.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Pupil</th><th>Plays</th><th>Best</th><th>Correct</th><th>Accuracy</th><th>To practise</th><th>Last played</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : ui.attempts ? '<div class="empty"><h2>No plays yet</h2><p>Results appear here as pupils play. Click Refresh to check.</p></div>' : ''}`;
+}
+const LB_fmtKg = kg => (Math.round(kg * 10) / 10).toLocaleString('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kg';
+async function loadResults() {
+  ui.attempts = null; render();
+  const { data, error } = await sb.from('attempts').select('id,set_id,pupil,score,answered,correct,best_streak,log,finished,started_at,updated_at').eq('assignment_id', view.id).order('started_at');
+  ui.attempts = error ? [] : data;
+  if (error) toast('Couldn’t load the results. Check your connection.', true);
+  if (view.name === 'assignment') render();
+}
+function assignmentCSV(a) {
+  const cols = ['Last played', 'Assignment', 'Set', 'Subject', 'Pupil', 'Question', 'Correct answer', 'Times asked', 'Times right', 'Times wrong', 'Result', 'Last attempt', 'Weakness', 'Their wrong answers'];
+  const lastBy = new Map(); (ui.attempts || []).forEach(t => { const k = t.pupil.toLowerCase(); if (!lastBy.has(k) || t.updated_at > lastBy.get(k)) lastBy.set(k, t.updated_at); });
+  const rows = [];
+  pupilSummaries(a).forEach(p => [...p.per.values()].forEach(r => {
+    const q = qFor(r.set_id, r.qid), s = getSet(r.set_id); if (!q) return;
+    rows.push([String(lastBy.get(p.name.toLowerCase()) || '').slice(0, 10), a.title, s.title || 'Untitled set', THEME.label(THEME.subjectFor(s)), p.name, q.q, q.answers[q.correct],
+      r.seen, r.right, r.wrong, r.wrong === 0 ? 'Right' : r.right === 0 ? 'Wrong' : 'Mixed', r.last ? 'Right' : 'Wrong', r.wrong > 0 ? 'Yes' : 'No', [...new Set(r.wrongs)].map(i => q.answers[i]).join(' | ')]);
+  }));
+  const cell = v => { v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const csv = '﻿' + [cols.join(','), ...rows.map(r => r.map(cell).join(','))].join('\r\n');
+  const el = document.createElement('a');
+  el.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  el.download = `${cfg.name} - ${(a.title || 'assignment').replace(/[\\/:*?"<>|]/g, '')} - by pupil and question.csv`;
+  document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(el.href), 2000);
+}
+/* Printable poster (one per page) or slips (eight per page) with the QR code, code and address */
+function printCard(a, slips) {
+  const link = pupilLink(a), title = esc(a.title || asgTarget(a).title || '');
+  const one = big => `<div class="c ${big ? 'big' : ''}"><div class="logo">${esc(cfg.school || '')} · ${esc(cfg.name)}</div><h1>${title}</h1>
+    <div class="qr">${qrSVG(link, big ? 8 : 3)}</div>
+    <ol><li>Go to <b>${esc(cfg.joinAddress)}</b></li><li>Type the code <b class="code">${esc(a.code)}</b></li><li>Type your first name and the first letter of your surname</li></ol>
+    ${a.due_at ? `<p class="due">Due ${esc(new Date(a.due_at).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }))}</p>` : ''}</div>`;
+  const w = window.open('', '_blank');
+  if (!w) return toast('Your browser blocked the print window. Allow pop-ups for this site and try again.', true);
+  w.document.write(`<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><title>${title} – ${esc(a.code)}</title><style>
+    @page{size:A4;margin:12mm} *{box-sizing:border-box} body{margin:0;font-family:Georgia,"Times New Roman",serif;color:#0b1b3f}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:6mm} .c{border:1.5px dashed #9aa3bb;border-radius:4mm;padding:5mm;break-inside:avoid;text-align:center}
+    .c.big{border:none;padding:10mm 0;margin-top:10mm} .logo{font:700 10px/1.4 Arial,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#56617c}
+    h1{font-size:18px;margin:2mm 0 3mm} .big h1{font-size:36px;margin:4mm 0 8mm} .qr svg{width:32mm;height:32mm} .big .qr svg{width:90mm;height:90mm}
+    ol{text-align:left;margin:3mm auto 0;padding-left:5mm;max-width:80mm;font-size:12px;line-height:1.6} .big ol{font-size:22px;max-width:150mm;margin-top:10mm}
+    .code{font-family:"Courier New",monospace;font-size:1.3em;letter-spacing:.12em} .due{font-size:12px;margin:2mm 0 0} .big .due{font-size:20px}
+  </style></head><body>${slips ? `<div class="grid">${Array.from({ length: 8 }, () => one(false)).join('')}</div>` : one(true)}<script>window.onload=()=>setTimeout(()=>window.print(),200)<\/script></body></html>`);
+  w.document.close();
 }
 
 /* ---------- view a set (read-only, with answers) ---------- */
@@ -794,6 +941,28 @@ app.addEventListener('click', async e => {
       break;
     }
     case 'back': view = { name: 'library', folder: view.folder || 'mine' }; ui = { search: ui.search }; render(); break;
+    case 'assignments': await flushAll(); view = { name: 'assignments', folder: view.folder }; ui = {}; render(); break;
+    case 'assignment': view = { name: 'assignment', id, folder: view.folder }; ui = {}; loadResults(); break;
+    case 'assign-new': await flushAll(); view = { name: 'assign-new', setId: t.dataset.id || null, folderId: t.dataset.folder || null, folder: view.folder }; ui = {}; render(); break;
+    case 'refresh-results': loadResults(); break;
+    case 'pupil-row': ui.openPupil = ui.openPupil === t.dataset.name ? null : t.dataset.name; render(); break;
+    case 'asg-csv': assignmentCSV(assignments.find(x => x.id === view.id)); break;
+    case 'print-card': printCard(assignments.find(x => x.id === id), false); break;
+    case 'print-slips': printCard(assignments.find(x => x.id === id), true); break;
+    case 'toggle-open': {
+      const a = assignments.find(x => x.id === id); t.disabled = true;
+      const { error } = await sb.from('assignments').update({ open: !a.open }).eq('id', id);
+      if (error) fail('Couldn’t change the code', error); else { a.open = !a.open; toast(a.open ? 'Reopened' : 'Closed. Pupils can’t open it now.'); }
+      render(); break;
+    }
+    case 'ask-del-asg': ui.confirmAsg = true; render(); break;
+    case 'cancel-asg': ui.confirmAsg = false; render(); break;
+    case 'del-asg': {
+      t.disabled = true;
+      const { error } = await sb.from('assignments').delete().eq('id', id);
+      if (error) { fail('Couldn’t delete it', error); break; }
+      assignments = assignments.filter(x => x.id !== id); view = { name: 'assignments' }; ui = {}; render(); toast('Deleted'); break;
+    }
     case 'add-q':
       set.questions.push(mkQ()); queueSave(set); render();
       { const qs = app.querySelectorAll('.q textarea'), last = qs[qs.length - 1]; if (last) { last.focus(); last.scrollIntoView({ block: 'center' }); } }
@@ -854,6 +1023,7 @@ app.addEventListener('submit', e => {
   if (e.target.id === 'forgot') return onForgot(e);
   if (e.target.id === 'pw-form') return onPassword(e);
   if (e.target.id === 'add-teacher') return onAddTeacher(e);
+  if (e.target.id === 'assign-form') return createAssignment();
   const form = e.target.dataset.form;
   if (form === 'new-folder') {
     const name = document.getElementById('new-folder-name').value.trim();

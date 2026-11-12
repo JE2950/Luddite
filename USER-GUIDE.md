@@ -84,6 +84,19 @@ Use your laptop on the projector. **Your browser tab runs the game**, so keep it
 
 If you close the tab by accident, open **Host live game** on the same set within 3 hours and click **Resume it**. The pupils carry on where they were.
 
+## Assignments and revision folders
+
+Pupils can also play on their own, outside lessons, and you see how they get on.
+
+- **Set an assignment:** click **Assign** on a set. Choose the title pupils see, the mode, how long each round lasts, and a due date if you want one. Click **Create code**.
+- **Share a revision folder:** open one of your folders and click **Share for revision**. Pupils choose from every set in the folder, including sets you add later.
+- **Give pupils the code:** each assignment has a 5-character code (letters and numbers), a QR code and a direct link. **Print poster** gives one large A4 sheet for the board; **Print slips** gives eight to cut out.
+- **What pupils do:** go to the site (or scan the QR code), type the code, then their first name and the first letter of their surname. They can play as many times as they like. Before each round they see their best score and the questions they keep getting wrong, and those questions come up twice as often.
+- **Results:** click **Assignments** at the top, then an assignment. You see each pupil's plays, best score, accuracy and number of questions to practise; click a name to list those questions. **Pupil weaknesses (CSV)** downloads one row per pupil per question, in the same layout as the live-game download. Click **Refresh** for the latest plays.
+- **Close** stops pupils opening the code (reopen it any time). **Delete** removes the code and every saved play.
+
+A pupil who types his name two ways ("Hugo B" and "Hugh B") shows up twice, so tell the class to use the same first name each time.
+
 ## Game modes and scoring
 
 Both modes reward accuracy: a wrong answer resets the pupil's streak and pauses them for 2 seconds while the right answer is shown.
@@ -109,4 +122,6 @@ Fish come in five tiers: Common, Uncommon, Rare, Epic and Legendary. To take luc
 
 ## Pupil data
 
-Pupils' names, answers and scores are held only on the teacher's laptop, and are never saved online. The browser keeps the last game for up to 3 hours so a closed tab can be reopened, then wipes it. They pass through the live-game service in transit without being stored. The only data stored online is teacher accounts and the question sets and folders teachers make. Download the results before closing the tab if you want to keep them.
+**Live games:** pupils' names, answers and scores are held only on the teacher's laptop, and are never saved online. The browser keeps the last game for up to 3 hours so a closed tab can be reopened, then wipes it. They pass through the live-game service in transit without being stored. The only data stored online is teacher accounts and the question sets and folders teachers make. Download the results before closing the tab if you want to keep them.
+
+**Assignments and revision folders:** each play is saved online in the Supabase project (London): the pupil's first name and surname initial as typed, the score, and each answer. Nothing else is stored. Deleting an assignment deletes its plays.

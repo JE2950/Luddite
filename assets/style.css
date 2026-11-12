@@ -1,7 +1,7 @@
 /* Layout: teacher library (folder rail + set grid) → set editor (stacked question cards with live maths preview) → pupil-view play screen (HUD bar + one big question card) */
 :root{
   /* Ludgrove: navy and white, the look of every page until a subject takes over */
-  --paper:#f4f6fa; --surface:#ffffff; --sunk:#e8edf6; --line:#d5dcea;
+  --paper:#e6eaf0; --surface:#f6f7f9; --sunk:#dce2eb; --line:#c9d1de;
   --ink:#0b1b3f; --muted:#56617c;
   --accent:#002664; --accent-deep:#001843; --on-accent:#ffffff;
   --good:#16936b; --good-soft:#d8f3e8; --bad:#c7392b; --bad-soft:#fbe1da;
@@ -426,11 +426,28 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .tag-chip.subj-french{background:#0055a4;border-color:#0055a4}
 
 /* ---------- Takeover (theme.js) ---------- */
+/* Morph (like PowerPoint's): the logo, heading, main panel and main button glide and reshape into their new
+   places, the page cross-fades, and a wave in the new subject's colours crosses the screen on top */
+.vt-morph::view-transition-group(*){animation-duration:1.2s;animation-timing-function:cubic-bezier(.65,0,.35,1)}
+.vt-morph::view-transition-old(*),.vt-morph::view-transition-new(*){animation-duration:1s;animation-delay:.1s;height:100%;width:100%;object-fit:fill}
+.vt-morph::view-transition-old(root){animation:lx-out .7s .35s cubic-bezier(.4,0,.2,1) both}
+.vt-morph::view-transition-new(root){animation:lx-in .7s .35s cubic-bezier(.4,0,.2,1) both}
+@keyframes lx-out{to{opacity:0}}
+@keyframes lx-in{from{opacity:0}}
+.vt-morph::view-transition-group(lx-wave){animation:none;z-index:50}
+.vt-morph::view-transition-new(lx-wave){animation:lx-wave 1.25s cubic-bezier(.55,0,.45,1) both}
+@keyframes lx-wave{from{transform:translateX(-200vw)}to{transform:translateX(0)}}
+/* The wave sits just off the right edge in the page itself, so it is never seen outside the animation */
+.lx-wave{position:fixed;top:0;left:100vw;width:100vw;height:100vh;pointer-events:none;view-transition-name:lx-wave;
+  background:linear-gradient(100deg,transparent 0 18%,var(--w1) 24% 34%,var(--w2) 34% 46%,var(--w3) 46% 58%,var(--w4) 58% 68%,transparent 76%)}
+.lx-wave.to-latin{--w1:#b8892b;--w2:#8f1d1d;--w3:#f3ede1;--w4:#2a1a12}
+.lx-wave.to-french{--w1:#0055a4;--w2:#ffffff;--w3:#e1352b;--w4:#14213d}
+.lx-wave.to-home{--w1:#002664;--w2:#ffffff;--w3:#dbe6f6;--w4:#0a3a86}
 .takeover-banner,.takeover-veil{position:fixed;inset:0;z-index:300;pointer-events:none;display:grid;place-items:center}
 .takeover-banner span{display:inline-block;padding:.5em 1.1em;font-size:clamp(28px,6vw,72px);line-height:1;white-space:nowrap;
   opacity:0;transform:translateY(10px);transition:opacity .38s ease,transform .38s cubic-bezier(.2,.8,.2,1)}
-.takeover-banner.in span{opacity:1;transform:none}
-.takeover-banner.out span{opacity:0;transform:translateY(-8px);transition-duration:.4s}
+.takeover-banner.is-in span{opacity:1;transform:none}
+.takeover-banner.is-out span{opacity:0;transform:translateY(-8px);transition-duration:.4s}
 .takeover-banner.to-latin span{font-family:"Cinzel",Georgia,serif;font-weight:700;letter-spacing:.12em;color:#5f0f0f;background:#fbf7ee;
   border:2px solid #b8892b;box-shadow:inset 0 0 0 5px #fbf7ee,inset 0 0 0 6px #b8892b,0 18px 50px rgba(42,26,18,.25)}
 .takeover-banner.to-french span{font-family:"Playfair Display",Georgia,serif;font-weight:700;color:#14213d;background:#fff;border-radius:999px;
@@ -438,11 +455,11 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .takeover-banner.to-home span{font-family:"Libre Baskerville",Georgia,serif;font-weight:700;letter-spacing:.2em;text-transform:uppercase;font-size:clamp(20px,3.5vw,40px);
   color:#fff;background:#002664;border-radius:10px;box-shadow:0 18px 50px rgba(0,38,100,.3)}
 .takeover-veil{opacity:0;transform:scale(.96);transition:opacity .52s cubic-bezier(.4,0,.2,1),transform .9s cubic-bezier(.2,.8,.2,1)}
-.takeover-veil.in{opacity:1;transform:none}
-.takeover-veil:not(.in){transition-duration:.62s,.62s}
+.takeover-veil.is-in{opacity:1;transform:none}
+.takeover-veil:not(.is-in){transition-duration:.62s,.62s}
 .takeover-veil.to-latin{background:radial-gradient(circle at 50% 50%,#fbf7ee 0,#efe7d6 55%,#e6dcc6 100%)}
 .takeover-veil.to-french{background:radial-gradient(circle at 50% 50%,#ffffff 0,#f6f1e6 60%,#ece6d8 100%)}
-.takeover-veil.to-home{background:radial-gradient(circle at 50% 50%,#ffffff 0,#f4f6fa 60%,#e8edf6 100%)}
+.takeover-veil.to-home{background:radial-gradient(circle at 50% 50%,#f6f7f9 0,#e6eaf0 60%,#dce2eb 100%)}
 .takeover-banner{z-index:301}
 @media (prefers-reduced-motion: reduce){.takeover-banner,.takeover-veil{display:none}}
 :root[data-subject] .mark .crest,:root[data-subject] .school{display:none}
@@ -476,3 +493,10 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 /* QR code on the host's join screen */
 .join-qr{background:#fff;padding:10px;border-radius:var(--r);line-height:0;box-shadow:0 0 0 1px var(--line)}
 .join-qr svg{width:clamp(130px,16vw,200px);height:auto;display:block}
+
+/* Assignment mode: the pupil's list of sets */
+.pick-list{display:flex;flex-direction:column;gap:10px}
+.pick-set{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:4px;padding:14px 16px;border:1px solid var(--line);border-radius:var(--r);background:var(--paper)}
+.pick-set:hover,.pick-set:focus-visible{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.pick-title{font-family:var(--display);font-weight:700;font-size:20px}
+.pick-meta{font-size:14px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}

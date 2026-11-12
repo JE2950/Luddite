@@ -5,6 +5,19 @@
 const C = window.APP, root = document.documentElement;
 const def = s => (s && C.subjects && C.subjects[s]) || null;
 
+/* The pieces that glide between looks. The first visible match for each gets the name. */
+const MORPH = [['lx-mark', '.mark'], ['lx-title', 'main h1, .stage h1, .gate-card h1, .main-head h1, h1'], ['lx-panel', '.stage, .gate-card, .setup, .join-banner, .lib section, .panel-form'],
+  ['lx-cta', '.big-go, .btn.primary'], ['lx-hud', '.hud, .host-bar, .top']];
+function visible(el) { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight; }
+function untag() { document.querySelectorAll('[data-morph]').forEach(el => { el.style.viewTransitionName = ''; delete el.dataset.morph; }); }
+function tag() {
+  untag();
+  const used = new Set();
+  MORPH.forEach(([name, sel]) => {
+    const el = [...document.querySelectorAll(sel)].find(e => !used.has(e) && !e.closest('.takeover-banner') && visible(e));
+    if (el) { used.add(el); el.style.viewTransitionName = name; el.dataset.morph = name; }
+  });
+}
 const T = window.THEME = {
   current: null,
   def,
@@ -56,14 +69,15 @@ const T = window.THEME = {
     if (s) root.dataset.subject = s; else delete root.dataset.subject;
   },
 
-  /* Takeover: the subject's name appears, the new look's colours wash over the page from the centre,
-     the page changes underneath, the wash clears to reveal it, and the name fades away.
-     `mid` runs at the moment the look changes (it redraws the page in the new look). */
+  /* Takeover, like PowerPoint's Morph: a wave sweeps across the screen from left to right, carrying the
+     new look with it, while the logo, the main heading, the main panel and the main button glide and
+     reshape from where they were to where they now sit. The subject's name pops up on a card as the wave
+     passes. Browsers without view transitions get a soft fade instead. `mid` redraws the page in the new look. */
   takeover(s, mid) {
     s = def(s) ? s : null;
     if (s === T.current && !T._busy) { if (mid) mid(); return Promise.resolve(); }
     if (T._busy) { T._next = { s, mid }; return T._busy; }
-    const swap = () => { T.apply(s); try { if (mid) mid(); } catch (e) { console.error(e); } };
+    const swap = () => { T.apply(s); try { if (mid) mid(); } catch (e) { console.error(e); } tag(); };
     if (matchMedia('(prefers-reduced-motion: reduce)').matches || !document.body) { swap(); return Promise.resolve(); }
 
     const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -72,29 +86,38 @@ const T = window.THEME = {
     banner.className = 'takeover-banner to-' + (s || 'home');
     banner.setAttribute('aria-hidden', 'true');
     banner.innerHTML = `<span>${String(label).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</span>`;
-    // The banner's font is fixed for its whole life (set in style.css per subject), and loaded before it
-    // appears, so the text never changes size mid-animation.
+    // The banner's font is fixed (style.css) and loaded before it shows, so the text never resizes mid-animation
     const face = s === 'latin' ? 'Cinzel' : s === 'french' ? '"Playfair Display"' : '"Libre Baskerville"';
-    const fontReady = Promise.race([document.fonts ? document.fonts.load(`700 48px ${face}`, label) : null, wait(600)]).catch(() => {});
+    const fonts = document.fonts ? Promise.all([document.fonts.load(`700 48px ${face}`, label), document.fonts.load(`700 32px ${face}`)]) : null;
+    const fontReady = Promise.race([fonts, wait(700)]).catch(() => {});
 
     T._busy = (async () => {
       await fontReady;
-      document.body.appendChild(banner);
-      banner.getBoundingClientRect();
-      banner.classList.add('in');
-      await wait(300);
-      // The new look's background washes in around the name, the page changes underneath, then the wash clears
-      const veil = document.createElement('div');
-      veil.className = 'takeover-veil to-' + (s || 'home');
-      document.body.insertBefore(veil, banner);
-      veil.getBoundingClientRect(); veil.classList.add('in');
-      await wait(460); swap();
-      await wait(120); veil.classList.remove('in');
-      await wait(560); veil.remove();
-      await wait(180);
-      banner.classList.remove('in'); banner.classList.add('out');
-      await wait(400);
-      banner.remove();
+      if (document.startViewTransition) {
+        tag();
+        document.documentElement.classList.add('vt-morph');
+        const wave = document.createElement('div');
+        wave.className = 'lx-wave to-' + (s || 'home'); wave.setAttribute('aria-hidden', 'true');
+        const vt = document.startViewTransition(() => { swap(); document.body.appendChild(wave); });
+        vt.finished.finally(() => wave.remove());
+        if (s) vt.ready.then(() => { document.body.appendChild(banner); banner.getBoundingClientRect(); setTimeout(() => banner.classList.add('is-in'), 380); }, () => {});
+        try { await vt.finished; } catch (e) { if (T.current !== s) swap(); }
+        document.documentElement.classList.remove('vt-morph');
+        untag();
+        if (s) { if (!banner.isConnected) document.body.appendChild(banner); banner.classList.add('is-in'); await wait(520); }
+      } else {
+        if (s) { document.body.appendChild(banner); banner.getBoundingClientRect(); banner.classList.add('is-in'); }
+        const veil = document.createElement('div');
+        veil.className = 'takeover-veil to-' + (s || 'home');
+        document.body.insertBefore(veil, banner);
+        veil.getBoundingClientRect(); veil.classList.add('is-in');
+        await wait(460); swap();
+        await wait(120); veil.classList.remove('is-in');
+        await wait(560); veil.remove();
+        await wait(180);
+      }
+      // Returning to the Ludgrove pages shows no name card
+      if (banner.isConnected) { banner.classList.remove('is-in'); banner.classList.add('is-out'); await wait(400); banner.remove(); }
       T._busy = null;
       const n = T._next; T._next = null;
       if (n && n.s !== T.current) return T.takeover(n.s, n.mid);
