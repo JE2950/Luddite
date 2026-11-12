@@ -31,10 +31,11 @@ window.APP = {
     event: 'Marine Mayhem'
   },
 
-  // Subjects. A set tagged with a subject takes on that subject's look, mode names,
-  // answer-key labels, fish and music as soon as a game starts.
+  // Subjects. A set takes on its subject's look, mode names, answer-key labels, fish and music
+  // as soon as a game starts. Sets with no subject chosen have it worked out from their questions.
   //   pixels: the colours of the squares in the takeover animation
-  //   music:  put MP3s at these paths; until they exist the default tracks in assets/music play
+  //   music:  one MP3 per subject, played in the lobby and through the game.
+  //           Until the file exists, the default tracks in assets/music play.
   subjects: {
     latin: {
       label: 'Latin',
@@ -42,7 +43,7 @@ window.APP = {
       modes: { classic: 'Certamen', fishing: 'Piscatus', event: 'Aestus Neptuni' },
       keys: ['I', 'II', 'III', 'IV'],
       pixels: ['#8f1d1d', '#b8892b', '#f3ede1', '#2a1a12', '#6b2a6e', '#d9c9a3'],
-      music: { lobby: 'assets/music/latin/lobby.mp3', classic: 'assets/music/latin/classic.mp3', fishing: 'assets/music/latin/fishing.mp3' },
+      music: 'assets/music/latin.mp3',
       fish: [
         ['Sardina', 'Perca', 'Gobius', 'Scomber'],
         ['Mullus', 'Aurata', 'Lupus'],
@@ -56,7 +57,7 @@ window.APP = {
       banner: 'FRANÇAIS',
       modes: { classic: 'Le Concours', fishing: 'La Pêche', event: 'La Grande Marée' },
       pixels: ['#0055a4', '#ffffff', '#e1352b', '#14213d', '#f6f1e6', '#0055a4'],
-      music: { lobby: 'assets/music/french/lobby.mp3', classic: 'assets/music/french/classic.mp3', fishing: 'assets/music/french/fishing.mp3' },
+      music: 'assets/music/french.mp3',
       fish: [
         ['Goujon', 'Perche', 'Gardon', 'Maquereau'],
         ['Truite', 'Brème', 'Bar'],

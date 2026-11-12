@@ -13,7 +13,40 @@ const T = window.THEME = {
   modes: () => Object.assign({}, C.modes, (def(T.current) || {}).modes),
   keyLabel: j => { const k = (def(T.current) || {}).keys; return k && k[j] ? k[j] : String(j + 1); },
   fishNames: s => (def(s) || {}).fish || null,
-  music: (s, key) => ((def(s) || {}).music || {})[key] || null,
+  music: (s, key) => { const m = (def(s) || {}).music; return typeof m === 'string' ? m : (m && m[key]) || null; },
+
+  /* Which subject a set belongs to. A subject chosen in the editor wins ('none' means no subject);
+     with nothing chosen, the title, tags and questions decide. */
+  subjectFor(set) {
+    if (!set) return null;
+    if (set.subject === 'none') return null;
+    if (def(set.subject)) return set.subject;
+    return T.detect(set);
+  },
+  detect(set) {
+    const head = [set.title || '', ...(set.tags || [])].join(' ').toLowerCase();
+    if (/\blatin|\blatina|\bce latin|\bvocab(ulary)? latin/.test(head)) return 'latin';
+    if (/\bfrench|fran[cç]ais/.test(head)) return 'french';
+    const qs = (set.questions || []).slice(0, 300);
+    const text = qs.map(q => [q.q, ...(q.answers || [])].join(' ')).join(' \n ');
+    if (!text.trim()) return null;
+    const low = text.toLowerCase();
+    let la = 0, fr = 0;
+    const count = re => (low.match(re) || []).length;
+    // Latin: dictionary entries (amo, -are, -avi, -atum / puella, -ae f), macrons, Latin-only words and endings
+    la += 3 * count(/,\s*-(are|ere|ire|avi|evi|ivi|atum|itum|ui|i|ae|is|us|a|um|orum|arum|ibus)\b/g);
+    la += 2 * count(/[āēīōūȳ]/g);
+    la += count(/\b(est|sunt|erat|erant|non|cum|sed|ego|nos|vos|puer|puella|rex|regina|dominus|servus|bellum|urbs|deus|amicus|quod|quia|ubi|iam|tum|nunc|semper|saepe|valde|etiam|neque|atque|ab|ex|per|ob|sub|inter|contra|propter)\b/g);
+    la += count(/\b\w+(amus|atis|ant|ebat|ebant|abat|abant|avit|averunt|orum|arum|ibus)\b/g);
+    // French: accents, elisions and common words
+    fr += 2 * count(/[éèêàçùâîôûëïœ]/g);
+    fr += 2 * count(/\b(l|d|j|qu|c|n|s|m|t)['’][a-zéèêàâîôûh]/g);
+    fr += count(/\b(le|la|les|un|une|des|du|je|tu|il|elle|nous|vous|ils|elles|sont|avec|pour|dans|mon|ma|mes|ton|ta|tes|son|sa|ses|très|aussi|mais|où|qui|quoi|chez|sur|sous|ce|cette|ces|au|aux|pas|bonjour|merci|oui|non)\b/g);
+    const n = Math.max(1, qs.length);
+    if (la >= 3 && la >= 2 * fr && la / n >= 0.3) return 'latin';
+    if (fr >= 3 && fr >= 2 * la && fr / n >= 0.3) return 'french';
+    return null;
+  },
 
   /* Switch look straight away, no animation */
   apply(s) {

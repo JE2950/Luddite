@@ -194,7 +194,7 @@ function render() {
 function matches(s, q) {
   if (!q) return true;
   q = q.toLowerCase().replace(/^#/, '');
-  return (s.title || '').toLowerCase().includes(q) || THEME.label(s.subject).toLowerCase() === q || (s.tags || []).some(t => t.toLowerCase().includes(q)) || (!mine(s) && ownerLabel(s).toLowerCase().includes(q));
+  return (s.title || '').toLowerCase().includes(q) || THEME.label(THEME.subjectFor(s)).toLowerCase() === q || (s.tags || []).some(t => t.toLowerCase().includes(q)) || (!mine(s) && ownerLabel(s).toLowerCase().includes(q));
 }
 function setsIn(f) {
   if (f === 'mine') return sets.filter(mine);
@@ -261,8 +261,8 @@ function cardHTML(s) {
   </article>`;
 }
 
-const subjChip = s => (THEME.def(s.subject) ? `<button class="tag-chip subj subj-${s.subject}" data-act="tag" data-tag="${esc(THEME.label(s.subject))}" title="Show ${esc(THEME.label(s.subject))} sets">${esc(THEME.label(s.subject))}</button>` : '');
-const tagsHTML = s => ((s.tags && s.tags.length) || THEME.def(s.subject)) ? `<div class="tags">${subjChip(s)}${(s.tags || []).map(t => `<button class="tag-chip" data-act="tag" data-tag="${esc(t)}" title="Show sets tagged ${esc(t)}">${esc(t)}</button>`).join('')}</div>` : '';
+const subjChip = s => { const k = THEME.subjectFor(s); return k ? `<button class="tag-chip subj subj-${k}" data-act="tag" data-tag="${esc(THEME.label(k))}" title="Show ${esc(THEME.label(k))} sets">${esc(THEME.label(k))}</button>` : ''; };
+const tagsHTML = s => ((s.tags && s.tags.length) || THEME.subjectFor(s)) ? `<div class="tags">${subjChip(s)}${(s.tags || []).map(t => `<button class="tag-chip" data-act="tag" data-tag="${esc(t)}" title="Show sets tagged ${esc(t)}">${esc(t)}</button>`).join('')}</div>` : '';
 
 /* ---------- change password ---------- */
 function renderAccount() {
@@ -381,7 +381,10 @@ function renderEditor() {
   <div class="ed-top">
     <div class="field"><label for="set-title">Set name</label><input id="set-title" class="title-in" data-field="title" value="${esc(s.title)}" placeholder="Untitled set" maxlength="80"></div>
     <div class="ed-row">
-      <div class="field"><label for="set-subject">Subject</label><select id="set-subject" data-field="subject"><option value="">None</option>${THEME.list().map(k => `<option value="${k}" ${s.subject === k ? 'selected' : ''}>${esc(THEME.label(k))}</option>`).join('')}</select></div>
+      <div class="field"><label for="set-subject">Subject</label><select id="set-subject" data-field="subject">
+        <option value="">${(() => { const d = THEME.detect(s); return d ? `${esc(THEME.label(d))} (worked out)` : 'Work it out'; })()}</option>
+        ${THEME.list().map(k => `<option value="${k}" ${s.subject === k ? 'selected' : ''}>${esc(THEME.label(k))}</option>`).join('')}
+        <option value="none" ${s.subject === 'none' ? 'selected' : ''}>None</option></select></div>
       <div class="field"><label for="set-folder">Folder</label><select id="set-folder" data-field="folder">${opts}</select></div>
       ${hasTags ? `<div class="field"><label for="set-tags">Tags</label><input id="set-tags" class="in" data-field="tags" value="${esc((s.tags || []).join(', '))}" placeholder="e.g. Year 7, fractions"></div>` : ''}
       <button class="btn" data-act="play" data-id="${s.id}" ${ok ? '' : 'disabled'}>▶ Play solo</button>
@@ -560,7 +563,7 @@ function startGame(setId) {
   qs.forEach(q => (game.stats[q.id] = { seen: 0, right: 0, wrong: {} }));
   view = { ...view, name: 'play', setId };
   render();
-  THEME.takeover(s.subject, () => { if (view.name === 'play') render(); });
+  THEME.takeover(THEME.subjectFor(s), () => { if (view.name === 'play') render(); });
 }
 function nextQ() {
   if (!game.order.length) {
@@ -753,7 +756,7 @@ app.addEventListener('click', async e => {
       t.disabled = true;
       const fid = !['mine', 'unfiled', 'school'].includes(view.folder) ? view.folder : null;
       let subject = null; try { subject = localStorage.getItem(cfg.storagePrefix + '.lastSubject') || null; } catch (err) {}
-      const s = await insertSet({ title: '', folder_id: fid, questions: [mkQ()], subject: THEME.def(subject) ? subject : null });
+      const s = await insertSet({ title: '', folder_id: fid, questions: [mkQ()], subject: THEME.def(subject) || subject === 'none' ? subject : null });
       t.disabled = false;
       if (!s) return;
       view = { name: 'edit', setId: s.id, folder: view.folder }; ui = {}; render();
@@ -827,7 +830,8 @@ app.addEventListener('click', async e => {
       const blankOnly = set.questions.length === 1 && !set.questions[0].q.trim() && !set.questions[0].answers.some(a => a.trim());
       set.questions = act === 'imp-replace' || blankOnly ? ui.importResult.questions : set.questions.concat(ui.importResult.questions);
       const n = ui.importResult.questions.length;
-      ui = {}; queueSave(set); render(); toast(`Added ${n} ${n === 1 ? 'question' : 'questions'}`);
+      ui = {}; queueSave(set); render();
+      { const d = !set.subject && THEME.detect(set); toast(`Added ${n} ${n === 1 ? 'question' : 'questions'}${d ? `. Subject worked out: ${THEME.label(d)}` : ''}`); }
       break;
     }
     case 'begin': {

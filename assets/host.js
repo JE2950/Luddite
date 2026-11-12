@@ -56,7 +56,7 @@ async function boot() {
   if (!questions.length) return fatal('This set has no finished questions', 'Add at least one question with two answers first.');
   G = {
     code: null, setId, title: data.title || 'Untitled set', questions,
-    subject: THEME.def(data.subject) ? data.subject : null, kx: null,
+    subject: THEME.subjectFor(data), kx: null,
     settings: { minutes: 10, rankBy: 'points', mode: 'classic', shuffle: true },
     paused: false, pausedAt: null,
     biggest: null, frenzyUntil: null, nextFrenzyAt: null,
@@ -327,6 +327,46 @@ function questionRows() {
     return { q, st, pct: st.seen ? st.right / st.seen : null, topWrong: top ? { text: q.answers[top[0]], n: top[1] } : null };
   });
 }
+/* One row per pupil per question they met: how often they saw it, got it right and got it wrong,
+   and what they put when wrong. Laid out flat so another program can read it straight in. */
+function pupilQuestionRows() {
+  const subject = THEME.label(G.subject) || '';
+  const d = new Date(G.startedAt || Date.now());
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const rows = [];
+  ranked().forEach(p => {
+    const by = new Map();
+    (p.log || []).forEach(e => {
+      const r = by.get(e.qid) || { seen: 0, right: 0, wrong: 0, wrongAnswers: [], last: null };
+      r.seen++; if (e.right) r.right++; else { r.wrong++; r.wrongAnswers.push(e.choice); }
+      r.last = e.right; by.set(e.qid, r);
+    });
+    G.questions.forEach(q => {
+      const r = by.get(q.id); if (!r) return;
+      const wrongs = [...new Set(r.wrongAnswers)].map(i => q.answers[i]);
+      const result = r.wrong === 0 ? 'Right' : r.right === 0 ? 'Wrong' : 'Mixed';
+      rows.push({ Date: date, Set: G.title, Subject: subject, Pupil: p.name, Question: q.q, 'Correct answer': q.answers[q.correct],
+        'Times asked': r.seen, 'Times right': r.right, 'Times wrong': r.wrong, Result: result,
+        'Last attempt': r.last ? 'Right' : 'Wrong', 'Weakness': r.wrong > 0 ? 'Yes' : 'No', 'Their wrong answers': wrongs.join(' | ') });
+    });
+  });
+  return rows;
+}
+function fileStem() {
+  const d = new Date(G.startedAt || Date.now());
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${window.APP.name} - ${G.title.replace(/[\\/:*?"<>|]/g, '')} - ${date}`;
+}
+function downloadCSV() {
+  const rows = pupilQuestionRows();
+  const cols = ['Date', 'Set', 'Subject', 'Pupil', 'Question', 'Correct answer', 'Times asked', 'Times right', 'Times wrong', 'Result', 'Last attempt', 'Weakness', 'Their wrong answers'];
+  const cell = v => { v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const csv = '\uFEFF' + [cols.join(','), ...rows.map(r => cols.map(c => cell(r[c])).join(','))].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = fileStem() + ' - by pupil and question.csv';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
 async function download() {
   try { await window.APP.loadXLSX(); } catch (e) { return; }
   const fish = fishing();
@@ -343,6 +383,9 @@ async function download() {
   const s1 = XLSX.utils.aoa_to_sheet(pupils); s1['!cols'] = [{ wch: 6 }, { wch: 22 }, { wch: 9 }, { wch: 10 }, { wch: 9 }, { wch: 11 }, { wch: 12 }, { wch: 11 }, { wch: 30 }, { wch: 15 }];
   const s2 = XLSX.utils.aoa_to_sheet(qs); s2['!cols'] = [{ wch: 50 }, { wch: 14 }, { wch: 10 }, { wch: 26 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
   XLSX.utils.book_append_sheet(wb, s1, 'Pupils');
+  const pq = XLSX.utils.json_to_sheet(pupilQuestionRows());
+  pq['!cols'] = [{ wch: 11 }, { wch: 24 }, { wch: 8 }, { wch: 18 }, { wch: 44 }, { wch: 24 }, { wch: 7 }, { wch: 7 }, { wch: 7 }, { wch: 8 }, { wch: 8 }, { wch: 9 }, { wch: 30 }];
+  XLSX.utils.book_append_sheet(wb, pq, 'By pupil and question');
   XLSX.utils.book_append_sheet(wb, s2, 'Questions');
   const log = [['Name', 'Question', 'Their answer', 'Correct answer', 'Right?']];
   ranked().forEach(p => (p.log || []).forEach(e => { const q = qById(e.qid); if (q) log.push([p.name, q.q, q.answers[e.choice], q.answers[q.correct], e.right ? 'Yes' : 'No']); }));
@@ -368,17 +411,21 @@ const music = {
     const from = a.volume, steps = Math.max(1, Math.round(ms / 40)); let i = 0;
     this.fadeT = setInterval(() => { i++; a.volume = Math.min(1, Math.max(0, from + (v - from) * i / steps)); if (i >= steps) { clearInterval(this.fadeT); if (done) done(); } }, 40);
   },
+  missing: {},
   want(key) {
     if (key === this.key) return;
     this.key = key;
+    // A subject's single track carries on from the lobby into the game without restarting
+    const own = key && !this.missing[G.subject] ? THEME.music(G.subject, key) : null;
+    if (own && this.el && this.src === own) return;
     const start = () => {
       if (this.el) { this.el.pause(); this.el = null; }
       if (!key) return;
       // The subject's own track if there is one, otherwise the default track
-      const own = THEME.music(G.subject, key);
-      const a = new Audio(own || TRACKS[key]); a.loop = true; a.volume = 0; this.el = a;
+      const own = this.missing[G.subject] ? null : THEME.music(G.subject, key);
+      const a = new Audio(own || TRACKS[key]); a.loop = true; a.volume = 0; this.el = a; this.src = own || TRACKS[key];
       const go = () => a.play().then(() => this.fadeTo(this.target(), 1200)).catch(() => {});
-      if (own) a.addEventListener('error', () => { if (this.el === a) { a.src = TRACKS[key]; go(); } }, { once: true });
+      if (own) a.addEventListener('error', () => { this.missing[G.subject] = true; if (this.el === a) { a.src = this.src = TRACKS[key]; go(); } }, { once: true });
       go();
     };
     if (this.el) this.fadeTo(0, 800, start); else start();
@@ -573,7 +620,7 @@ function endedHTML() {
   return `<div class="wrap host wide">
     <div class="toolbar"><a class="btn ghost small" href="teacher.html">← Library</a><span class="sp"></span>${LB.mark}</div>
     <div class="main-head"><div><span class="qlabel">Game over · ${esc(G.title)}</span><h1 style="font-size:clamp(32px,5vw,52px)">Results</h1></div>
-      <div class="head-acts"><button class="btn primary" data-act="download">⇩ Download results</button><button class="btn" data-act="again">Play again</button></div></div>
+      <div class="head-acts"><button class="btn primary" data-act="download">⇩ Download results</button><button class="btn" data-act="download-csv" title="One row per pupil per question, for importing into another program">⇩ Pupil weaknesses (CSV)</button><button class="btn" data-act="again">Play again</button></div></div>
     ${podium.length ? `<div class="podium">${podium.map((p, i) => `<div class="pod pod${i + 1}"><span class="pod-rank">${i + 1}</span><span class="pod-name">${esc(p.name)}</span><span class="pod-score">${G.settings.rankBy === 'points' ? (fishing() ? LB.fmtKg(p.kg) : p.score.toLocaleString('en-GB') + ' pts') : G.settings.rankBy === 'correct' ? p.correct + ' correct' : Math.round(100 * acc(p)) + '%'}</span></div>`).join('')}</div>` : ''}
     ${fishing() && G.biggest ? `<div class="big-catch wide-catch">${LB.fishSVG(G.biggest.tier, G.biggest.shape, 110)}<div><span class="qlabel">Biggest catch of the game</span><b>${esc(G.biggest.who)}</b><span style="color:${LB.FISH_TIERS[G.biggest.tier].colour}">${LB.FISH_TIERS[G.biggest.tier].name} ${esc(G.biggest.name)} · ${LB.fmtKg(G.biggest.kg)}</span></div></div>` : ''}
     <div class="summary" style="margin-block:20px">
@@ -663,6 +710,7 @@ app.addEventListener('click', async e => {
     case 'no-end': ui.confirmEnd = false; render(); break;
     case 'end': endGame(); break;
     case 'download': download(); break;
+    case 'download-csv': downloadCSV(); break;
     case 'music-mute': music.toggle(); t.textContent = music.muted ? '♪ Off' : '♪ On'; t.setAttribute('aria-pressed', music.muted); { const v = document.getElementById('music-vol'); if (v) v.disabled = music.muted; } break;
     case 'again': try { localStorage.removeItem(STORE); } catch (err) {} location.reload(); break;
   }

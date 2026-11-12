@@ -34,7 +34,7 @@ Each set has these buttons:
 
 Sets save automatically as you type. Watch for **Saved** next to the logo.
 
-1. Open a folder (optional) and click **+ New set**. Give it a name, and choose its **Subject** (Latin, French or None). The subject decides the look, mode names and music of any game played with the set. New sets start with the subject you last chose.
+1. Open a folder (optional) and click **+ New set**. Give it a name, The subject decides the look, mode names and music of any game played with the set. Leave **Subject** on **Work it out** and the app reads the title, tags and questions: Latin dictionary entries, macrons and Latin words make it Latin; accents and French words make it French. The box shows what it worked out, e.g. "Latin (worked out)". Choose Latin, French or None to override it.
 2. For each question, type the question and 2–4 answers, and tick the circle next to the right one. The **Pupil sees** preview shows exactly how it will look.
 3. Add **tags**, separated by commas (e.g. `Year 7, fractions`), to find the set later.
 
@@ -78,7 +78,9 @@ Use your laptop on the projector. **Your browser tab runs the game**, so keep it
    - The right-hand panel shows class accuracy and the trickiest questions so far, with the most common wrong answer for each.
    - **♪ On/Off** and the slider control the music, which plays from your laptop only.
 7. The game ends when time runs out, or when you click **End game**.
-8. The results screen shows a podium, the full leaderboard and question stats. Click **Download results** for a spreadsheet with three sheets: **Pupils**, **Questions** and **Every answer**.
+8. The results screen shows a podium, the full leaderboard and question stats. Two downloads:
+   - **Download results:** a spreadsheet with four sheets: **Pupils**, **By pupil and question**, **Questions** and **Every answer**.
+   - **Pupil weaknesses (CSV):** one row per pupil per question they met, with the date, set, subject, question, correct answer, times asked, right and wrong, a Result (Right, Wrong or Mixed), a Weakness flag (Yes if they got it wrong at least once) and their wrong answers. Every column has a plain heading and the file opens in Excel, so another program or an AI can read it straight in and build questions on each pupil's weak spots.
 
 If you close the tab by accident, open **Host live game** on the same set within 3 hours and click **Resume it**. The pupils carry on where they were.
 
