@@ -149,7 +149,7 @@ L.fishSVG = (tier, shape, size = 120) => {
 
 
 /* ---------- Guided tour (the "?" button), after the Ludgrove Division Screen's tour ----------
-   LB.tour.start(steps) runs one; LB.tour.auto(key, steps) runs it once per page per browser.
+   LB.tour.start(steps) runs one. Tours only ever start from the ? button or the ? key.
    A step: { sel, title, text }. A step whose element isn't on screen sits in the middle with no spotlight. */
 L.tour = (() => {
   let steps = [], i = 0, el = null;
@@ -197,12 +197,7 @@ L.tour = (() => {
   function step(d) { const n = i + d; if (n < 0) return; if (n >= steps.length) return stop(); i = n; show(); }
   function stop() { if (el) el.classList.remove('on'); document.documentElement.classList.remove('touring'); }
   function start(list) { steps = (list || []).filter(Boolean); if (!steps.length) return; i = 0; build().classList.add('on'); document.documentElement.classList.add('touring'); show(); }
-  function auto(key, list) {
-    const k = 'quizapp.tour.' + key;
-    try { if (localStorage.getItem(k)) return; localStorage.setItem(k, '1'); } catch (e) { return; }
-    setTimeout(() => start(typeof list === 'function' ? list() : list), 600);
-  }
-  return { start, auto, stop, open: () => !!(el && el.classList.contains('on')) };
+  return { start, stop, open: () => !!(el && el.classList.contains('on')) };
 })();
 L.helpButton = (title = 'Guided tour (?)') => `<button class="help-btn" data-act="help" title="${L.esc(title)}" aria-label="Guided tour"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.2-2.8 4"/><path d="M12 17.4h.01"/></svg></button>`;
 

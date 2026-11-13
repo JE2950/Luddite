@@ -42,4 +42,4 @@ This note copies the pattern of the guided tour in Jonny's Ludgrove Division Scr
 | Live game | pause, next, present mode, the race, results download |
 | Assignments | new assignment, code and poster, slips, results table, pupil drill-down, close or reopen |
 
-Each tour runs by itself the first time a teacher opens that page (stored per teacher in the browser), then only from "?".
+Tours only start from the "?" button or the ? key. They never start by themselves (Jonny, 13 Nov 2026).

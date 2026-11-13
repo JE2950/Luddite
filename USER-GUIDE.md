@@ -2,7 +2,7 @@
 
 Ludus (or whatever you've renamed it) runs quick quiz games in class. You build sets of multiple-choice questions; pupils join a game on their own laptops with a 6-digit code and their first name, and everyone answers at their own pace. Pupils need no accounts, and nothing about them is stored online.
 
-Every page has a **?** button in the top corner (or press the **?** key). It walks you round that page one part at a time: Back and Next, or the arrow keys, and Esc to close. Each tour also runs once by itself the first time you open that page.
+Every page has a **?** button in the top corner (or press the **?** key). It walks you round that page one part at a time: Back and Next, or the arrow keys, and Esc to close.
 
 In this guide, "your site" means your Netlify address or your own domain. If you set up a `play.` address, pupils use that.
 

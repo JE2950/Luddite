@@ -198,7 +198,6 @@ function render() {
   else if (view.name === 'play') app.innerHTML = `<div class="wrap play">${renderPlay()}</div>`;
   typeset(app);
   const f = app.querySelector('[data-autofocus]'); if (f) f.focus();
-  if (TOURS[view.name]) LB.tour.auto('teacher-' + view.name, () => TOURS[view.name]());
 }
 
 /* ---------- guided tours, one per page (the ? button) ---------- */

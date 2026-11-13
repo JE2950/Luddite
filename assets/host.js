@@ -570,7 +570,6 @@ function render() {
   music.want(musicKey());
   typeset(app);
   autoScroll();
-  if (G.phase === 'setup') LB.tour.auto('host-setup', HOST_TOURS.setup);
 }
 
 function fishingRulesHTML() {
