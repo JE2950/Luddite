@@ -226,7 +226,7 @@ const TOURS = {
   worksheet: () => [
     { sel: '.ws-kinds', title: 'Kind of sheet', text: 'Pick one. The preview changes straight away. Crosswords and word searches need answers made of letters, so questions with picture or number answers are left out of those.' },
     { sel: '#ws-count', title: 'How many', text: 'Choose how many questions go on the sheet. If you choose fewer than the set has, they are picked at random.' },
-    { sel: '#ws-dir', title: 'Which way round', text: 'For a vocab set, the first option gives the Latin or French and asks for the English. The second turns it round.' },
+    { sel: '#ws-dir', title: 'Which way round', text: 'Each option shows a pair from this set, so you can see which word is the clue and which the pupils write. Sheets start English into Latin for a usual vocab set. Only single words are written, and an entry such as “rēx, rēgis” uses its first word.' },
     { sel: '[data-act="ws-seed"]', title: 'New layout', text: 'Shuffles the order, the grid and the questions picked. What you see in the preview is what prints.' },
     { sel: '[data-act="ws-print"]', title: 'Print', text: 'Prints the sheet, with the answers on the next page if that box is ticked. Choose Save as PDF in the print box to keep a copy.' }
   ],
@@ -541,6 +541,8 @@ function printCard(a, slips) {
 }
 
 /* ---------- worksheets ---------- */
+/* English into Latin for a usual vocab set; the other way if that leaves more single words to write */
+const wsDir = s => { const n = d => WS.build(s, { kind: 'choice', dir: d, count: 'all', seed: 1 }).total || 0; return n('ab') > n('ba') ? 'ab' : 'ba'; };
 const wsSeed = () => 1 + Math.floor(Math.random() * 2147483646);
 const WS_ICONS = { match: '⇄', cross: '▦', gap: '＿', search: '🔍', anagram: '🔀', choice: 'a b c' };
 function wsLook(s) {
@@ -555,10 +557,16 @@ function renderWorksheet() {
   const counts = [...new Set([5, 10, T.count, 15, 20, 30])].sort((a, b) => a - b).filter(n => n < res.ok).concat(['all']);
   const cur = o.count || (res.ok <= T.count ? 'all' : T.count);
   const why = T.words ? 'their answers are pictures, contain numbers or maths, or are too long for a grid' : T.text ? 'their answers are pictures' : 'they have no wrong answers to choose from';
+  const single = WS.build(s, { ...o, kind: 'choice', count: 'all' }), multi = (s.questions || []).filter(LB.validQ).length - (single.total || 0);
   const notes = [];
-  if (res.empty) notes.push(`None of this set’s questions suit this sheet, because ${why}.`);
-  else {
+  if (res.empty) {
+    notes.push('Nothing in this set suits this sheet this way round. Worksheets use only single words for pupils to write.');
+    if (multi > 0) notes.push(`${multi} ${multi === 1 ? 'question has' : 'questions have'} more than one word to write.`);
+    if (res.total) notes.push(`${res.total} ${res.total === 1 ? 'is' : 'are'} left out because ${why}.`);
+    notes.push('Try the other way round, or another kind of sheet.');
+  } else {
     if (res.used < res.ok && !res.missed) notes.push(`Uses ${res.used} of the ${res.ok} questions that suit this sheet, picked at random. New layout picks again.`);
+    if (multi > 0) notes.push(`${multi} ${multi === 1 ? 'question is' : 'questions are'} left out because the word to write is more than one word.`);
     if (res.left) notes.push(`${res.left} ${res.left === 1 ? 'question is' : 'questions are'} left out because ${why}.`);
     if (res.missed) notes.push(`${res.missed} ${res.missed === 1 ? 'answer' : 'answers'} wouldn’t fit the grid. Press New layout to try another arrangement.`);
   }
@@ -570,7 +578,7 @@ function renderWorksheet() {
     <aside class="ws-side">
       <div class="ws-kinds" role="radiogroup" aria-label="Kind of worksheet">${Object.entries(WS.TEMPLATES).map(([k, t]) => `<button class="ws-kind ${k === o.kind ? 'on' : ''}" role="radio" aria-checked="${k === o.kind}" data-act="ws-kind" data-kind="${k}"><span class="ws-ic" aria-hidden="true">${WS_ICONS[k]}</span><b>${esc(t.name)}</b><span>${esc(t.about)}</span></button>`).join('')}</div>
       <div class="field"><label for="ws-count">Questions</label><select id="ws-count" data-ws="count">${counts.map(n => `<option value="${n}" ${String(n) === String(cur) ? 'selected' : ''}>${n === 'all' ? `All that suit (${res.ok})` : n}</option>`).join('')}</select></div>
-      <div class="field"><label for="ws-dir">Which way round</label><select id="ws-dir" data-ws="dir"><option value="ab" ${o.dir === 'ab' ? 'selected' : ''}>Questions as clues, answers to write</option><option value="ba" ${o.dir === 'ba' ? 'selected' : ''}>Answers as clues, questions to write</option></select></div>
+      <div class="field"><label for="ws-dir">Which way round</label><select id="ws-dir" data-ws="dir">${['ba', 'ab'].map(d => { const ex = WS.example(s, d); return `<option value="${d}" ${o.dir === d ? 'selected' : ''}>${ex ? `Clue “${esc(ex[0])}”, pupils write “${esc(ex[1])}”` : d === 'ba' ? 'Answers as clues, questions to write' : 'Questions as clues, answers to write'}</option>`; }).join('')}</select></div>
       ${o.kind === 'gap' ? `<label class="tog-row"><input type="checkbox" data-ws="bank" ${o.bank ? 'checked' : ''}> Word bank at the top</label>` : ''}
       ${o.kind === 'search' ? `<label class="tog-row"><input type="checkbox" data-ws="backwards" ${o.backwards ? 'checked' : ''}> Words can run backwards (harder)</label>` : ''}
       <label class="tog-row"><input type="checkbox" data-ws="key" ${o.key ? 'checked' : ''}> Answers on a separate page</label>
@@ -1142,7 +1150,7 @@ app.addEventListener('click', async e => {
     case 'edit': view = { name: 'edit', setId: id, folder: view.folder }; ui = {}; render(); break;
     case 'view': view = { name: 'view', setId: id, folder: view.folder }; ui = { search: ui.search }; render(); window.scrollTo(0, 0); break;
     case 'export': exportSet(getSet(id)); break;
-    case 'worksheet': await flushAll(); view = { name: 'worksheet', setId: id, from: view.name, folder: view.folder }; ui = { ws: { kind: 'match', count: '', dir: 'ab', key: true, bank: true, backwards: false, seed: wsSeed() } }; render(); break;
+    case 'worksheet': await flushAll(); view = { name: 'worksheet', setId: id, from: view.name, folder: view.folder }; ui = { ws: { kind: 'match', count: '', dir: wsDir(getSet(id)), key: true, bank: true, backwards: false, seed: wsSeed() } }; render(); break;
     case 'ws-back': view = { name: view.from || 'library', setId: view.setId, folder: view.folder || 'mine' }; ui = {}; render(); break;
     case 'ws-kind': ui.ws.kind = t.dataset.kind; ui.ws.count = ''; render(); break;
     case 'ws-seed': ui.ws.seed = wsSeed(); render(); break;

@@ -28,11 +28,16 @@
       const others = q.answers.filter((x, j) => j !== q.correct && String(x).trim()).map(x => L.isImg(x) ? side('', L.imgOf(x)) : side(x, ''));
       return { prompt, answer, others };
     });
-    if (dir !== 'ba') return out;
-    // Turned round: the right answer becomes the question; wrong answers come from other questions
-    return out.map((it, i) => ({ prompt: it.answer, answer: it.prompt, others: out.filter((x, j) => j !== i).map(x => x.prompt) }))
-      .filter(it => it.prompt.text || it.prompt.img);
+    const turned = dir !== 'ba' ? out
+      // Turned round: the right answer becomes the question; wrong answers come from other questions
+      : out.map((it, i) => ({ prompt: it.answer, answer: it.prompt, others: out.filter((x, j) => j !== i).map(x => x.prompt) })).filter(it => it.prompt.text || it.prompt.img);
+    // Pupils write single words only. A dictionary entry keeps its headword: "rēx, rēgis" becomes "rēx".
+    return turned.map(it => ({ ...it, answer: headword(it.answer), others: it.others.map(headword) }))
+      .filter(it => it.answer.img || (it.answer.text && !/\s/.test(it.answer.text)));
   }
+  const headword = x => x.img ? x : { ...x, text: x.text.split(/[,;]/)[0].trim() };
+  /* An example pair, so the teacher can see which way round the sheet goes */
+  function example(set, dir) { const it = items(set, dir).find(x => x.prompt.text && x.answer.text && !hasMaths(x.prompt.text + x.answer.text)); return it ? [it.prompt.text, it.answer.text] : null; }
   const hasMaths = s => /\$[^$]+\$/.test(s);
   const plain = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
   /* Letters for a grid: accents and macrons dropped, everything else but letters removed */
@@ -284,5 +289,5 @@
       ${o.key ? `<section class="key"><div class="logo">${esc(o.brand)}</div><h2>${esc(o.title)}: answers</h2>${o.key}</section>` : ''}</div></body></html>`;
   }
 
-  window.WS = { TEMPLATES, build, page, _gridWord: gridWord, _layout: layout };
+  window.WS = { TEMPLATES, build, page, example, _gridWord: gridWord, _layout: layout };
 })();

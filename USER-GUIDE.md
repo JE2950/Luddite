@@ -112,7 +112,7 @@ Open a set and click **🖨 Worksheets** to print it as a paper sheet. Choose on
 - **Anagrams:** each answer with its letters jumbled.
 - **Multiple choice:** each question with its answers, labelled a to d.
 
-Choose how many questions to include (fewer than the set picks them at random) and which way round they go. The preview shows exactly what will print. **New layout** shuffles the order and the grid, and **Print** prints it, with the answers on a separate page unless you untick that box. Choose Save as PDF in the print box to keep a copy.
+Pupils only ever write single words. A dictionary entry such as `rēx, rēgis` uses its first word, `rēx`, and anything longer is left out. For a usual vocab set, sheets start English into Latin (or French): the English is the clue and the pupils write, find or match the Latin. **Which way round** shows a pair from your set for each option, so you can see which word they write. Choose how many questions to include (fewer than the set picks them at random). The preview shows exactly what will print. **New layout** shuffles the order and the grid, and **Print** prints it, with the answers on a separate page unless you untick that box. Choose Save as PDF in the print box to keep a copy.
 
 Crosswords and word searches drop accents and macrons from the grid and leave out answers that are pictures, numbers or maths. Gap fills and anagrams leave out picture answers. The page tells you how many questions it left out and why. Sheets take the subject's look, like the posters.
 
