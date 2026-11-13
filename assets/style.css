@@ -54,6 +54,19 @@
   --question:"Bitter", Georgia, serif;
   --r:8px; --r-lg:12px; --btn-r:6px;
 }
+/* History: parchment, sealing-wax plum and gold leaf; Alegreya lettering like an old chronicle */
+:root[data-subject="history"]{
+  --paper:#efe6d2; --surface:#fbf7ec; --sunk:#e3d8bf; --line:#cdbf9f;
+  --ink:#2a1f17; --muted:#6a5b4b;
+  --accent:#5b2a4a; --accent-deep:#3d1b31; --on-accent:#ffffff;
+  --good:#2e7a4e; --good-soft:#dcefdc; --bad:#a8402c; --bad-soft:#f6dcd2;
+  --a1:#a8402c; --a2:#2f5b8c; --a3:#2e7a4e; --a4:#b8892b;
+  --gold:#b8892b;
+  --display:"Alegreya", Georgia, serif;
+  --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --question:"Alegreya", Georgia, serif;
+  --r:6px; --r-lg:10px; --btn-r:4px;
+}
 *{box-sizing:border-box}
 html,body{min-height:100%}
 body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5;padding:0 16px}
@@ -440,6 +453,7 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .tag-chip.subj-latin{background:#8f1d1d;border-color:#8f1d1d}
 .tag-chip.subj-french{background:#0055a4;border-color:#0055a4}
 .tag-chip.subj-geography{background:#1f5f4a;border-color:#1f5f4a}
+.tag-chip.subj-history{background:#5b2a4a;border-color:#5b2a4a}
 
 /* ---------- Takeover (theme.js) ---------- */
 /* Morph (like PowerPoint's): the logo, heading, main panel and main button glide and reshape into their new
@@ -459,6 +473,7 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .lx-wave.to-latin{--w1:#b8892b;--w2:#8f1d1d;--w3:#f3ede1;--w4:#2a1a12}
 .lx-wave.to-french{--w1:#0055a4;--w2:#ffffff;--w3:#e1352b;--w4:#14213d}
 .lx-wave.to-geography{--w1:#c98a2b;--w2:#1f5f4a;--w3:#e9eee1;--w4:#2f7fb5}
+.lx-wave.to-history{--w1:#b8892b;--w2:#5b2a4a;--w3:#efe6d2;--w4:#2a1f17}
 .lx-wave.to-home{--w1:#002664;--w2:#ffffff;--w3:#dbe6f6;--w4:#0a3a86}
 .takeover-banner,.takeover-veil{position:fixed;inset:0;z-index:300;pointer-events:none;display:grid;place-items:center}
 .takeover-banner span{display:inline-block;padding:.5em 1.1em;font-size:clamp(28px,6vw,72px);line-height:1;white-space:nowrap;
@@ -477,6 +492,7 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .takeover-veil.to-latin{background:radial-gradient(circle at 50% 50%,#fbf7ee 0,#efe7d6 55%,#e6dcc6 100%)}
 .takeover-veil.to-french{background:radial-gradient(circle at 50% 50%,#ffffff 0,#f6f1e6 60%,#ece6d8 100%)}
 .takeover-veil.to-geography{background:radial-gradient(circle at 50% 50%,#fbfcf8 0,#e9eee1 60%,#dce3d1 100%)}
+.takeover-veil.to-history{background:radial-gradient(circle at 50% 50%,#fbf7ec 0,#efe6d2 60%,#e3d8bf 100%)}
 .takeover-veil.to-home{background:radial-gradient(circle at 50% 50%,#fbfaf6 0,#f3efe6 60%,#e8e2d6 100%)}
 .takeover-banner{z-index:301}
 @media (prefers-reduced-motion: reduce){.takeover-banner,.takeover-veil{display:none}}
@@ -523,6 +539,24 @@ button.lb-name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 :root[data-subject="geography"] .lb-row.top1{background:color-mix(in srgb,var(--ochre) 24%,transparent)}
 :root[data-subject="geography"] .pod1{border-color:var(--ochre);background:color-mix(in srgb,var(--ochre) 20%,var(--surface))}
 :root[data-subject="geography"] .flames i.on{background:var(--ochre)}
+
+/* ---------- History ---------- */
+/* A timeline along the top (gold band with year marks) and parchment over the page */
+:root[data-subject="history"] body{background:
+  repeating-linear-gradient(90deg,#2a1f17 0 2px,transparent 2px 48px) 0 0/100% 7px no-repeat,
+  linear-gradient(#b8892b,#b8892b) 0 0/100% 7px no-repeat,
+  radial-gradient(ellipse at 20% 10%,rgba(184,137,43,.10),transparent 55%),
+  radial-gradient(ellipse at 85% 80%,rgba(91,42,74,.07),transparent 50%),
+  var(--paper)}
+:root[data-subject="history"] h1,:root[data-subject="history"] .mark{font-weight:800}
+:root[data-subject="history"] .stage,:root[data-subject="history"] .gate-card,:root[data-subject="history"] .join-banner{border:1.5px solid var(--gold);box-shadow:inset 0 0 0 4px var(--surface),inset 0 0 0 5px color-mix(in srgb,var(--accent) 40%,transparent),0 10px 26px rgba(42,31,23,.10)}
+:root[data-subject="history"] .qtext{font-weight:700}
+:root[data-subject="history"] .ans .key{font-family:var(--display);font-weight:800;border-radius:50% 50% 46% 54%/52% 48% 52% 48%}
+:root[data-subject="history"] .join-code{background:var(--accent);color:#fff;box-shadow:inset 0 0 0 3px var(--gold),inset 0 0 0 6px var(--accent),inset 0 0 0 7px var(--gold)}
+:root[data-subject="history"] .qlabel,:root[data-subject="history"] .stat .k{color:var(--accent)}
+:root[data-subject="history"] .lb-row.top1{background:color-mix(in srgb,var(--gold) 24%,transparent)}
+:root[data-subject="history"] .pod1{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 20%,var(--surface))}
+:root[data-subject="history"] .flames i.on{background:var(--gold)}
 
 /* QR code on the host's join screen */
 .join-qr{background:#fff;padding:10px;border-radius:var(--r);line-height:0;box-shadow:0 0 0 1px var(--line)}

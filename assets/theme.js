@@ -42,6 +42,7 @@ const T = window.THEME = {
     const head = [set.title || '', ...(set.tags || [])].join(' ').toLowerCase();
     if (/\blatin|\blatina|\bce latin|\bvocab(ulary)? latin/.test(head)) return 'latin';
     if (/\bfrench|fran[cç]ais/.test(head)) return 'french';
+    if (/\bhistor|\btudors?\b|\bnormans?\b|\bvictorians?\b|\bstuarts?\b|\bvikings?\b|\banglo-saxons?\b|\bmedieval\b|\bmiddle ages\b|\bworld war|\bww ?(1|2|i|ii)\b|\bcivil war\b|\bindustrial revolution\b|\bcold war\b|\breformation\b|\bkings and queens\b|\b1066\b/.test(head)) return 'history';
     if (/\bgeog|\bflags?\b|capital cities|\bcountries\b|\bmap skills|\bcontinents?\b|\brivers?\b|\bmountains?\b/.test(head)) return 'geography';
     const qs = (set.questions || []).slice(0, 300);
     const text = qs.map(q => [q.q, ...(q.answers || [])].join(' ')).join(' \n ');
@@ -63,7 +64,12 @@ const T = window.THEME = {
     ge += count(GEO_PLACES);
     ge += count(/\b(capital|country|countries|continent|river|mountain|volcano|volcanic|glacier|glaciation|erosion|deposition|weathering|meander|delta|estuary|ox-bow|oxbow|tectonic|plate|earthquake|tsunami|climate|weather|rainfall|precipitation|latitude|longitude|equator|tropic|hemisphere|population|migration|urban|rural|settlement|biome|rainforest|desert|tundra|savanna|grid reference|contour|scale|compass|ordnance survey|flag|ocean|sea|lake|island|peninsula|coast|coastal|cliff|stack|arch|spit|longshore drift|source|mouth|tributary|confluence|watershed|drainage basin|hydrograph|flood|deforestation|sustainab\w*|fair trade|development|gdp|aid|tourism|national park|ecosystem)\b/g);
     ge += 2 * qs.filter(q => q.image || (q.answerImages && q.answerImages.some(Boolean))).length;
+    // History: years, reigns, wars and the words of the British history syllabus
+    let hi = 0;
+    hi += 2 * count(/\b1[0-9]{3}\b/g);
+    hi += count(/\b(king|queen|monarch|monarchy|reign|crown|throne|battle|war|wars|treaty|parliament|revolution|rebellion|revolt|empire|colony|colonies|century|medieval|norman|normans|saxon|saxons|viking|vikings|tudor|tudors|stuart|stuarts|victorian|victorians|georgian|castle|feudal|baron|barons|knight|knights|peasant|peasants|serf|church|pope|monastery|monasteries|abbey|reformation|protestant|catholic|plague|black death|crusade|crusades|army|soldier|soldiers|invasion|invaded|conquest|magna carta|domesday|archbishop|prime minister|suffrage|suffragette|suffragettes|slavery|abolition|industrial|factory|railway|trenches|blitz|evacuee|evacuees|armistice|holocaust|nazi|nazis|fascism|communism|dictator|historian|source|chronology|dynasty|duke|earl|lord|henry|elizabeth|victoria|william|richard|edward|charles|cromwell|napoleon|wellington|churchill|hitler)\b/g);
     const n = Math.max(1, qs.length);
+    if (hi >= 3 && hi > ge && hi >= 2 * la && hi >= 2 * fr && hi / n >= 0.3) return 'history';
     if (la >= 3 && la >= 2 * fr && la >= 2 * ge && la / n >= 0.3) return 'latin';
     if (fr >= 3 && fr >= 2 * la && fr >= ge && fr / n >= 0.3) return 'french';   // French vocab for countries is still French
     if (ge >= 3 && ge >= 2 * la && ge >= 2 * fr && ge / n >= 0.3) return 'geography';
@@ -89,7 +95,7 @@ const T = window.THEME = {
 
     const wait = ms => new Promise(r => setTimeout(r, ms));
     // Load the new look's fonts first, so text doesn't change shape partway through
-    const face = s === 'latin' ? 'Cinzel' : s === 'french' ? '"Playfair Display"' : s === 'geography' ? 'Bitter' : '"Libre Baskerville"';
+    const face = s === 'latin' ? 'Cinzel' : s === 'french' ? '"Playfair Display"' : s === 'geography' ? 'Bitter' : s === 'history' ? 'Alegreya' : '"Libre Baskerville"';
     const fonts = document.fonts ? Promise.all([document.fonts.load(`700 48px ${face}`), document.fonts.load(`700 32px ${face}`)]) : null;
     const fontReady = Promise.race([fonts, wait(700)]).catch(() => {});
 

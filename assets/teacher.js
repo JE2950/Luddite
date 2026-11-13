@@ -206,7 +206,7 @@ function render() {
 const TOURS = {
   library: () => [
     { sel: '.rail', title: 'Your library', text: 'My sets holds everything you have made. Unfiled is anything not yet in a folder. Other teachers’ sets lets you play or copy what colleagues have made. Your own folders sit underneath; + New folder adds one.' },
-    { sel: '#search', title: 'Find a set', text: 'Type part of a name or a tag. A subject works too: type Latin, French or Geography. In Other teachers’ sets you can also search by teacher.' },
+    { sel: '#search', title: 'Find a set', text: 'Type part of a name or a tag. A subject works too: type Latin, French, Geography or History. In Other teachers’ sets you can also search by teacher.' },
     { sel: '[data-act="new-set"]', title: 'Make a set', text: 'Opens an empty set in the editor. Type questions in, or paste them from Excel or Quizlet. It saves as you go.' },
     { sel: '.card', title: 'Each set', text: 'Host live game runs it on the board with the class joining on their laptops. Play solo tries it yourself. Assign gives pupils a code to play it on their own. The coloured label shows the subject, which sets the look, music, runners and treasures.' },
     { sel: '[data-act="assignments"]', title: 'Assignments', text: 'Every code you have handed out, with each pupil’s plays, scores and the questions they keep getting wrong. Open a folder and use Share for revision to give pupils a choice of sets.' },
@@ -214,7 +214,7 @@ const TOURS = {
   ],
   edit: () => [
     { sel: '#set-title', title: 'Name the set', text: 'Pupils see this name on the board and in revision folders.' },
-    { sel: '#set-subject', title: 'Subject', text: 'Latin, French or Geography gives the game that subject’s look, music, runners and fishing treasures. Leave it on the first option and Ludus works the subject out from the questions. None keeps the Ludgrove look.' },
+    { sel: '#set-subject', title: 'Subject', text: 'Latin, French, Geography or History gives the game that subject’s look, music, runners and fishing treasures. Leave it on the first option and Ludus works the subject out from the questions. None keeps the Ludgrove look.' },
     { sel: '.q', title: 'A question', text: 'Type the question, then two to four answers. The round button marks the right one. If two answers are the same, a warning appears, because pupils would only see one of them.' },
     { sel: '.q-pic, .pic-btn', title: 'Pictures', text: 'Add a picture to the question, or press the picture button beside an answer to make that answer a picture. Pasting a picture’s web address into an answer box does the same. Use it for flags, maps and diagrams.' },
     { sel: '[data-act="toggle-import"]', title: 'Import questions', text: 'Paste rows from Excel, paste a Quizlet export, or upload a spreadsheet. With Quizlet you choose which way round the questions go, and cards that share a word are combined so no wrong answer is ever another right one.' },
@@ -500,7 +500,7 @@ function assignmentCSV(a) {
   document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(el.href), 2000);
 }
 /* Printable poster (one per page) or slips (eight per page) with the QR code, code and address,
-   in the look of the set's subject (Latin, French, Geography), or Ludgrove navy for anything else */
+   in the look of the set's subject (Latin, French, Geography, History), or Ludgrove navy for anything else */
 function asgSubject(a) {
   if (a.set_id) return THEME.subjectFor(getSet(a.set_id) || {});
   const tally = {}; sets.filter(s => s.folder_id === a.folder_id && mine(s)).forEach(s => { const k = THEME.subjectFor(s); if (k) tally[k] = (tally[k] || 0) + 1; });
@@ -513,6 +513,8 @@ const PRINT_LOOK = {
     css: `.c{border:none;border-radius:5mm;box-shadow:0 0 0 1.5px #c9cfdc;overflow:hidden;padding-top:7mm;position:relative}.c::before{content:"";position:absolute;left:0;right:0;top:0;height:2.5mm;background:linear-gradient(90deg,#0055a4 0 33.3%,#fff 33.3% 66.6%,#e1352b 66.6%)}.c.big{box-shadow:none}h1{font-weight:900}.stripe{height:4mm;background:linear-gradient(90deg,#0055a4 0 33.3%,#fff 33.3% 66.6%,#e1352b 66.6%)}` },
   geography: { face: '"Bitter", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#14271f', accent: '#1f5f4a', soft: '#c98a2b',
     css: `.c{border:1.5px solid #1f5f4a;box-shadow:inset 0 0 0 2.5px #fff,inset 0 0 0 3.5px #9fbcae;border-radius:2mm}.c.big{padding:12mm}h1{font-weight:800}.stripe{height:3mm;background:repeating-linear-gradient(90deg,#14271f 0 12mm,#fff 12mm 24mm);box-shadow:0 0 0 .4mm #14271f}` },
+  history: { face: '"Alegreya", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#2a1f17', accent: '#5b2a4a', soft: '#b8892b',
+    css: `.c{border:1.5px solid #b8892b;box-shadow:inset 0 0 0 2.5px #fff,inset 0 0 0 3.5px #c9a5b9;border-radius:1.5mm}.c.big{padding:12mm}h1{font-weight:800}.stripe{height:3mm;background:repeating-linear-gradient(90deg,#2a1f17 0 .5mm,#b8892b .5mm 12mm)}` },
   none: { face: '"Libre Baskerville", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#0b1b3f', accent: '#002664', soft: '#9aa3bb',
     css: `.c{border:1.5px dashed #9aa3bb;border-radius:4mm}.c.big{border:none}.stripe{height:3mm;background:#002664}` }
 };

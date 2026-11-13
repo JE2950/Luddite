@@ -3,6 +3,8 @@
    Latin: a man or woman in a toga, a gladiator, or (now and then) a charioteer.
    French: a mime in a beret, a chef with a frying pan, or a peasant in a garlic necklace.
    Geography: explorers, a mountaineer, a polar explorer, a jungle explorer or a geologist; now and then a Land Rover or a camel.
+   History: a Norman knight, a Viking, a Tudor lady, a Cavalier, a suffragette or a First World War Tommy; now and then a knight on horseback or a penny-farthing.
+   (Until a character's pictures are added to assets/runners, the athlete runs in its place.)
    Sets with no subject get an athlete in Ludgrove navy.
    RUNNER.pick(subject) chooses a character; RUNNER.strip(subject, kind) shows one on its own;
    RUNNER.race(container) draws several lanes for the host screen. Pictures come from assets/runners. */
@@ -15,10 +17,11 @@ const CAST = {
   latin: ['toga-m', 'toga-f', 'gladiator'],
   french: ['mime', 'chef', 'peasant'],
   geography: ['explorer-m', 'explorer-f', 'mountaineer', 'polar', 'jungle', 'geologist'],
+  history: ['knight', 'viking', 'tudor-lady', 'cavalier', 'suffragette', 'tommy'],
   none: ['athlete']
 };
-const RARE = { latin: ['chariot'], geography: ['landrover', 'camel'] };     // turn up now and then
-const BIG = new Set(['chariot', 'landrover', 'camel']);
+const RARE = { latin: ['chariot'], geography: ['landrover', 'camel'], history: ['horse-knight', 'penny-farthing'] };     // turn up now and then
+const BIG = new Set(['chariot', 'landrover', 'camel', 'horse-knight', 'penny-farthing']);
 function pick(subject) {
   const rare = RARE[subject];
   if (rare && Math.random() < 0.12) return rare[Math.floor(Math.random() * rare.length)];
@@ -43,10 +46,10 @@ function deal(subject, bag) {
    Seen almost from above: the ground fills the picture, and only a band along the top edge shows the setting
    (temples, a Paris street, mountains, trees). `band` is that band's height in pixels. */
 const SKY = {
-  latin: ['#f6d7a7', '#fbeed6'], french: ['#bfd9f2', '#eef5fb'], geography: ['#bfe0ef', '#eef7f4'], none: ['#dfe7f3', '#f4f6fa']
+  latin: ['#f6d7a7', '#fbeed6'], french: ['#bfd9f2', '#eef5fb'], geography: ['#bfe0ef', '#eef7f4'], history: ['#d9cfe0', '#f4efe4'], none: ['#dfe7f3', '#f4f6fa']
 };
 const GROUND = {
-  latin: ['#dcb984', '#cfa86f'], french: ['#a9abb0', '#97999f'], geography: ['#9cc27a', '#8bb46a'], none: ['#c0614f', '#ad5444']
+  latin: ['#dcb984', '#cfa86f'], french: ['#a9abb0', '#97999f'], geography: ['#9cc27a', '#8bb46a'], history: ['#a9b07a', '#979e69'], none: ['#c0614f', '#ad5444']
 };
 function scene(ctx, w, h, subject, x, band) {
   subject = SKY[subject] ? subject : 'none';
@@ -78,6 +81,13 @@ function scene(ctx, w, h, subject, x, band) {
   } else if (subject === 'geography') {
     for (let i = -1; i < w / 340 + 2; i++) { const bx = i * 340 - ((x * 0.1) % 340); mountain(ctx, bx + 120, base, hh * 0.95, 150); mountain(ctx, bx + 250, base, hh * 0.7, 110); }
     for (let i = -1; i < w / 90 + 2; i++) { const k = i + Math.floor(x * 0.35 / 90), bx = i * 90 - ((x * 0.35) % 90); if (((k % 4) + 4) % 4 !== 3) pine(ctx, bx + 20, base, hh * (0.42 + ((k * 13) % 3) * 0.1)); }
+  } else if (subject === 'history') {   // a castle on the hill, a church spire and timber-framed houses
+    ctx.fillStyle = '#c9c1a8'; hills(ctx, w, base - hh * 0.42, hh * 0.3, x * 0.1, 320);
+    for (let i = -1; i < w / 600 + 2; i++) { const bx = i * 600 - ((x * 0.1) % 600); castle(ctx, bx + 380, base - hh * 0.2, hh * 0.78); }
+    for (let i = -1; i < w / 130 + 2; i++) {
+      const k = i + Math.floor(x * 0.35 / 130), bx = i * 130 - ((x * 0.35) % 130), m = ((k % 5) + 5) % 5;
+      if (m === 2) spire(ctx, bx + 60, base, hh * 0.95); else if (m === 4) oak(ctx, bx + 60, base, hh * 0.62); else tudor(ctx, bx + 26, base, 70, hh * (0.82 + ((k * 7) % 3) * 0.06));
+    }
   } else {
     ctx.fillStyle = '#cfd8e6'; hills(ctx, w, base - hh * 0.4, hh * 0.3, x * 0.15, 300);
     for (let i = -1; i < w / 260 + 2; i++) { const bx = i * 260 - ((x * 0.35) % 260); tree(ctx, bx + 60, base, hh * 0.8); }
@@ -103,11 +113,45 @@ function groundTexture(ctx, w, h, subject, x, band) {
     for (let gy = band + 30; gy < h; gy += 60) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke(); }
     ctx.strokeStyle = 'rgba(60,90,40,.22)'; ctx.lineWidth = 1.5;
     for (let i = -1; i < w / 300 + 2; i++) { const cx = i * 300 - (x % 300) + 150; for (let r = 1; r <= 3; r++) { ctx.beginPath(); ctx.ellipse(cx, band + (h - band) * 0.55, 26 * r, 9 * r, 0, 0, TAU); ctx.stroke(); } }
+  } else if (subject === 'history') {   // a medieval field in strips, with a cart track
+    ctx.strokeStyle = 'rgba(80,70,30,.16)'; ctx.lineWidth = 2;
+    for (let y = band + 12; y < h; y += 12) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1;
+    for (let i = -1; i < w / 160 + 2; i++) { const gx = i * 160 - (x % 160); ctx.beginPath(); ctx.moveTo(gx, band); ctx.lineTo(gx + 10, h); ctx.stroke(); }
   } else {                            // running track
     ctx.fillStyle = 'rgba(255,255,255,.14)';
     for (let i = -1; i < w / 6 + 2; i++) for (let y = band + 6; y < h; y += 9) ctx.fillRect(i * 6 - (x % 6) + ((y / 9) % 2) * 3, y, 1.5, 1.5);
   }
   ctx.restore();
+}
+function castle(ctx, x, base, hh) {
+  ctx.fillStyle = '#b3aa95';
+  const tw = hh * 0.34, ww = hh * 1.3;
+  ctx.fillRect(x - ww / 2, base - hh * 0.62, ww, hh * 0.62);                       // curtain wall
+  for (const dx of [-ww / 2 - tw / 2, ww / 2 - tw / 2]) ctx.fillRect(x + dx, base - hh * 0.86, tw, hh * 0.86);   // towers
+  ctx.fillRect(x - tw * 0.7, base - hh, tw * 1.4, hh);                              // keep
+  const merlons = (x0, y, wd) => { for (let mx = x0; mx < x0 + wd - 2; mx += 8) ctx.fillRect(mx, y - 5, 5, 5); };
+  merlons(x - ww / 2, base - hh * 0.62, ww); merlons(x - ww / 2 - tw / 2, base - hh * 0.86, tw); merlons(x + ww / 2 - tw / 2, base - hh * 0.86, tw); merlons(x - tw * 0.7, base - hh, tw * 1.4);
+  ctx.fillStyle = '#5b2a4a'; ctx.fillRect(x - 1, base - hh - 22, 2, 18); ctx.beginPath(); ctx.moveTo(x + 1, base - hh - 22); ctx.lineTo(x + 14, base - hh - 18); ctx.lineTo(x + 1, base - hh - 14); ctx.fill();
+  ctx.fillStyle = '#7d7462'; ctx.beginPath(); ctx.arc(x, base - hh * 0.16, hh * 0.12, Math.PI, 0); ctx.fillRect(x - hh * 0.12, base - hh * 0.16, hh * 0.24, hh * 0.16); ctx.fill();
+}
+function spire(ctx, x, base, hh) {
+  ctx.fillStyle = '#d8cdb3'; ctx.fillRect(x - hh * 0.12, base - hh * 0.55, hh * 0.24, hh * 0.55);
+  ctx.fillStyle = '#9b8f78'; ctx.beginPath(); ctx.moveTo(x - hh * 0.14, base - hh * 0.55); ctx.lineTo(x, base - hh); ctx.lineTo(x + hh * 0.14, base - hh * 0.55); ctx.fill();
+  ctx.fillStyle = '#d8cdb3'; ctx.fillRect(x - hh * 0.4, base - hh * 0.3, hh * 0.3, hh * 0.3);
+}
+function oak(ctx, x, base, hh) {
+  ctx.fillStyle = '#5b4a2a'; ctx.fillRect(x - 3, base - hh * 0.45, 6, hh * 0.45);
+  ctx.fillStyle = '#6f8a4a'; for (const [dx, dy, r] of [[0, -0.7, 0.3], [-0.22, -0.55, 0.24], [0.22, -0.55, 0.24]]) { ctx.beginPath(); ctx.arc(x + dx * hh, base + dy * hh, r * hh, 0, TAU); ctx.fill(); }
+}
+function tudor(ctx, x, base, wd, hh) {
+  ctx.fillStyle = '#f1e8d3'; ctx.fillRect(x, base - hh * 0.7, wd, hh * 0.7);
+  ctx.fillStyle = '#6b5a4a'; ctx.beginPath(); ctx.moveTo(x - 4, base - hh * 0.7); ctx.lineTo(x + wd / 2, base - hh); ctx.lineTo(x + wd + 4, base - hh * 0.7); ctx.fill();
+  ctx.fillStyle = '#3d2e22';
+  for (let bx = x; bx <= x + wd - 3; bx += wd / 3) ctx.fillRect(bx, base - hh * 0.7, 3, hh * 0.7);
+  ctx.fillRect(x, base - hh * 0.4, wd, 3);
+  ctx.fillStyle = '#5a6f8a'; ctx.fillRect(x + wd * 0.12, base - hh * 0.62, wd * 0.16, hh * 0.16); ctx.fillRect(x + wd * 0.72, base - hh * 0.62, wd * 0.16, hh * 0.16);
+  ctx.fillStyle = '#3d2e22'; ctx.fillRect(x + wd * 0.42, base - hh * 0.3, wd * 0.16, hh * 0.3);
 }
 function mountain(ctx, x, base, hh, wd) {
   ctx.fillStyle = '#8fa5a0'; ctx.beginPath(); ctx.moveTo(x - wd, base); ctx.lineTo(x, base - hh); ctx.lineTo(x + wd, base); ctx.fill();

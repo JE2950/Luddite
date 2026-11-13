@@ -81,6 +81,21 @@ window.APP = {
         [['Pirate’s treasure chest', 'chest'], ['Meteorite', 'meteorite'], ['Golden compass', 'gcompass']],
         [['Idol of the Lost City', 'idol'], ['The Great Diamond', 'diamond'], ['The Golden Globe', 'gglobe']]
       ] }
+    },
+    history: {
+      label: 'History',
+      banner: 'HISTORY',
+      modes: { classic: 'The March of Time', fishing: 'Mudlarking', event: 'Low Tide' },
+      keys: ['A', 'B', 'C', 'D'],
+      pixels: ['#5b2a4a', '#b8892b', '#efe6d2', '#2a1f17', '#2f5b8c', '#d9c9a3'],
+      // No History music yet: the default tracks play. Treasures reuse pictures drawn for the other subjects.
+      treasure: { unit: 'pounds', symbol: '£', items: [
+        [['Old penny', 'coin'], ['Chipped pot', 'pot'], ['Rusty sword', 'sword'], ['Old postcard', 'postcard']],
+        [['Bronze coin', 'coin'], ['Leather-bound book', 'book'], ['Oil lamp', 'lamp']],
+        [['Legionary helmet', 'helmet'], ['Signet ring', 'ring'], ['Ship’s telescope', 'telescope']],
+        [['Pirate’s treasure chest', 'chest'], ['Knight’s sword', 'sword'], ['Napoleon’s hat', 'bicorne']],
+        [['The Crown Jewels', 'crown'], ['The Great Diamond', 'diamond'], ['The Golden Eagle', 'eagle']]
+      ] }
     }
   },
   // Team names for team games, by subject, with each team's colour
@@ -88,6 +103,7 @@ window.APP = {
     latin: [['Romani', '#8f1d1d'], ['Graeci', '#2d5a8c'], ['Galli', '#4f7a3f'], ['Carthaginienses', '#b8892b']],
     french: [['Les Bleus', '#0055a4'], ['Les Rouges', '#e1352b'], ['Les Verts', '#2e8b6e'], ['Les Jaunes', '#c9962a']],
     geography: [['Explorers', '#1f5f4a'], ['Navigators', '#2f7fb5'], ['Pioneers', '#c98a2b'], ['Voyagers', '#a3402e']],
+    history: [['Normans', '#5b2a4a'], ['Saxons', '#2f5b8c'], ['Tudors', '#a8402c'], ['Victorians', '#2e6b4e']],
     none: [['Red', '#c7392b'], ['Blue', '#1f5fae'], ['Green', '#1f8a5c'], ['Gold', '#b8892b']]
   },
   // Takeover colours for the Ludgrove pages (used when a game ends and the page returns home).

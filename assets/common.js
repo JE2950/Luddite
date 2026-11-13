@@ -130,8 +130,18 @@ L.missText = subject => (L.catchUnit(subject) ? 'Nothing found' : 'The fish got 
    when there is one; otherwise the simple drawing. Add a file's name to CATCH_ART when you add the file. */
 L.CATCH_ART = new Set(["fish-atlantic-salmon", "fish-bluefin-tuna", "fish-bream", "fish-brown-trout", "fish-captain-codswallop", "fish-golden-guppy", "fish-mackerel", "fish-minnow", "fish-mirror-carp", "fish-perch", "fish-pike", "fish-roach", "fish-sea-bass", "fish-sir-flounderpants", "fish-sturgeon", "fish-wels-catfish", "french-accordion", "french-bottle-of-perfume", "french-copy-of-les-miserables", "french-garlic-bulb", "french-golden-croissant", "french-model-eiffel-tower", "french-napoleons-hat", "french-old-beret", "french-painters-palette", "french-petanque-boule", "french-royal-crown", "french-snail-shell", "french-stale-baguette", "french-sword-of-joan-of-arc", "french-the-golden-snail", "french-the-great-golden-cheese", "geography-ammonite-fossil", "geography-broken-compass", "geography-explorers-telescope", "geography-gold-nugget", "geography-golden-compass", "geography-idol-of-the-lost-city", "geography-message-in-a-bottle", "geography-meteorite", "geography-old-penny", "geography-old-postcard", "geography-pirates-treasure-chest", "geography-quartz-crystal", "geography-school-globe", "geography-soggy-map", "geography-the-golden-globe", "geography-the-great-diamond", "latin-bronze-coin", "latin-chipped-pot", "latin-golden-eagle", "latin-golden-fleece", "latin-golden-laurel-wreath", "latin-greek-vase", "latin-legionary-helmet", "latin-marble-bust", "latin-model-trojan-horse", "latin-neptunes-trident", "latin-oil-lamp", "latin-old-sandal", "latin-rusty-sword", "latin-shield-of-achilles", "latin-silver-ring", "latin-wax-tablet"]);
 L.slug = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+/* History's treasures reuse pictures drawn for the other subjects */
+L.CATCH_ALIAS = {
+  'history-old-penny': 'geography-old-penny', 'history-chipped-pot': 'latin-chipped-pot', 'history-rusty-sword': 'latin-rusty-sword',
+  'history-old-postcard': 'geography-old-postcard', 'history-bronze-coin': 'latin-bronze-coin', 'history-leather-bound-book': 'french-copy-of-les-miserables',
+  'history-oil-lamp': 'latin-oil-lamp', 'history-legionary-helmet': 'latin-legionary-helmet', 'history-signet-ring': 'latin-silver-ring',
+  'history-ships-telescope': 'geography-explorers-telescope', 'history-pirates-treasure-chest': 'geography-pirates-treasure-chest',
+  'history-knights-sword': 'french-sword-of-joan-of-arc', 'history-napoleons-hat': 'french-napoleons-hat', 'history-the-crown-jewels': 'french-royal-crown',
+  'history-the-great-diamond': 'geography-the-great-diamond', 'history-the-golden-eagle': 'latin-golden-eagle'
+};
 L.catchArt = (name, subject, size) => {
-  const key = (subject ? subject : 'fish') + '-' + L.slug(name);
+  let key = (subject ? subject : 'fish') + '-' + L.slug(name);
+  if (!L.CATCH_ART.has(key) && L.CATCH_ALIAS[key]) key = L.CATCH_ALIAS[key];
   return L.CATCH_ART.has(key) ? `<img class="catch-art" src="assets/catches/${key}.webp" width="${size}" height="${size}" alt="" draggable="false">` : '';
 };
 L.catchSVG = (c, size = 120) => (c && c.icon
