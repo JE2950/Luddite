@@ -25,6 +25,19 @@ function pick(subject) {
   const list = CAST[subject] || CAST.none;
   return list[Math.floor(Math.random() * list.length)];
 }
+/* Deals runners like cards, so a class gets an even spread: every character comes out before any repeats, in a random order.
+   The bag is a plain array kept with the game, so it survives a refresh. Rare ones still turn up now and then. */
+function deal(subject, bag) {
+  const rare = RARE[subject];
+  if (rare && Math.random() < 0.12) return rare[Math.floor(Math.random() * rare.length)];
+  if (!bag.length) {
+    const list = (CAST[subject] || CAST.none).slice();
+    for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+    if (list.length > 1 && list[list.length - 1] === bag.last) list.unshift(list.pop());   // no repeat across the join between bags
+    bag.push(...list);
+  }
+  const k = bag.pop(); bag.last = k; return k;
+}
 
 /* ---------- backgrounds ----------
    Seen almost from above: the ground fills the picture, and only a band along the top edge shows the setting
@@ -417,5 +430,5 @@ function race(container) {
 }
 function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
-window.RUNNER = { pick, show, hide, boost: () => strip && strip.ln.boost(), trip: () => strip && strip.ln.trip(), race, kinds: CAST, drawRunner };
+window.RUNNER = { pick, deal, show, hide, boost: () => strip && strip.ln.boost(), trip: () => strip && strip.ln.trip(), race, kinds: CAST, drawRunner };
 })();

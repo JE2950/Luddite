@@ -109,7 +109,7 @@ function dropChannel(pid) {
 /* ---------- game logic ---------- */
 function newPupil(name, pub, chan) {
   let pid; do { pid = rid(10); } while (G.pupils[pid]);   // pid is this tab's own label for the pupil; it is never sent anywhere
-  return { pid, pub, chan, name, runner: RUNNER.pick(G.subject), score: 0, kg: 0, catches: 0, biggest: null, streak: 0, best: 0, answered: 0, correct: 0, deck: [], last: null, cur: null, perm: null, log: [], seq: 0, lockUntil: 0, lastActive: Date.now(), lastResult: null, joinedAt: Date.now() };
+  return { pid, pub, chan, name, runner: RUNNER.deal(G.subject, G.runnerBag || (G.runnerBag = [])), score: 0, kg: 0, catches: 0, biggest: null, streak: 0, best: 0, answered: 0, correct: 0, deck: [], last: null, cur: null, perm: null, log: [], seq: 0, lockUntil: 0, lastActive: Date.now(), lastResult: null, joinedAt: Date.now() };
 }
 function deal(p) {
   if (!p.deck.length) {
@@ -527,7 +527,7 @@ function updateRace() {
   race.full = presenting;
   if (presenting && !box.querySelector('.present-exit')) box.insertAdjacentHTML('beforeend', '<button class="present-exit" data-act="present-off" title="Back to the dashboard (Esc)">Back to dashboard</button>');
   if (G.settings.teams) {   // one runner per team
-    G.teamRunners = G.teamRunners || teamDefs().map(() => RUNNER.pick(G.subject));
+    G.teamRunners = G.teamRunners || (bag => teamDefs().map(() => RUNNER.deal(G.subject, bag)))([]);
     race.set(G.subject, teamTotals().map(t => ({ id: 'team' + t.i, name: t.name, kind: G.teamRunners[t.i], value: t.total })));
   } else race.set(G.subject, ranked().slice(0, presenting ? 10 : 6).map(p => ({ id: p.pid, name: p.name, kind: p.runner || 'athlete', value: val(p) })));
 }
