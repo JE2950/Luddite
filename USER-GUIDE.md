@@ -101,6 +101,21 @@ In the host settings, choose **2 teams**, **3 teams** or **4 teams**. Pupils go 
 - **Fishing mode with a subject set:** each right answer brings up a treasure instead of a fish, worth denarii (Latin), francs (French) or pounds (Geography): from rusty swords, garlic bulbs and soggy maps up to the Golden Fleece, the Great Golden Cheese and the Golden Globe.
 - **The characters** are pictures in `assets/runners` (see the note there). Replace a file to change a character.
 
+## Worksheets
+
+Open a set and click **🖨 Worksheets** to print it as a paper sheet. Choose one of six kinds:
+
+- **Match up:** two columns; pupils write the letter of the matching answer in each box.
+- **Crossword:** the questions are the clues and the answers go in the grid.
+- **Gap fill:** each question with a line for the answer, and a word bank if you tick it. If a question already has a gap, such as `J’___ un frère` or `…`, the line goes in that gap.
+- **Word search:** the answers are hidden in the grid, with the questions as clues. Tick **Words can run backwards** for a harder grid.
+- **Anagrams:** each answer with its letters jumbled.
+- **Multiple choice:** each question with its answers, labelled a to d.
+
+Choose how many questions to include (fewer than the set picks them at random) and which way round they go. The preview shows exactly what will print. **New layout** shuffles the order and the grid, and **Print** prints it, with the answers on a separate page unless you untick that box. Choose Save as PDF in the print box to keep a copy.
+
+Crosswords and word searches drop accents and macrons from the grid and leave out answers that are pictures, numbers or maths. Gap fills and anagrams leave out picture answers. The page tells you how many questions it left out and why. Sheets take the subject's look, like the posters.
+
 ## Assignments and revision folders
 
 Pupils can also play on their own, outside lessons, and you see how they get on.

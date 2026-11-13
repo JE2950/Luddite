@@ -196,7 +196,9 @@ function render() {
   else if (view.name === 'assignment') app.innerHTML = `<div class="wrap">${header()}${renderAssignment()}</div>`;
   else if (view.name === 'assign-new') app.innerHTML = `<div class="wrap">${header()}${renderAssignNew()}</div>`;
   else if (view.name === 'play') app.innerHTML = `<div class="wrap play">${renderPlay()}</div>`;
+  else if (view.name === 'worksheet') app.innerHTML = `<div class="wrap">${header()}${renderWorksheet()}</div>`;
   typeset(app);
+  if (view.name === 'worksheet') wsPreview();
   const f = app.querySelector('[data-autofocus]'); if (f) f.focus();
 }
 
@@ -217,8 +219,16 @@ const TOURS = {
     { sel: '.q-pic, .pic-btn', title: 'Pictures', text: 'Add a picture to the question, or press the picture button beside an answer to make that answer a picture. Pasting a picture’s web address into an answer box does the same. Use it for flags, maps and diagrams.' },
     { sel: '[data-act="toggle-import"]', title: 'Import questions', text: 'Paste rows from Excel, paste a Quizlet export, or upload a spreadsheet. With Quizlet you choose which way round the questions go, and cards that share a word are combined so no wrong answer is ever another right one.' },
     { sel: '[data-act="ask-swap"]', title: 'Swap questions and answers', text: 'Turns the whole set round: each right answer becomes the question and the question becomes its answer. Run it again to swap back.' },
+    { sel: '[data-act="worksheet"]', title: 'Worksheets', text: 'Prints this set as a match up, crossword, gap fill, word search, anagrams or multiple choice sheet, with the answers on a separate page.' },
     { sel: '.q-prev', title: 'What pupils see', text: 'A preview of the question as it will look on a pupil’s screen, with the right answer marked.' },
     { sel: '[data-act="host-link"], [data-act="play"]', title: 'Use it', text: 'Host live game runs it with the class. Play solo lets you try it first.' }
+  ],
+  worksheet: () => [
+    { sel: '.ws-kinds', title: 'Kind of sheet', text: 'Pick one. The preview changes straight away. Crosswords and word searches need answers made of letters, so questions with picture or number answers are left out of those.' },
+    { sel: '#ws-count', title: 'How many', text: 'Choose how many questions go on the sheet. If you choose fewer than the set has, they are picked at random.' },
+    { sel: '#ws-dir', title: 'Which way round', text: 'For a vocab set, the first option gives the Latin or French and asks for the English. The second turns it round.' },
+    { sel: '[data-act="ws-seed"]', title: 'New layout', text: 'Shuffles the order, the grid and the questions picked. What you see in the preview is what prints.' },
+    { sel: '[data-act="ws-print"]', title: 'Print', text: 'Prints the sheet, with the answers on the next page if that box is ticked. Choose Save as PDF in the print box to keep a copy.' }
   ],
   assignments: () => [
     { sel: '.tbl, .empty', title: 'Your codes', text: 'Each row is a code pupils use to play on their own. Click a title to see the results. To make a new one, click Assign on a set, or open a folder and click Share for revision.' }
@@ -530,6 +540,76 @@ function printCard(a, slips) {
   w.document.close();
 }
 
+/* ---------- worksheets ---------- */
+const wsSeed = () => 1 + Math.floor(Math.random() * 2147483646);
+const WS_ICONS = { match: '⇄', cross: '▦', gap: '＿', search: '🔍', anagram: '🔀', choice: 'a b c' };
+function wsLook(s) {
+  const subj = THEME.subjectFor(s);
+  return { subj, look: PRINT_LOOK[subj] || PRINT_LOOK.none, brand: [cfg.school, cfg.name, subj && THEME.label(subj)].filter(Boolean).join(' · ') };
+}
+function renderWorksheet() {
+  const s = getSet(view.setId);
+  if (!s) { view = { name: 'library', folder: 'mine' }; return renderLibrary(); }
+  const o = ui.ws, T = WS.TEMPLATES[o.kind];
+  const res = ui.wsRes = WS.build(s, { ...o, count: o.count || T.count });
+  const counts = [...new Set([5, 10, T.count, 15, 20, 30])].sort((a, b) => a - b).filter(n => n < res.ok).concat(['all']);
+  const cur = o.count || (res.ok <= T.count ? 'all' : T.count);
+  const why = T.words ? 'their answers are pictures, contain numbers or maths, or are too long for a grid' : T.text ? 'their answers are pictures' : 'they have no wrong answers to choose from';
+  const notes = [];
+  if (res.empty) notes.push(`None of this set’s questions suit this sheet, because ${why}.`);
+  else {
+    if (res.used < res.ok && !res.missed) notes.push(`Uses ${res.used} of the ${res.ok} questions that suit this sheet, picked at random. New layout picks again.`);
+    if (res.left) notes.push(`${res.left} ${res.left === 1 ? 'question is' : 'questions are'} left out because ${why}.`);
+    if (res.missed) notes.push(`${res.missed} ${res.missed === 1 ? 'answer' : 'answers'} wouldn’t fit the grid. Press New layout to try another arrangement.`);
+  }
+  return `
+  <div class="toolbar"><button class="btn ghost small" data-act="ws-back">← Back to the set</button></div>
+  <div class="main-head"><div><span class="qlabel">Worksheets</span><h1>${esc(s.title || 'Untitled set')}</h1></div>
+    <div class="head-acts"><button class="btn" data-act="ws-seed" ${res.empty ? 'disabled' : ''}>↻ New layout</button><button class="btn primary" data-act="ws-print" ${res.empty ? 'disabled' : ''}>🖨 Print</button></div></div>
+  <div class="ws-wrap">
+    <aside class="ws-side">
+      <div class="ws-kinds" role="radiogroup" aria-label="Kind of worksheet">${Object.entries(WS.TEMPLATES).map(([k, t]) => `<button class="ws-kind ${k === o.kind ? 'on' : ''}" role="radio" aria-checked="${k === o.kind}" data-act="ws-kind" data-kind="${k}"><span class="ws-ic" aria-hidden="true">${WS_ICONS[k]}</span><b>${esc(t.name)}</b><span>${esc(t.about)}</span></button>`).join('')}</div>
+      <div class="field"><label for="ws-count">Questions</label><select id="ws-count" data-ws="count">${counts.map(n => `<option value="${n}" ${String(n) === String(cur) ? 'selected' : ''}>${n === 'all' ? `All that suit (${res.ok})` : n}</option>`).join('')}</select></div>
+      <div class="field"><label for="ws-dir">Which way round</label><select id="ws-dir" data-ws="dir"><option value="ab" ${o.dir === 'ab' ? 'selected' : ''}>Questions as clues, answers to write</option><option value="ba" ${o.dir === 'ba' ? 'selected' : ''}>Answers as clues, questions to write</option></select></div>
+      ${o.kind === 'gap' ? `<label class="tog-row"><input type="checkbox" data-ws="bank" ${o.bank ? 'checked' : ''}> Word bank at the top</label>` : ''}
+      ${o.kind === 'search' ? `<label class="tog-row"><input type="checkbox" data-ws="backwards" ${o.backwards ? 'checked' : ''}> Words can run backwards (harder)</label>` : ''}
+      <label class="tog-row"><input type="checkbox" data-ws="key" ${o.key ? 'checked' : ''}> Answers on a separate page</label>
+      ${notes.length ? `<div class="ws-notes">${notes.map(n => `<p>${esc(n)}</p>`).join('')}</div>` : ''}
+    </aside>
+    <div class="ws-preview">${res.empty ? '<p class="hint" style="padding:24px">Choose another kind of sheet.</p>' : '<iframe id="ws-frame" title="Worksheet preview"></iframe>'}</div>
+  </div>`;
+}
+/* Maths is typeset here, then copied into the sheet with the shapes it uses */
+async function wsDoc() {
+  const s = getSet(view.setId), res = ui.wsRes, { look, brand } = wsLook(s);
+  let body = res.body, key = ui.ws.key ? res.key : '', defs = '';
+  const MJ = window.MathJax;
+  if (/\$[^$]+\$/.test(body + key) && MJ && MJ.startup && MJ.startup.promise) {
+    const tmp = document.createElement('div'); tmp.style.cssText = 'position:absolute;left:-9999px;top:0;width:700px';
+    tmp.innerHTML = `<div>${body}</div><div>${key}</div>`; document.body.appendChild(tmp);
+    try { await MJ.startup.promise; await MJ.typesetPromise([tmp]); tmp.querySelectorAll('mjx-assistive-mml').forEach(x => x.remove()); body = tmp.children[0].innerHTML; key = tmp.children[1].innerHTML; const g = document.getElementById('MJX-SVG-global-cache'); if (g) defs = `<svg style="display:none">${g.innerHTML}</svg>`; } catch (e) {}
+    tmp.remove();
+  }
+  const base = location.href.replace(/[^/]*([?#].*)?$/, '');
+  return WS.page({ kind: ui.ws.kind, title: s.title || 'Untitled set', brand, look, base, body, key, defs });
+}
+let wsTurn = 0;
+async function wsPreview() {
+  const turn = ++wsTurn, f = document.getElementById('ws-frame');
+  if (!f || !ui.wsRes || ui.wsRes.empty) return;
+  const html = await wsDoc();
+  if (turn !== wsTurn || !document.body.contains(f)) return;
+  f.onload = () => { try { f.style.height = (f.contentDocument.documentElement.scrollHeight + 4) + 'px'; } catch (e) {} };
+  f.srcdoc = html;
+}
+function wsPrint() {
+  const f = document.getElementById('ws-frame');
+  if (!f || !f.contentWindow) return;
+  const s = getSet(view.setId), was = document.title;
+  document.title = `${s.title || 'Untitled set'} – ${WS.TEMPLATES[ui.ws.kind].name}`;
+  try { f.contentWindow.focus(); f.contentWindow.print(); } finally { setTimeout(() => { document.title = was; }, 1000); }
+}
+
 /* ---------- view a set (read-only, with answers) ---------- */
 function renderView() {
   const s = getSet(view.setId);
@@ -546,6 +626,7 @@ function renderView() {
       ${ok ? `<a class="btn primary" href="host.html?set=${encodeURIComponent(s.id)}">Host live game</a>` : ''}
       <button class="btn" data-act="play" data-id="${s.id}" ${ok ? '' : 'disabled'}>▶ Play solo</button>
       ${own ? `<button class="btn" data-act="edit" data-id="${s.id}">Edit</button>` : `<button class="btn" data-act="dup" data-id="${s.id}">Copy to my sets</button>`}
+      ${ok ? `<button class="btn" data-act="worksheet" data-id="${s.id}">🖨 Worksheets</button>` : ''}
       <button class="btn ghost" data-act="export" data-id="${s.id}">Export to Excel</button>
     </div></div>
   <div class="toolbar"><label class="tog-row"><input type="checkbox" id="show-answers" ${show ? 'checked' : ''}> Show answers</label></div>
@@ -596,6 +677,7 @@ function renderEditor() {
     ${ok >= 2 ? (ui.confirmSwap
       ? `<span class="confirm">Turn every question round, so each right answer becomes the question? <button class="btn small primary" data-act="swap">Swap</button><button class="btn small ghost" data-act="no-swap">Cancel</button></span>`
       : `<button class="btn" data-act="ask-swap" title="Each right answer becomes the question, and each question becomes its answer">⇄ Swap questions and answers</button>`) : ''}
+    ${ok ? `<button class="btn" data-act="worksheet" data-id="${s.id}" title="Print a match up, crossword, gap fill, word search, anagrams or multiple choice sheet">🖨 Worksheets</button>` : ''}
     <span class="sp"></span>
     <span class="hint">Maths: wrap it in dollar signs, e.g. <code>$\\frac{3}{4}$</code>, <code>$x^2$</code>, <code>$\\sqrt{50}$</code></span>
   </div>
@@ -1060,6 +1142,11 @@ app.addEventListener('click', async e => {
     case 'edit': view = { name: 'edit', setId: id, folder: view.folder }; ui = {}; render(); break;
     case 'view': view = { name: 'view', setId: id, folder: view.folder }; ui = { search: ui.search }; render(); window.scrollTo(0, 0); break;
     case 'export': exportSet(getSet(id)); break;
+    case 'worksheet': await flushAll(); view = { name: 'worksheet', setId: id, from: view.name, folder: view.folder }; ui = { ws: { kind: 'match', count: '', dir: 'ab', key: true, bank: true, backwards: false, seed: wsSeed() } }; render(); break;
+    case 'ws-back': view = { name: view.from || 'library', setId: view.setId, folder: view.folder || 'mine' }; ui = {}; render(); break;
+    case 'ws-kind': ui.ws.kind = t.dataset.kind; ui.ws.count = ''; render(); break;
+    case 'ws-seed': ui.ws.seed = wsSeed(); render(); break;
+    case 'ws-print': wsPrint(); break;
     case 'tag': {
       const vs = view.name === 'view' ? getSet(view.setId) : null;
       const folder = vs ? (mine(vs) ? 'mine' : 'school') : (view.folder === 'school' ? 'school' : 'mine');
@@ -1225,6 +1312,7 @@ app.addEventListener('input', e => {
 
 app.addEventListener('change', e => {
   const t = e.target;
+  if (t.dataset.ws && ui.ws) { ui.ws[t.dataset.ws] = t.type === 'checkbox' ? t.checked : t.value; render(); return; }
   if (t.id === 'import-file' && t.files[0]) {
     const file = t.files[0];
     window.APP.loadXLSX().then(() => readSheet(file), () => toast('Couldn’t load the spreadsheet tool. Check your connection and try again.', true));
