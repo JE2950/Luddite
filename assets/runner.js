@@ -4,7 +4,6 @@
    French: a mime in a beret, a chef with a frying pan, or a peasant in a garlic necklace.
    Geography: explorers, a mountaineer, a polar explorer, a jungle explorer or a geologist; now and then a Land Rover or a camel.
    History: a Norman knight, a Viking, a Tudor lady, a Cavalier, a suffragette or a First World War Tommy; now and then a knight on horseback or a penny-farthing.
-   (Until a character's pictures are added to assets/runners, the athlete runs in its place.)
    Sets with no subject get an athlete in Ludgrove navy.
    RUNNER.pick(subject) chooses a character; RUNNER.strip(subject, kind) shows one on its own;
    RUNNER.race(container) draws several lanes for the host screen. Pictures come from assets/runners. */
