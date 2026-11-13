@@ -75,7 +75,7 @@ Use your laptop on the projector. **Your browser tab runs the game**, so keep it
    - **Game length:** 3–30 minutes, or until you end it
    - **Rank pupils by:** points/catch, correct answers, or accuracy. Accuracy ranks pupils with 10 or more answers above everyone else, so one lucky answer cannot win.
    - **Shuffle answer order:** on by default, so neighbours' screens don't match
-3. Click **Open the lobby**. The board shows your site's address and a 6-digit code, and lobby music starts.
+3. Click **Open the lobby**. The board shows your site's address and a 6-digit code, and lobby music starts. Below them is the game's **joining link**: click **Copy link** and push it to pupils' devices from your classroom app. The link opens the join page with the code filled in, so each pupil only types his name.
 4. Pupils go to your site, type the code and their first name, and their names appear on the board. Click a name to remove someone, e.g. a silly name. That laptop and that name are then blocked for the rest of the game.
 5. Click **Start game** when everyone's in. The music changes to the game track.
 6. During the game:

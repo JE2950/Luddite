@@ -615,11 +615,14 @@ function setupHTML() {
     </div></div></div>`;
 }
 
+/* Link that opens the join page with this game's code filled in, for the QR code and for pushing to pupils' devices */
+const joinLink = () => window.APP.joinUrl + '?code=' + G.code;
+
 /* QR code that opens the join page with this game's code filled in */
 function qrHTML() {
   if (!window.qrcode) return '';
   try {
-    const q = window.qrcode(0, 'M'); q.addData(window.APP.joinUrl + '?code=' + G.code); q.make();
+    const q = window.qrcode(0, 'M'); q.addData(joinLink()); q.make();
     return `<div><span class="qlabel">Or scan</span><div class="join-qr" role="img" aria-label="QR code for the join page">${q.createSvgTag({ cellSize: 4, margin: 0, scalable: true })}</div></div>`;
   } catch (e) { return ''; }
 }
@@ -632,6 +635,7 @@ function lobbyHTML() {
       <div><span class="qlabel">Game code</span><div class="join-code">${esc(G.code)}</div></div>
       ${qrHTML()}
     </section>
+    <div class="join-link"><span class="qlabel">Joining link</span><input id="join-link" readonly value="${esc(joinLink())}" aria-label="Joining link for this game"><button class="btn small" data-act="copy-join">Copy link</button><span class="hint" id="join-msg" aria-live="polite"></span></div>
     <div class="main-head" style="margin-top:24px"><div><h1><span id="count">${list.length}</span> ${list.length === 1 ? 'pupil' : 'pupils'} joined</h1><p>Click a name to remove that pupil.</p></div>
       <div class="head-acts"><button class="btn primary big-go" data-act="start" ${list.length ? '' : 'disabled'}>Start game</button></div></div>
     ${G.settings.teams && list.length ? `<div class="ed-row" style="margin-bottom:10px"><button class="btn small" data-act="shuffle-teams">Shuffle teams</button></div>
@@ -816,6 +820,12 @@ app.addEventListener('click', async e => {
       render();
       break;
     case 'start': startGame(); break;
+    case 'copy-join': {
+      const box = document.getElementById('join-link'), msg = document.getElementById('join-msg');
+      const fallback = () => { box.focus(); box.select(); if (msg) msg.textContent = 'Press Ctrl+C to copy.'; };
+      try { navigator.clipboard.writeText(joinLink()).then(() => { if (msg) msg.textContent = 'Copied.'; }, fallback); } catch (err) { fallback(); }
+      break;
+    }
     case 'shuffle-teams': shuffleTeams(); Object.values(G.pupils).forEach(p => send(chans.get(p.pid), 'state', stateFor(p))); persist(); render(); break;
     case 'ask-kick': ui.kick = t.dataset.id; render(); break;
     case 'no-kick': ui.kick = null; render(); break;
