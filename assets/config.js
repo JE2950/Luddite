@@ -88,7 +88,8 @@ window.APP = {
       modes: { classic: 'The March of Time', fishing: 'Mudlarking', event: 'Low Tide' },
       keys: ['A', 'B', 'C', 'D'],
       pixels: ['#5b2a4a', '#b8892b', '#efe6d2', '#2a1f17', '#2f5b8c', '#d9c9a3'],
-      // No History music yet: the default tracks play. Treasures reuse pictures drawn for the other subjects.
+      music: { lobby: 'assets/music/geography-lobby.mp3', game: 'assets/music/geography.mp3' },   // the same tracks as Geography
+      // Treasures reuse pictures drawn for the other subjects.
       treasure: { unit: 'pounds', symbol: '£', items: [
         [['Old penny', 'coin'], ['Chipped pot', 'pot'], ['Rusty sword', 'sword'], ['Old postcard', 'postcard']],
         [['Bronze coin', 'coin'], ['Leather-bound book', 'book'], ['Oil lamp', 'lamp']],
