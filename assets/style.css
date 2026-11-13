@@ -633,3 +633,10 @@ body.presenting .race:hover .present-exit,.present-exit:focus-visible{opacity:1}
 .answers.pics .ans > span:last-child{display:flex;justify-content:center;align-items:center;width:100%;min-width:0}
 .answers.pics .ans-img{width:min(100%,220px);height:auto;max-height:104px}
 @media (max-width:640px){.wrap.play .answers.pics .ans-img{width:min(100%,140px);max-height:72px}.wrap.play .answers.pics .ans{min-height:92px;padding:8px}}
+
+/* Fishing: the rod casting (six frames in one strip, played once in a second) and the drawn catches */
+.rod{width:min(100%,420px);aspect-ratio:360/181;background:url(catches/rod-strip.webp) 0 0/600% 100% no-repeat;animation:rodcast .95s steps(6,jump-none) forwards}
+@keyframes rodcast{from{background-position:0 0}to{background-position:100% 0}}
+@media (prefers-reduced-motion:reduce){.rod{animation:none;background-position:100% 0}}
+.catch-art{display:block;object-fit:contain;filter:drop-shadow(0 6px 10px rgba(0,0,0,.18))}
+.catch-row .catch-art,.big-catch .catch-art{display:inline-block}

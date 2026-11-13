@@ -126,8 +126,17 @@ L.catchPhrase = c => {
 L.catchNoun = subject => (L.catchUnit(subject) ? 'treasure' : 'catch');
 L.catchLabel = subject => { const u = L.catchUnit(subject); return u ? u[0].toUpperCase() + u.slice(1) : 'Total kg'; };   // a column heading
 L.missText = subject => (L.catchUnit(subject) ? 'Nothing found' : 'The fish got away');
-/* The picture for a catch: a treasure drawing, or the fish */
-L.catchSVG = (c, size = 120) => (c && c.icon ? L.itemSVG(c.icon, c.tier, size) : L.fishSVG(c.tier, c.shape, size));
+/* The picture for a catch. A drawn picture in assets/catches (named subject-item.webp, or fish-name.webp) is used
+   when there is one; otherwise the simple drawing. Add a file's name to CATCH_ART when you add the file. */
+L.CATCH_ART = new Set(["fish-mackerel", "fish-minnow", "fish-perch", "fish-roach", "french-bottle-of-perfume", "french-garlic-bulb", "french-old-beret", "french-snail-shell", "french-stale-baguette", "geography-broken-compass", "geography-old-penny", "geography-old-postcard", "geography-soggy-map", "latin-bronze-coin", "latin-chipped-pot", "latin-greek-vase", "latin-oil-lamp", "latin-old-sandal", "latin-rusty-sword", "latin-wax-tablet"]);
+L.slug = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+L.catchArt = (name, subject, size) => {
+  const key = (subject ? subject : 'fish') + '-' + L.slug(name);
+  return L.CATCH_ART.has(key) ? `<img class="catch-art" src="assets/catches/${key}.webp" width="${size}" height="${size}" alt="" draggable="false">` : '';
+};
+L.catchSVG = (c, size = 120) => (c && c.icon
+  ? L.catchArt(c.name, c.subject, size) || L.itemSVG(c.icon, c.tier, size)
+  : L.catchArt(c && c.name, null, size) || L.fishSVG(c.tier, c.shape, size));
 
 /* A simple drawn fish, coloured by rarity */
 L.fishSVG = (tier, shape, size = 120) => {

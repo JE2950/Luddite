@@ -574,7 +574,9 @@ function render() {
 
 function fishingRulesHTML() {
   const tr = THEME.treasure(G.subject);
-  const pics = LB.FISH_TIERS.map((t, i) => tr && tr.items[i] ? LB.itemSVG(tr.items[i][0][1], i, 64) : LB.fishSVG(i, t.fish[0][1], 64));
+  const pics = LB.FISH_TIERS.map((t, i) => tr && tr.items[i]
+    ? LB.catchArt(tr.items[i][0][0], G.subject, 64) || LB.itemSVG(tr.items[i][0][1], i, 64)
+    : LB.catchArt(t.fish[0][0], null, 64) || LB.fishSVG(i, t.fish[0][1], 64));
   const range = t => tr ? `${tr.symbol || ''}${(t.min * 10).toLocaleString('en-GB')}–${tr.symbol || ''}${(t.max * 10).toLocaleString('en-GB')}` : `${t.min}–${t.max} kg`;
   return `<div class="fish-tiers">${LB.FISH_TIERS.map((t, i) => `<div class="fish-tier">${pics[i]}<b style="color:${t.colour}">${t.name}</b><span>${range(t)}</span></div>`).join('')}</div>
     <p class="hint" style="margin:0;max-width:60ch">${tr ? `Every right answer brings up a treasure, worth ${esc(tr.unit)}.` : 'Every right answer catches a fish.'} A streak raises the pupil’s lure level (up to 4), which roughly doubles the chance of Rare or better. A wrong answer ${tr ? 'finds nothing' : 'catches nothing'}, resets the streak and pauses the pupil for 2 seconds. About every 3 minutes a 30-second ${esc(THEME.modes().event)} doubles every ${tr ? 'find' : 'catch'}.</p>`;

@@ -237,7 +237,7 @@ function render() {
       h = `<div class="wrap play">${hud()}<div class="stage pop"><span class="qlabel">Question ${S.answered + 1}</span>${LB.qHTML(S.q)}${answersHTML(false)}
         <span class="hint">${S.screen === 'checking' ? 'Checking…' : `Click an answer, or press 1–${S.q.answers.length}`}</span></div></div>`; break;
     case 'casting':
-      h = `<div class="wrap play">${hud()}<div class="stage center cast-stage"><div class="cast" aria-label="Casting"><span class="line"></span><span class="bob"></span><span class="ripple"></span></div><span class="qlabel">Casting…</span></div></div>`; break;
+      h = `<div class="wrap play">${hud()}<div class="stage center cast-stage"><div class="rod" role="img" aria-label="Casting"></div><span class="qlabel">Casting…</span></div></div>`; break;
     case 'feedback': {
       const r = S.result, locked = Date.now() < S.lockUntil;
       if (r.fish) {
