@@ -244,6 +244,37 @@
     return { ...res, used: res.used ?? list.length, missed: res.missed || 0, ok: ok.length, total: all.length, left: all.length - ok.length };
   }
 
+  /* Each subject's look on paper (also used for the assignment posters and slips) */
+  const LOOK = {
+    latin: { face: '"Cinzel", Georgia, serif', body: '"EB Garamond", Georgia, serif', ink: '#2a1a12', accent: '#8f1d1d', soft: '#b8892b',
+      css: `.c{border:2px solid #b8892b;box-shadow:inset 0 0 0 3px #fff,inset 0 0 0 4px #b8892b;border-radius:1mm}.c.big{border:2px solid #b8892b;padding:12mm}h1{letter-spacing:.04em}.stripe{height:4mm;background:repeating-linear-gradient(90deg,#b8892b 0 9mm,#fff 9mm 11mm,#8f1d1d 11mm 20mm,#fff 20mm 22mm)}` },
+    french: { face: '"Playfair Display", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#14213d', accent: '#0055a4', soft: '#e1352b',
+      css: `.c{border:none;border-radius:5mm;box-shadow:0 0 0 1.5px #c9cfdc;overflow:hidden;padding-top:7mm;position:relative}.c::before{content:"";position:absolute;left:0;right:0;top:0;height:2.5mm;background:linear-gradient(90deg,#0055a4 0 33.3%,#fff 33.3% 66.6%,#e1352b 66.6%)}.c.big{box-shadow:none}h1{font-weight:900}.stripe{height:4mm;background:linear-gradient(90deg,#0055a4 0 33.3%,#fff 33.3% 66.6%,#e1352b 66.6%)}` },
+    geography: { face: '"Bitter", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#14271f', accent: '#1f5f4a', soft: '#c98a2b',
+      css: `.c{border:1.5px solid #1f5f4a;box-shadow:inset 0 0 0 2.5px #fff,inset 0 0 0 3.5px #9fbcae;border-radius:2mm}.c.big{padding:12mm}h1{font-weight:800}.stripe{height:3mm;background:repeating-linear-gradient(90deg,#14271f 0 12mm,#fff 12mm 24mm);box-shadow:0 0 0 .4mm #14271f}` },
+    history: { face: '"Alegreya", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#2a1f17', accent: '#5b2a4a', soft: '#b8892b',
+      css: `.c{border:1.5px solid #b8892b;box-shadow:inset 0 0 0 2.5px #fff,inset 0 0 0 3.5px #c9a5b9;border-radius:1.5mm}.c.big{padding:12mm}h1{font-weight:800}.stripe{height:3mm;background:repeating-linear-gradient(90deg,#2a1f17 0 .5mm,#b8892b .5mm 12mm)}` },
+    none: { face: '"Libre Baskerville", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#0b1b3f', accent: '#002664', soft: '#9aa3bb',
+      css: `.c{border:1.5px dashed #9aa3bb;border-radius:4mm}.c.big{border:none}.stripe{height:3mm;background:#002664}` }
+  };
+
+  /* Maths is typeset in the page, then copied into the sheet with the shapes it uses */
+  async function typeset(...parts) {
+    const MJ = window.MathJax;
+    if (!parts.some(p => /\$[^$]+\$/.test(p)) || !MJ || !MJ.startup || !MJ.startup.promise) return [...parts, ''];
+    const tmp = document.createElement('div'); tmp.style.cssText = 'position:absolute;left:-9999px;top:0;width:700px';
+    tmp.innerHTML = parts.map(p => `<div>${p}</div>`).join(''); document.body.appendChild(tmp);
+    let out = [...parts, ''];
+    try {
+      await MJ.startup.promise; await MJ.typesetPromise([tmp]);
+      tmp.querySelectorAll('mjx-assistive-mml').forEach(x => x.remove());
+      const g = document.getElementById('MJX-SVG-global-cache');
+      out = [...[...tmp.children].map(c => c.innerHTML), g ? `<svg style="display:none">${g.innerHTML}</svg>` : ''];
+    } catch (e) {}
+    tmp.remove();
+    return out;
+  }
+
   /* ---------- the printable page ---------- */
   const CSS = (look, base) => `
     @page{size:A4;margin:12mm}*{box-sizing:border-box}
@@ -289,5 +320,32 @@
       ${o.key ? `<section class="key"><div class="logo">${esc(o.brand)}</div><h2>${esc(o.title)}: answers</h2>${o.key}</section>` : ''}</div></body></html>`;
   }
 
-  window.WS = { TEMPLATES, build, page, example, _gridWord: gridWord, _layout: layout };
+  /* ---------- weakness sheets: one page per pupil with the questions he got wrong ----------
+     pupils: [{ name, items: [{ prompt:{text,img}, answer:{text,img}, options:[{text,img}] | null }] }] */
+  function weakBody(pupils, setTitle) {
+    const item = it => {
+      const t = it.prompt.text;
+      const pic = it.prompt.img ? `<img class="pic" src="${esc(it.prompt.img)}" alt="">` : '';
+      if (it.options) return `<li class="mcq"><div class="cq">${pic}<span class="t">${esc(t)}</span></div><div class="opts">${it.options.map((o, k) => `<span class="opt"><b>${'abcd'[k]}</b> ${sideHTML(o, 'small')}</span>`).join('')}</div></li>`;
+      const q = GAP.test(t) ? esc(t).replace(GAP, '<span class="blank"></span>') : `${esc(t)}<span class="line"></span>`;
+      return `<li>${pic}<span class="t">${q}</span></li>`;
+    };
+    return pupils.map((p, i) => `<section class="pupil${i ? ' next' : ''}"><div class="stripe"></div><div class="logo">${esc(p.brand)}</div>
+      <h1>${esc(p.name)}</h1><div class="kind">${esc(setTitle)} · Questions to practise</div>
+      <div class="who"><span class="d">Date</span></div>
+      <p class="instr">${p.items.some(x => x.options) ? 'Write the correct answer to each question, or circle it where there are choices.' : 'Write the correct answer to each question.'}</p>
+      <ol class="gaps weak">${p.items.map(item).join('')}</ol></section>`).join('');
+  }
+  function weakKey(pupils) {
+    return pupils.map(p => `<div class="kp"><h3>${esc(p.name)}</h3><ol class="key-ol">${p.items.map(it => `<li>${it.options ? '<b>' + 'abcd'[it.options.indexOf(it.answer)] + '</b> ' : ''}${sideHTML(it.answer, 'small')}</li>`).join('')}</ol></div>`).join('');
+  }
+  function weakPage(o) {
+    return `<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><title>${esc(o.title)} – weakness sheets</title><link rel="stylesheet" href="${esc(o.base)}assets/fonts.css"><style>${CSS(o.look)}
+      .pupil.next{break-before:page}.weak li{margin-bottom:7mm}.weak .line{display:block;border-bottom:1px solid ${o.look.ink};height:8mm;margin-top:1mm}
+      .who span.d{flex:0 0 60mm}.kp{break-inside:avoid;margin-bottom:5mm}.kp h3{font-family:${o.look.face};color:${o.look.accent};margin:0 0 1.5mm;font-size:15px}
+      @media screen{.pupil.next{margin-top:14mm;border-top:2px dashed #ccc;padding-top:10mm}}</style></head><body>${o.defs || ''}
+      <div class="sheet">${o.body}${o.key ? `<section class="key"><div class="logo">${esc(o.brand)}</div><h2>${esc(o.title)}: answers</h2>${o.key}</section>` : ''}</div></body></html>`;
+  }
+
+  window.WS = { TEMPLATES, build, page, example, weakBody, weakKey, weakPage, LOOK, typeset, _gridWord: gridWord, _layout: layout };
 })();

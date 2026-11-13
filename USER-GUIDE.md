@@ -116,6 +116,10 @@ Pupils only ever write single words. A dictionary entry such as `rēx, rēgis` u
 
 Crosswords and word searches drop accents and macrons from the grid and leave out answers that are pictures, numbers or maths. Gap fills and anagrams leave out picture answers. The page tells you how many questions it left out and why. Sheets take the subject's look, like the posters.
 
+### Weakness sheets after a live game
+
+On the results screen, click **🖨 Weakness sheets**. Each boy gets a page in the subject's look, with the name he joined with at the top and the questions he got wrong, each with a line to write the answer (or the choices to circle, if the answers are pictures). Choose **Every question he got wrong** or **Only questions still wrong at his last try**. The answers for every boy go on the last page unless you untick that box. Click **Print or save as PDF**, then choose Save as PDF in the print box for one file with a page per boy, ready to print and hand out. Boys with nothing to practise get no page; the panel names them.
+
 ## Assignments and revision folders
 
 Pupils can also play on their own, outside lessons, and you see how they get on.

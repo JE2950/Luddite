@@ -506,18 +506,7 @@ function asgSubject(a) {
   const tally = {}; sets.filter(s => s.folder_id === a.folder_id && mine(s)).forEach(s => { const k = THEME.subjectFor(s); if (k) tally[k] = (tally[k] || 0) + 1; });
   return Object.keys(tally).sort((x, y) => tally[y] - tally[x])[0] || null;
 }
-const PRINT_LOOK = {
-  latin: { face: '"Cinzel", Georgia, serif', body: '"EB Garamond", Georgia, serif', ink: '#2a1a12', accent: '#8f1d1d', soft: '#b8892b',
-    css: `.c{border:2px solid #b8892b;box-shadow:inset 0 0 0 3px #fff,inset 0 0 0 4px #b8892b;border-radius:1mm}.c.big{border:2px solid #b8892b;padding:12mm}h1{letter-spacing:.04em}.stripe{height:4mm;background:repeating-linear-gradient(90deg,#b8892b 0 9mm,#fff 9mm 11mm,#8f1d1d 11mm 20mm,#fff 20mm 22mm)}` },
-  french: { face: '"Playfair Display", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#14213d', accent: '#0055a4', soft: '#e1352b',
-    css: `.c{border:none;border-radius:5mm;box-shadow:0 0 0 1.5px #c9cfdc;overflow:hidden;padding-top:7mm;position:relative}.c::before{content:"";position:absolute;left:0;right:0;top:0;height:2.5mm;background:linear-gradient(90deg,#0055a4 0 33.3%,#fff 33.3% 66.6%,#e1352b 66.6%)}.c.big{box-shadow:none}h1{font-weight:900}.stripe{height:4mm;background:linear-gradient(90deg,#0055a4 0 33.3%,#fff 33.3% 66.6%,#e1352b 66.6%)}` },
-  geography: { face: '"Bitter", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#14271f', accent: '#1f5f4a', soft: '#c98a2b',
-    css: `.c{border:1.5px solid #1f5f4a;box-shadow:inset 0 0 0 2.5px #fff,inset 0 0 0 3.5px #9fbcae;border-radius:2mm}.c.big{padding:12mm}h1{font-weight:800}.stripe{height:3mm;background:repeating-linear-gradient(90deg,#14271f 0 12mm,#fff 12mm 24mm);box-shadow:0 0 0 .4mm #14271f}` },
-  history: { face: '"Alegreya", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#2a1f17', accent: '#5b2a4a', soft: '#b8892b',
-    css: `.c{border:1.5px solid #b8892b;box-shadow:inset 0 0 0 2.5px #fff,inset 0 0 0 3.5px #c9a5b9;border-radius:1.5mm}.c.big{padding:12mm}h1{font-weight:800}.stripe{height:3mm;background:repeating-linear-gradient(90deg,#2a1f17 0 .5mm,#b8892b .5mm 12mm)}` },
-  none: { face: '"Libre Baskerville", Georgia, serif', body: '"Atkinson Hyperlegible", Arial, sans-serif', ink: '#0b1b3f', accent: '#002664', soft: '#9aa3bb',
-    css: `.c{border:1.5px dashed #9aa3bb;border-radius:4mm}.c.big{border:none}.stripe{height:3mm;background:#002664}` }
-};
+const PRINT_LOOK = WS.LOOK;   // the subject print looks live in worksheets.js, shared with the host's weakness sheets
 function printCard(a, slips) {
   const link = pupilLink(a), title = esc(a.title || asgTarget(a).title || '');
   const subj = asgSubject(a), L = PRINT_LOOK[subj] || PRINT_LOOK.none;
@@ -589,17 +578,9 @@ function renderWorksheet() {
     <div class="ws-preview">${res.empty ? '<p class="hint" style="padding:24px">Choose another kind of sheet.</p>' : '<iframe id="ws-frame" title="Worksheet preview"></iframe>'}</div>
   </div>`;
 }
-/* Maths is typeset here, then copied into the sheet with the shapes it uses */
 async function wsDoc() {
   const s = getSet(view.setId), res = ui.wsRes, { look, brand } = wsLook(s);
-  let body = res.body, key = ui.ws.key ? res.key : '', defs = '';
-  const MJ = window.MathJax;
-  if (/\$[^$]+\$/.test(body + key) && MJ && MJ.startup && MJ.startup.promise) {
-    const tmp = document.createElement('div'); tmp.style.cssText = 'position:absolute;left:-9999px;top:0;width:700px';
-    tmp.innerHTML = `<div>${body}</div><div>${key}</div>`; document.body.appendChild(tmp);
-    try { await MJ.startup.promise; await MJ.typesetPromise([tmp]); tmp.querySelectorAll('mjx-assistive-mml').forEach(x => x.remove()); body = tmp.children[0].innerHTML; key = tmp.children[1].innerHTML; const g = document.getElementById('MJX-SVG-global-cache'); if (g) defs = `<svg style="display:none">${g.innerHTML}</svg>`; } catch (e) {}
-    tmp.remove();
-  }
+  const [body, key, defs] = await WS.typeset(res.body, ui.ws.key ? res.key : '');
   const base = location.href.replace(/[^/]*([?#].*)?$/, '');
   return WS.page({ kind: ui.ws.kind, title: s.title || 'Untitled set', brand, look, base, body, key, defs });
 }

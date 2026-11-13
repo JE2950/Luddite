@@ -555,6 +555,7 @@ const HOST_TOURS = {
   ],
   ended: () => [
     { sel: '.podium', title: 'Results', text: 'The podium, then every pupil. Click a name for his answers.' },
+    { sel: '[data-act="weak-open"]', title: 'Weakness sheets', text: 'A printable page for each boy, with his name and the questions he got wrong, in the subject’s look. Print it, or choose Save as PDF for a file.' },
     { sel: '[data-act="download"]', title: 'Download', text: 'The spreadsheet has a sheet by pupil and question, ready to load into another program to target each boy’s weak spots. The CSV holds the same rows.' }
   ]
 };
@@ -741,7 +742,7 @@ function endedHTML() {
   return `<div class="wrap host wide">
     <div class="toolbar"><a class="btn ghost small" href="teacher.html">← Library</a><span class="sp"></span>${LB.mark}</div>
     <div class="main-head"><div><span class="qlabel">Game over · ${esc(G.title)}</span><h1 style="font-size:clamp(32px,5vw,52px)">Results</h1></div>
-      <div class="head-acts"><button class="btn primary" data-act="download">⇩ Download results</button><button class="btn" data-act="download-csv" title="One row per pupil per question, for importing into another program">⇩ Pupil weaknesses (CSV)</button><button class="btn" data-act="again">Play again</button></div></div>
+      <div class="head-acts"><button class="btn primary" data-act="download">⇩ Download results</button><button class="btn" data-act="weak-open" title="A printable page for each pupil with the questions he got wrong">🖨 Weakness sheets</button><button class="btn" data-act="download-csv" title="One row per pupil per question, for importing into another program">⇩ Pupil weaknesses (CSV)</button><button class="btn" data-act="again">Play again</button></div></div>
     ${G.settings.teams ? `<h2 class="side-h">Teams</h2>${teamsBarHTML()}<h2 class="side-h" style="margin-top:18px">Pupils</h2>` : ''}
     ${podium.length ? `<div class="podium">${podium.map((p, i) => `<div class="pod pod${i + 1}"><span class="pod-rank">${i + 1}</span><span class="pod-name">${esc(p.name)}</span><span class="pod-score">${G.settings.rankBy === 'points' ? (fishing() ? LB.fmtCatch(p.kg) : p.score.toLocaleString('en-GB') + ' pts') : G.settings.rankBy === 'correct' ? p.correct + ' correct' : Math.round(100 * acc(p)) + '%'}</span></div>`).join('')}</div>` : ''}
     ${fishing() && G.biggest ? `<div class="big-catch wide-catch">${LB.catchSVG(G.biggest, 110)}<div><span class="qlabel">${LB.catchUnit(G.subject) ? 'Best treasure of the game' : 'Biggest catch of the game'}</span><b>${esc(G.biggest.who)}</b><span style="color:${LB.FISH_TIERS[G.biggest.tier].colour}">${LB.FISH_TIERS[G.biggest.tier].name} ${esc(G.biggest.name)} · ${LB.fmtCatch(G.biggest.kg)}</span></div></div>` : ''}
@@ -761,6 +762,74 @@ function endedHTML() {
     <div id="drawer">${pupilDrawer()}</div>
   </div>`;
 }
+
+/* ---------- weakness sheets ----------
+   A printable page for each pupil, with his name and the questions he got wrong, in the subject's look.
+   Opens over the results; Print, then Save as PDF, makes one file with a page per boy. */
+const weak = { which: 'any', key: true };
+function weakPupils() {
+  const brand = [window.APP.school, window.APP.name, G.subject && THEME.label(G.subject)].filter(Boolean).join(' · ');
+  const side = a => LB.isImg(a) ? { text: '', img: LB.safeSrc(LB.imgOf(a)) } : { text: String(a || '').trim(), img: '' };
+  return Object.values(G.pupils).sort((a, b) => a.name.localeCompare(b.name)).map(p => {
+    const last = new Map(), wrong = new Set();
+    (p.log || []).forEach(e => { last.set(e.qid, e.right); if (!e.right) wrong.add(e.qid); });
+    const qs = G.questions.filter(q => weak.which === 'last' ? last.get(q.id) === false : wrong.has(q.id));
+    const items = qs.map(q => {
+      const answer = side(q.answers[q.correct]);
+      const pics = q.answers.some(a => LB.isImg(a));
+      const options = pics ? q.answers.filter(a => String(a).trim()).map(side) : null;
+      return { prompt: { text: String(q.q || '').trim(), img: LB.safeSrc(q.image || '') }, answer: options ? options[q.answers.filter(a => String(a).trim()).indexOf(q.answers[q.correct])] : answer, options };
+    });
+    return { name: p.name, brand, items };
+  });
+}
+async function weakDoc() {
+  const all = weakPupils(), with_ = all.filter(p => p.items.length);
+  const look = WS.LOOK[G.subject] || WS.LOOK.none;
+  const [body, key, defs] = await WS.typeset(WS.weakBody(with_, G.title), weak.key ? WS.weakKey(with_) : '');
+  const base = location.href.replace(/[^/]*([?#].*)?$/, '');
+  return { html: WS.weakPage({ title: G.title, brand: with_[0] ? with_[0].brand : '', look, base, body, key, defs }), with_, without: all.filter(p => !p.items.length) };
+}
+function weakOpen() {
+  let box = document.getElementById('weak-box');
+  if (!box) {
+    box = document.createElement('div'); box.id = 'weak-box'; box.className = 'weak-box'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'Weakness sheets');
+    document.body.appendChild(box);
+    box.addEventListener('click', e => { const t = e.target.closest('[data-weak]'); if (!t) { if (e.target === box) weakClose(); return; } const a = t.dataset.weak; if (a === 'close') weakClose(); if (a === 'print') weakPrint(); });
+    box.addEventListener('change', e => { const t = e.target; if (t.name === 'weak-which') weak.which = t.value; if (t.name === 'weak-key') weak.key = t.checked; weakFill(); });
+    document.addEventListener('keydown', weakEsc);
+  }
+  box.innerHTML = `<div class="weak-panel">
+    <div class="weak-head"><div><span class="qlabel">Weakness sheets</span><h2>${esc(G.title)}</h2></div><span class="sp"></span><button class="btn" data-weak="close">Close</button><button class="btn primary" data-weak="print">🖨 Print or save as PDF</button></div>
+    <div class="weak-opts">
+      <label class="tog-row"><input type="radio" name="weak-which" value="any" ${weak.which === 'any' ? 'checked' : ''}> Every question he got wrong</label>
+      <label class="tog-row"><input type="radio" name="weak-which" value="last" ${weak.which === 'last' ? 'checked' : ''}> Only questions still wrong at his last try</label>
+      <label class="tog-row"><input type="checkbox" name="weak-key" ${weak.key ? 'checked' : ''}> Answers on the last page</label>
+    </div>
+    <p class="hint" id="weak-note"></p>
+    <div class="ws-preview"><iframe id="weak-frame" title="Weakness sheets preview"></iframe></div></div>`;
+  weakFill();
+  box.querySelector('[data-weak="print"]').focus();
+}
+let weakTurn = 0;
+async function weakFill() {
+  const turn = ++weakTurn, f = document.getElementById('weak-frame'), note = document.getElementById('weak-note');
+  if (!f) return;
+  const d = await weakDoc();
+  if (turn !== weakTurn) return;
+  const btn = document.querySelector('[data-weak="print"]'); if (btn) btn.disabled = !d.with_.length;
+  note.textContent = !d.with_.length ? 'Nobody has a question to practise.'
+    : `${d.with_.length} ${d.with_.length === 1 ? 'sheet' : 'sheets'}, one page for each pupil, in alphabetical order.` + (d.without.length ? ` No sheet for ${d.without.map(p => p.name).join(', ')}: nothing to practise.` : '') + ' In the print box, choose Save as PDF to keep a file.';
+  f.onload = () => { try { f.style.height = (f.contentDocument.documentElement.scrollHeight + 4) + 'px'; } catch (e) {} };
+  f.srcdoc = d.html;
+}
+function weakPrint() {
+  const f = document.getElementById('weak-frame'); if (!f || !f.contentWindow) return;
+  const was = document.title; document.title = `${fileStem()} - weakness sheets`;
+  try { f.contentWindow.focus(); f.contentWindow.print(); } finally { setTimeout(() => { document.title = was; }, 1000); }
+}
+function weakEsc(e) { if (e.key === 'Escape' && document.getElementById('weak-box')) { e.stopPropagation(); weakClose(); } }
+function weakClose() { const b = document.getElementById('weak-box'); if (b) b.remove(); document.removeEventListener('keydown', weakEsc); const o = document.querySelector('[data-act="weak-open"]'); if (o) o.focus(); }
 
 /* Slowly scroll a long leaderboard so everyone appears on the projector */
 let scrollTimer = null;
@@ -841,6 +910,7 @@ app.addEventListener('click', async e => {
     case 'no-end': ui.confirmEnd = false; render(); break;
     case 'end': endGame(); break;
     case 'download': download(); break;
+    case 'weak-open': weakOpen(); break;
     case 'download-csv': downloadCSV(); break;
     case 'music-mute': music.toggle(); t.textContent = music.muted ? '♪ Off' : '♪ On'; t.setAttribute('aria-pressed', music.muted); { const v = document.getElementById('music-vol'); if (v) v.disabled = music.muted; } break;
     case 'again': try { localStorage.removeItem(STORE); } catch (err) {} location.reload(); break;
