@@ -696,3 +696,9 @@ body.presenting .race:hover .present-exit,.present-exit:focus-visible{opacity:1}
 .weak-panel{background:var(--paper);border-radius:var(--r-lg);box-shadow:0 20px 60px rgba(0,0,0,.3);width:min(980px,100%);padding:18px 20px 22px}
 .weak-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.weak-head .sp{flex:1}.weak-head h2{font-size:24px}
 .weak-opts{display:flex;flex-wrap:wrap;gap:6px 18px;margin:12px 0 4px}
+
+/* Teachers page: messages beside the Add button, and a clear Admin label */
+.admin-msg{border-radius:var(--r);padding:10px 12px;margin:2px 0 4px;font-size:14px;border:1.5px solid}
+.admin-msg.bad{background:var(--bad-soft);border-color:var(--bad);color:var(--ink)}
+.admin-msg.good{background:var(--good-soft);border-color:var(--good)}
+.chip.chip-admin{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:700}

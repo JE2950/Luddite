@@ -349,7 +349,8 @@ async function adminCall(body) {
   }
   return data || {};
 }
-const tempPassword = () => { const w = ['maple','harbour','comet','pebble','lantern','orbit','meadow','falcon','tulip','quartz','ember','glacier']; const a = new Uint32Array(3); crypto.getRandomValues(a); return w[a[0] % w.length] + '-' + w[a[1] % w.length] + '-' + (10 + a[2] % 90); };
+/* Starting passwords pass any Supabase strength rule: capital, small letters, digits and a symbol */
+const tempPassword = () => { const w = ['Maple','Harbour','Comet','Pebble','Lantern','Orbit','Meadow','Falcon','Tulip','Quartz','Ember','Glacier']; const a = new Uint32Array(3); crypto.getRandomValues(a); return w[a[0] % w.length] + '-' + w[a[1] % w.length].toLowerCase() + '-' + (10 + a[2] % 90); };
 async function loadTeachers() {
   ui.teachers = null; ui.adminErr = ''; render();
   const r = await adminCall({ action: 'list' });
@@ -361,20 +362,21 @@ function renderAdmin() {
   const fmtD = d => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Never';
   return `<div class="toolbar"><button class="btn ghost small" data-act="back">← All sets</button></div>
   <div class="main-head"><div><h1>Teachers</h1><p>Add colleagues, and set a new password if someone is locked out.</p></div></div>
-  ${ui.adminNote ? `<div class="ro note-ok" role="status">${ui.adminNote}</div>` : ''}
-  ${ui.adminErr ? `<div class="confirm" role="alert">${esc(ui.adminErr)}</div>` : ''}
   <form class="panel-form wide" id="add-teacher">
     <h2>Add a teacher</h2>
     <div class="ed-row">
-      <div class="field" style="flex:2;min-width:220px"><label for="new-email">School email</label><input class="in" id="new-email" type="email" required style="width:100%"></div>
+      <div class="field" style="flex:2;min-width:220px"><label for="new-email">School email</label><input class="in" id="new-email" type="email" required style="width:100%" value="${esc(ui.newEmail || '')}"></div>
       <div class="field" style="flex:1;min-width:180px"><label for="new-pw">Starting password</label><input class="in mono-in" id="new-pw" value="${esc(ui.newPw || (ui.newPw = tempPassword()))}" minlength="8" required style="width:100%"></div>
       <button class="btn primary" id="add-btn">Add teacher</button>
     </div>
+    ${ui.adminErr ? `<div class="admin-msg bad" role="alert"><b>That didn’t work.</b> ${esc(ui.adminErr)}</div>` : ''}
+    ${ui.adminNote ? `<div class="admin-msg good" role="status">${ui.adminNote}</div>` : ''}
     <p class="hint" style="margin:0">Give them the email and starting password. They can change it under <b>Password</b> once signed in.</p>
   </form>
   ${t == null && !ui.adminErr ? '<div class="loading">Loading teachers…</div>' : ''}
-  ${t ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Email</th><th>Added</th><th>Last signed in</th><th></th></tr></thead><tbody>
-    ${t.map(u => `<tr><td>${esc(u.email)}${u.you ? ' <span class="chip">You</span>' : ''}${u.admin ? ' <span class="chip">Admin</span>' : ''}</td><td>${fmtD(u.created_at)}</td><td>${fmtD(u.last_sign_in_at)}</td>
+  ${t == null && ui.adminErr ? '<p class="hint">The list of teachers couldn’t load. The reason is in the box above.</p>' : ''}
+  ${t ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Email</th><th>Role</th><th>Added</th><th>Last signed in</th><th></th></tr></thead><tbody>
+    ${t.map(u => `<tr><td>${esc(u.email)}${u.you ? ' <span class="chip">You</span>' : ''}</td><td>${u.admin ? '<span class="chip chip-admin">Admin</span>' : 'Teacher'}</td><td>${fmtD(u.created_at)}</td><td>${fmtD(u.last_sign_in_at)}</td>
       <td style="text-align:right">${ui.removing === u.id
         ? `<span class="confirm">Remove ${esc(u.email)}? Their sets and folders are deleted too. <button class="btn small danger" data-act="admin-remove" data-id="${u.id}">Remove</button><button class="btn small ghost" data-act="admin-cancel">Keep</button></span>`
         : `<button class="btn small" data-act="admin-pw" data-id="${u.id}" data-email="${esc(u.email)}">Set new password</button>${u.you ? '' : ` <button class="btn small ghost danger" data-act="admin-ask-remove" data-id="${u.id}">Remove</button>`}`}</td></tr>`).join('')}
@@ -1350,9 +1352,10 @@ document.addEventListener('keydown', e => {
 async function onAddTeacher(e) {
   const email = document.getElementById('new-email').value.trim(), pw = document.getElementById('new-pw').value;
   const btn = document.getElementById('add-btn'); btn.disabled = true; btn.textContent = 'Adding…';
-  const r = await adminCall({ action: 'create', email, password: pw });
-  if (r.error) { ui.adminErr = r.error; ui.adminNote = ''; render(); return; }
-  ui.adminErr = ''; ui.adminNote = `Added <b>${esc(email)}</b> with starting password <code class="mono">${esc(pw)}</code>. Send them both, plus the link ${esc(location.origin)}.`;
+  ui.newEmail = email; ui.newPw = pw;
+  const r = await Promise.race([adminCall({ action: 'create', email, password: pw }), new Promise(ok => setTimeout(() => ok({ error: 'Supabase didn’t answer within 20 seconds. Check your connection and try again.' }), 20000))]);
+  if (r.error) { console.warn('Add teacher:', r.error); ui.adminErr = r.error; ui.adminNote = ''; render(); return; }
+  ui.newEmail = ''; ui.adminErr = ''; ui.adminNote = `Added <b>${esc(email)}</b> with starting password <code class="mono">${esc(pw)}</code>. Send them both, plus the link ${esc(location.origin)}.`;
   ui.newPw = tempPassword(); loadTeachers();
 }
 
