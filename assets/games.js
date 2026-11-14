@@ -18,6 +18,13 @@
     mole:  { name: 'Whack-a-mole', about: 'Moles pop up holding answers. Whack the right one.' }
   };
   const ARCADE = ['maze', 'plane', 'mole'];
+  /* Drawn pictures for the games (assets/games). A page can supply them itself in window.GAME_ART. */
+  const IMG = {};
+  const art = name => {
+    if (!IMG[name]) { const im = new Image(); im.src = (window.GAME_ART && window.GAME_ART[name]) || 'assets/games/' + name + '.webp'; IMG[name] = im; }
+    return IMG[name].complete && IMG[name].naturalWidth ? IMG[name] : null;
+  };
+  const flyer = () => ({ latin: 'chariot', french: 'balloon' })[window.THEME && THEME.current] || 'biplane';
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const palette = () => ({ ink: css('--ink') || '#1d2433', paper: css('--paper') || '#f3efe6', surface: css('--surface') || '#fff', sunk: css('--sunk') || '#e8e2d6',
@@ -137,22 +144,18 @@
       while (q.length) { const [x, y] = q.shift(); for (const [dx, dy] of DIRS) { const nx = x + dx, ny = y + dy; if (!wall(nx, ny) && d[ny][nx] > d[y][x] + 1) { d[ny][nx] = d[y][x] + 1; q.push([nx, ny]); } } }
       return d;
     }
-    const at = o => Math.abs(o.x - Math.round(o.x)) < 0.06 && Math.abs(o.y - Math.round(o.y)) < 0.06;
+    // Each actor moves from the centre of one square to the next and only chooses a new direction on arriving.
     function moveActor(o, sp, choose) {
       let left = sp;
-      while (left > 0) {
-        if (at(o)) {
-          o.x = Math.round(o.x); o.y = Math.round(o.y);
-          choose(o);
-          if (!o.dir[0] && !o.dir[1]) return;
-        }
-        // distance to the next cell centre in the current direction
+      if (!o.dir[0] && !o.dir[1]) { o.x = Math.round(o.x); o.y = Math.round(o.y); choose(o); if (!o.dir[0] && !o.dir[1]) return; }
+      while (left > 1e-9) {
         const tx = o.dir[0] > 0 ? Math.floor(o.x + 1e-6) + 1 : o.dir[0] < 0 ? Math.ceil(o.x - 1e-6) - 1 : o.x;
         const ty = o.dir[1] > 0 ? Math.floor(o.y + 1e-6) + 1 : o.dir[1] < 0 ? Math.ceil(o.y - 1e-6) - 1 : o.y;
         const dist = Math.abs(tx - o.x) + Math.abs(ty - o.y);
-        const s = Math.min(left, dist || left);
-        o.x += o.dir[0] * s; o.y += o.dir[1] * s; left -= s;
-        if (dist === 0) break;
+        if (left < dist) { o.x += o.dir[0] * left; o.y += o.dir[1] * left; return; }
+        o.x = tx; o.y = ty; left -= dist;
+        choose(o);
+        if (!o.dir[0] && !o.dir[1]) return;
       }
     }
     const g = {
@@ -172,6 +175,7 @@
         if (!dt || api.S.waiting) return;
         if (caughtUntil > t) return;
         if (caughtUntil && caughtUntil <= t) { caughtUntil = 0; api.msg.className = 'arc-msg'; reset(); }
+        if (me.want[0] === -me.dir[0] && me.want[1] === -me.dir[1] && (me.want[0] || me.want[1])) me.dir = me.want;   // turning back works at once
         moveActor(me, dt * 4.6, o => {
           if (o.want[0] || o.want[1]) { if (!wall(o.x + o.want[0], o.y + o.want[1])) o.dir = o.want; }
           if (wall(o.x + o.dir[0], o.y + o.dir[1])) o.dir = [0, 0];
@@ -231,66 +235,73 @@
     return g;
   }
 
-  /* ---------- Airplane ---------- */
+  /* ---------- Airplane (a sun chariot for Latin, a balloon for French, a biplane otherwise) ---------- */
   function Plane(api) {
-    let lanes = 4, laneY = [], target = 1, y = 0, items = [], speed = 0, n = 4, clouds = [];
+    let lanes = 4, laneY = [], items = [], speed = 0, n = 4, clouds = [];
+    const me = { x: 0, y: 0, tx: 0, ty: 0 };
     const wave = () => {
       const order = L.shuffle([...Array(n).keys()]);
       items = order.map((j, k) => ({ j, lane: k, x: api.W + 60 + Math.random() * api.W * 0.35 }));
     };
+    const size = () => Math.max(80, Math.min(api.H * 0.34, 170));
+    const laneOf = y => { let b = 0; laneY.forEach((ly, k) => { if (Math.abs(ly - y) < Math.abs(laneY[b] - y)) b = k; }); return b; };
     const g = {
-      help: 'Up and down arrows (or W and S) to steer. On a tablet, tap above or below the plane. Fly into the right answer.',
-      resize(W, H) { laneY = [...Array(lanes).keys()].map(k => H * (k + 0.5) / lanes); if (!y) y = laneY[target]; clouds = Array.from({ length: 6 }, (_, i) => ({ x: Math.random() * W, y: Math.random() * H, s: 0.4 + Math.random() * 0.6 })); },
-      round(q) { n = q.answers.length; lanes = n; g.resize(api.W, api.H); target = Math.min(target, n - 1); speed = Math.min(api.W / 3.2, api.W / 5.5 + (speed ? 6 : 0)); wave(); },
+      help: 'Drag your finger or move the mouse to fly, or use the arrow keys. Fly into the right answer.',
+      resize(W, H) {
+        laneY = [...Array(lanes).keys()].map(k => H * (k + 0.5) / lanes);
+        if (!me.x) { me.x = me.tx = W * 0.14; me.y = me.ty = laneY[Math.min(1, lanes - 1)]; }
+        me.tx = Math.min(me.tx, W * 0.5); me.ty = Math.max(20, Math.min(H - 20, me.ty));
+        clouds = Array.from({ length: 6 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: 0.4 + Math.random() * 0.6 }));
+      },
+      round(q) { n = q.answers.length; lanes = n; g.resize(api.W, api.H); speed = Math.min(api.W / 3.2, api.W / 5.5 + (speed ? 6 : 0)); wave(); },
       key(e) {
-        if (e.type !== 'keydown') return ['ArrowUp', 'ArrowDown', 'w', 's', 'W', 'S'].includes(e.key);
-        if (['ArrowUp', 'w', 'W'].includes(e.key)) { target = Math.max(0, target - 1); return true; }
-        if (['ArrowDown', 's', 'S'].includes(e.key)) { target = Math.min(lanes - 1, target + 1); return true; }
+        const up = ['ArrowUp', 'w', 'W'].includes(e.key), down = ['ArrowDown', 's', 'S'].includes(e.key), lr = ['ArrowLeft', 'ArrowRight', 'a', 'd', 'A', 'D'].includes(e.key);
+        if (e.type !== 'keydown') return up || down || lr;
+        if (up || down) { me.ty = laneY[Math.max(0, Math.min(lanes - 1, laneOf(me.ty) + (up ? -1 : 1)))]; return true; }
+        if (lr) { me.tx = Math.max(api.W * 0.08, Math.min(api.W * 0.5, me.tx + (/Left|a|A/.test(e.key) ? -60 : 60))); return true; }
         return false;
       },
       step(dt) {
         if (!dt) return;
-        y += (laneY[target] - y) * Math.min(1, dt * 10);
+        const k = Math.min(1, dt * 9);
+        me.x += (me.tx - me.x) * k; me.y += (me.ty - me.y) * k;
         clouds.forEach(c => { c.x -= dt * speed * 0.3 * c.s; if (c.x < -80) { c.x = api.W + 40; c.y = Math.random() * api.H; } });
         if (api.S.waiting) return;
-        const px = api.W * 0.14;
+        const half = size() * 0.36;
         items.forEach(it => {
           it.x -= dt * speed;
           const t = api.S.toks[it.j]; if (!t) return;
           t.x = it.x; t.y = laneY[it.lane];
           const w = t.el.offsetWidth, h = t.el.offsetHeight;
-          if (Math.abs(it.x - px) < w / 2 + 18 && Math.abs(laneY[it.lane] - y) < h / 2 + 8) api.pick(it.j);
+          if (Math.abs(it.x - me.x) < w / 2 + half && Math.abs(laneY[it.lane] - me.y) < h / 2 + half * 0.6) api.pick(it.j);
         });
         if (items.length && items.every(it => it.x < -api.W * 0.25)) wave();
       },
       draw(t) {
-        const c = api.ctx, P = api.S.pal;
-        const sky = c.createLinearGradient(0, 0, 0, api.H); sky.addColorStop(0, '#bfe0f5'); sky.addColorStop(1, '#eef7fc');
+        const c = api.ctx, P = api.S.pal, sub = window.THEME && THEME.current;
+        const sky = c.createLinearGradient(0, 0, 0, api.H);
+        sky.addColorStop(0, sub === 'latin' ? '#d9c8f0' : '#bfe0f5'); sky.addColorStop(1, sub === 'latin' ? '#f6f0fb' : '#eef7fc');
         c.fillStyle = sky; c.fillRect(0, 0, api.W, api.H);
         c.fillStyle = 'rgba(255,255,255,.85)';
         clouds.forEach(cl => { c.beginPath(); c.ellipse(cl.x, cl.y, 46 * cl.s, 16 * cl.s, 0, 0, 7); c.ellipse(cl.x + 22 * cl.s, cl.y - 9 * cl.s, 26 * cl.s, 14 * cl.s, 0, 0, 7); c.fill(); });
         c.strokeStyle = 'rgba(0,0,0,.06)'; c.setLineDash([6, 10]);
         laneY.forEach(ly => { c.beginPath(); c.moveTo(0, ly); c.lineTo(api.W, ly); c.stroke(); }); c.setLineDash([]);
-        // the plane
-        const px = api.W * 0.14, py = y + Math.sin(t * 4) * 2, s = Math.max(0.8, api.H / 420);
-        c.save(); c.translate(px, py); c.scale(s, s); c.rotate((laneY[target] - y) * 0.004);
-        c.fillStyle = P.accent; c.beginPath(); c.ellipse(0, 0, 34, 9, 0, 0, 7); c.fill();
-        c.beginPath(); c.moveTo(-6, 0); c.lineTo(-16, -26); c.lineTo(2, -26); c.lineTo(12, 0); c.fill();
-        c.beginPath(); c.moveTo(-6, 0); c.lineTo(-16, 22); c.lineTo(0, 22); c.lineTo(10, 0); c.fill();
-        c.beginPath(); c.moveTo(-26, 0); c.lineTo(-36, -16); c.lineTo(-28, -16); c.lineTo(-18, -2); c.fill();
-        c.fillStyle = '#cfe8ff'; c.beginPath(); c.ellipse(18, -3, 8, 4, 0, 0, 7); c.fill();
-        c.fillStyle = P.a[0]; c.beginPath(); c.arc(34, 0, 3, 0, 7); c.fill();
+        const im = art(flyer()), sz = size(), bob = Math.sin(t * 4) * 3;
+        c.save(); c.translate(me.x, me.y + bob); c.rotate(Math.max(-0.25, Math.min(0.25, (me.ty - me.y) * 0.006)));
+        if (im) { const s2 = sz / Math.max(im.width, im.height); c.drawImage(im, -im.width * s2 / 2, -im.height * s2 / 2, im.width * s2, im.height * s2); }
+        else { c.fillStyle = P.accent; c.beginPath(); c.ellipse(0, 0, 34, 9, 0, 0, 7); c.fill(); }
         c.restore();
       }
     };
-    const ctrl = () => api.ctrl(`<div class="updown"><button data-v="-1" aria-label="Up">▲ Up</button><button data-v="1" aria-label="Down">▼ Down</button></div>`);
-    ctrl();
-    api.root.querySelectorAll('.updown button').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); target = Math.max(0, Math.min(lanes - 1, target + +b.dataset.v)); }));
-    api.field.addEventListener('pointerdown', e => {
-      if (e.target.closest('.arc-tok')) return;
-      const r = api.field.getBoundingClientRect(), yy = e.clientY - r.top;
-      let best = 0; laneY.forEach((ly, k) => { if (Math.abs(ly - yy) < Math.abs(laneY[best] - yy)) best = k; }); target = best;
-    });
+    api.ctrl('');
+    // Follow the finger (while touching) or the mouse (while over the sky)
+    const follow = e => {
+      if (e.target.closest && e.target.closest('.arc-tok') && e.type === 'pointerdown') return;
+      const r = api.field.getBoundingClientRect();
+      me.tx = Math.max(api.W * 0.06, Math.min(api.W * 0.5, e.clientX - r.left)); me.ty = Math.max(20, Math.min(api.H - 20, e.clientY - r.top));
+    };
+    api.field.addEventListener('pointerdown', e => { follow(e); try { api.field.setPointerCapture(e.pointerId); } catch (x) {} });
+    api.field.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' || e.buttons || e.pressure) follow(e); });
     return g;
   }
 
@@ -304,7 +315,7 @@
         holes = []; const rr = Math.min(cw * 0.3, H * 0.1); for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) holes.push({ x: cw * (c + 0.5), y: H * (0.36 + 0.29 * r), r: rr });
       },
       round(q) { n = q.answers.length; moles = []; nextPop = clock + 0.3; whack = null; api.S.toks.forEach(t => { t.hide = true; t.x = -999; t.y = -999; }); },
-      tap(j) { if (moles.some(m => m.j === j && m.up > 0.5)) { const m = moles.find(m => m.j === j); whack = { x: holes[m.h].x, y: holes[m.h].y, t: clock }; api.pick(j); } },
+      tap(j) { if (moles.some(m => m.j === j && m.up > 0.5)) { const m = moles.find(m => m.j === j); whack = { x: holes[m.h].x, y: holes[m.h].y, t: performance.now() / 1000 }; api.pick(j); } },
       key(e) {
         if (e.type !== 'keydown' || !/^[1-6]$/.test(e.key)) return false;
         g.tap(+e.key - 1); return true;
@@ -327,28 +338,27 @@
         moles = moles.filter(m => m.t < m.life || (api.S.waiting && m.j === api.S.picked));
         api.S.toks.forEach(t => { const m = moles.find(m => m.j === t.j); if (m && m.up > 0.4) { const h = holes[m.h]; t.hide = false; t.x = h.x; t.y = h.y - h.r * (0.9 + 1.4 * m.up); } else t.hide = true; });
       },
-      draw() {
-        const c = api.ctx, P = api.S.pal;
+      draw(now) {
+        const c = api.ctx, mole = art('mole'), hammer = art('hammer');
         c.fillStyle = '#9cc27a'; c.fillRect(0, 0, api.W, api.H);
         c.fillStyle = 'rgba(255,255,255,.08)'; for (let i = 0; i < 40; i++) c.fillRect((i * 97) % api.W, (i * 53) % api.H, 3, 8);
         holes.forEach((h, i) => {
-          c.fillStyle = '#5b3d22'; c.beginPath(); c.ellipse(h.x, h.y, h.r, h.r * 0.38, 0, 0, 7); c.fill();
+          c.fillStyle = '#5b3d22'; c.beginPath(); c.ellipse(h.x, h.y, h.r * 1.05, h.r * 0.36, 0, 0, 7); c.fill();
           const m = moles.find(m => m.h === i);
           if (m && m.up > 0) {
-            c.save(); c.beginPath(); c.rect(h.x - h.r * 1.2, h.y - h.r * 3, h.r * 2.4, h.r * 3); c.clip();
-            const top = h.y - h.r * 1.5 * m.up;
-            c.fillStyle = '#8a5a35'; c.beginPath(); c.ellipse(h.x, top + h.r * 0.75, h.r * 0.62, h.r * 0.85, 0, 0, 7); c.fill();
-            c.fillStyle = '#f2d2b0'; c.beginPath(); c.ellipse(h.x, top + h.r * 0.95, h.r * 0.32, h.r * 0.25, 0, 0, 7); c.fill();
-            c.fillStyle = '#1b1b1b'; c.beginPath(); c.arc(h.x - h.r * 0.22, top + h.r * 0.45, h.r * 0.07, 0, 7); c.arc(h.x + h.r * 0.22, top + h.r * 0.45, h.r * 0.07, 0, 7); c.fill();
-            c.fillStyle = '#e88a9a'; c.beginPath(); c.arc(h.x, top + h.r * 0.78, h.r * 0.09, 0, 7); c.fill();
+            const w = h.r * 2.5, ht = mole ? w * mole.height / mole.width : w * 0.76;
+            const top = h.y + h.r * 0.25 - ht * (0.15 + 0.85 * m.up);
+            c.save(); c.beginPath(); c.rect(h.x - w, h.y - ht * 2, w * 2, ht * 2 + h.r * 0.3); c.clip();
+            if (mole) c.drawImage(mole, h.x - w / 2, top, w, ht);
+            else { c.fillStyle = '#8a5a35'; c.beginPath(); c.ellipse(h.x, top + ht * 0.5, w * 0.3, ht * 0.45, 0, 0, 7); c.fill(); }
             c.restore();
           }
-          c.fillStyle = '#6f4a2a'; c.beginPath(); c.ellipse(h.x, h.y + h.r * 0.12, h.r * 1.02, h.r * 0.28, 0, 0, Math.PI); c.fill();
         });
-        if (whack && clock - whack.t < 0.35) {
-          const k = (clock - whack.t) / 0.35;
-          c.save(); c.translate(whack.x + 30, whack.y - 60); c.rotate(-0.9 + k * 1.1);
-          c.fillStyle = '#7a5230'; c.fillRect(-4, 0, 8, 60); c.fillStyle = P.ink; c.fillRect(-20, -14, 40, 20); c.restore();
+        if (whack && now - whack.t < 0.45) {
+          const k = Math.min(1, (now - whack.t) / 0.18), sz = holes[0] ? holes[0].r * 2.6 : 90;
+          c.save(); c.translate(whack.x + sz * 0.35, whack.y - sz * 0.55); c.rotate(-0.2 - 0.9 * (1 - k));
+          if (hammer) c.drawImage(hammer, -sz / 2, -sz / 2, sz, sz * hammer.height / hammer.width);
+          c.restore();
         }
       }
     };
