@@ -114,6 +114,7 @@ function newPupil(name, pub, chan) {
   return { pid, pub, chan, name, runner: RUNNER.deal(G.subject, G.runnerBag || (G.runnerBag = [])), score: 0, kg: 0, catches: 0, biggest: null, streak: 0, best: 0, answered: 0, correct: 0, deck: [], last: null, cur: null, perm: null, log: [], seq: 0, lockUntil: 0, lastActive: Date.now(), lastResult: null, joinedAt: Date.now() };
 }
 const wordStyle = () => window.GAMES && GAMES.isWord(G.settings.style);
+const playStyle = () => (wordStyle() && !playable().length ? 'quiz' : G.settings.style || 'quiz');   // a word game needs written answers
 const playable = () => wordStyle() ? G.questions.filter(q => LB.wordAnswer(q.answers[q.correct])) : G.questions;
 function deal(p) {
   p.hang = null; p.jumble = null;
@@ -137,7 +138,7 @@ function qPayload(p) {
   const perm = p.perm && p.perm.length === q.answers.length ? p.perm : q.answers.map((_, i) => i);
   const base = { seq: p.seq, q: q.q, image: q.image };
   // Word games: no answer choices. Anagram gets the letters jumbled; Hangman the shape, with the letters found so far.
-  const st = G.settings.style, a = String(q.answers[q.correct]);
+  const st = playStyle(), a = String(q.answers[q.correct]);
   if (st === 'type') return base;
   if (st === 'anagram') return { ...base, letters: p.jumble || (p.jumble = shuffle([...a].filter(c => /\p{L}/u.test(c)))), lengths: a.trim().split(/\s+/).map(w => [...w].filter(c => /\p{L}/u.test(c)).length).filter(Boolean) };
   if (st === 'hangman') { const h = p.hang || { found: [], misses: [] }; return { ...base, shape: LB.answerShape(a).map((c, k) => c === '_' && h.found.includes(LB.foldLetter([...a.trim()][k])) ? [...a.trim()][k] : c), misses: h.misses }; }
@@ -148,7 +149,7 @@ function stateFor(p) {
     phase: G.phase, title: G.title, name: p.name, subject: G.subject, runner: p.runner,
     team: teamOf(p) ? { name: teamOf(p)[0], colour: teamOf(p)[1] } : null,
     endIn: G.phase === 'playing' && G.endAt ? G.endAt - (G.paused ? G.pausedAt : Date.now()) : null,
-    mode: G.settings.mode, style: G.settings.style || 'quiz', kg: p.kg, lure: LB.lureFor(p.streak + 1),
+    mode: G.settings.mode, style: playStyle(), kg: p.kg, lure: LB.lureFor(p.streak + 1),
     frenzyIn: frenzyOn() ? G.frenzyUntil - (G.paused ? G.pausedAt : Date.now()) : 0,
     paused: G.phase === 'playing' && G.paused,
     score: p.score, streak: p.streak, answered: p.answered, correct: p.correct,
