@@ -58,7 +58,7 @@ async function boot() {
   G = {
     code: null, setId, title: data.title || 'Untitled set', questions,
     subject: THEME.subjectFor(data), kx: null,
-    settings: { minutes: 10, rankBy: 'points', mode: 'classic', style: 'quiz', shuffle: true, teams: 0 },
+    settings: { minutes: 10, rankBy: 'points', mode: 'classic', style: 'quiz' /* live games always use answer buttons: the single-player games are for assignments only */, shuffle: true, teams: 0 },
     paused: false, pausedAt: null,
     biggest: null, frenzyUntil: null, nextFrenzyAt: null,
     phase: 'setup', endAt: null, startedAt: null, endedAt: null,
@@ -799,6 +799,7 @@ function fishingRulesHTML() {
     <p class="hint" style="margin:0;max-width:60ch">${tr ? `Every right answer brings up a treasure, worth ${esc(tr.unit)}.` : 'Every right answer catches a fish.'} A streak raises the pupil’s lure level (up to 4), which roughly doubles the chance of Rare or better. A wrong answer ${tr ? 'finds nothing' : 'catches nothing'}, resets the streak and pauses the pupil for 2 seconds. About every 3 minutes a 30-second ${esc(THEME.modes().event)} doubles every ${tr ? 'find' : 'catch'}.</p>`;
 }
 function readSetup() {
+  G.settings.style = 'quiz';
   const m = document.getElementById('minutes'), r = document.getElementById('rankby');
   if (m) G.settings.minutes = +m.value;
   if (r) G.settings.rankBy = r.value;
@@ -822,9 +823,6 @@ function setupHTML() {
         <button class="mode ${G.settings.mode === 'gameshow' ? 'on' : ''}" role="radio" aria-checked="${G.settings.mode === 'gameshow'}" data-act="mode" data-mode="gameshow"><b>Gameshow quiz</b><span>You set the pace. Everyone answers the same question against the clock, with lifelines and bonus rounds.</span></button>
         <button class="mode ${G.settings.mode === 'winlose' ? 'on' : ''}" role="radio" aria-checked="${G.settings.mode === 'winlose'}" data-act="mode" data-mode="winlose"><b>Win or lose</b><span>You set the pace. Pupils bet points on each answer: right wins the bet, wrong loses it.</span></button>
       </div>
-      ${classMode() ? '' : `<div class="styles-pick"><span class="qlabel">How pupils play</span>
-        <div class="styles" role="radiogroup" aria-label="How pupils play">${Object.entries(GAMES.STYLES).map(([k, v]) => `<button class="style-tile ${(G.settings.style || 'quiz') === k ? 'on' : ''}" role="radio" aria-checked="${(G.settings.style || 'quiz') === k}" data-act="style" data-style="${k}"><span class="st-ic st-${k}" aria-hidden="true"></span><b>${esc(v.name)}</b><span>${esc(v.about)}</span></button>`).join('')}</div></div>
-      ${wordStyle() && playable().length < G.questions.length ? `<p class="hint" style="margin:0">${playable().length ? `${G.questions.length - playable().length} of the ${G.questions.length} questions have picture or maths answers, so ${esc(GAMES.STYLES[G.settings.style].name)} leaves them out.` : `None of these questions has a written answer, so ${esc(GAMES.STYLES[G.settings.style].name)} uses answer buttons for every question.`}</p>` : ''}`}
       <div class="ed-row" style="justify-content:center">
         ${classMode() ? `<div class="field"><label for="cls-count">Questions</label><select id="cls-count">${[5, 10, 15, 20, 30].filter(n => n < G.questions.length).concat([G.questions.length]).map(n => `<option value="${n}" ${(G.settings.clsCount || Math.min(20, G.questions.length)) === n ? 'selected' : ''}>${n === G.questions.length ? `All ${n}` : n}</option>`).join('')}</select></div>`
         : `<div class="field"><label for="minutes">Game length</label><select id="minutes">${[3, 5, 10, 15, 20, 30, 0].map(m => `<option value="${m}" ${G.settings.minutes === m ? 'selected' : ''}>${m ? m + ' minutes' : 'Until I end it'}</option>`).join('')}</select></div>`}
@@ -1080,7 +1078,6 @@ app.addEventListener('click', async e => {
     case 'mode': readSetup(); G.settings.mode = t.dataset.mode; render(); break;
     case 'cls-next': clsNext(); break;
     case 'cls-reveal': clsReveal(); break;
-    case 'style': readSetup(); G.settings.style = t.dataset.style; render(); break;
     case 'open': {
       readSetup();
       t.disabled = true; t.textContent = 'Opening…';

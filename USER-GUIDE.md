@@ -91,9 +91,11 @@ Use your laptop on the projector. **Your browser tab runs the game**, so keep it
 
 If you close the tab by accident, open **Host live game** on the same set within 3 hours and click **Resume it**. The pupils carry on where they were.
 
-## Ways to play
+## Ways to play in homework
 
-Before you open the lobby, **How pupils play** sets what pupils see on their devices. Scoring, streaks, the race, the leaderboard, results and weakness sheets work the same in every way of playing, and the board still marks every answer, so the right answers never reach pupils' devices.
+These games are for assignments only. Pupils can't reach them any other way: live games always use answer buttons. Once you set an assignment, each boy picks a game on the set's start screen and can switch between them as often as he likes while the code is open. Close the code and the games close with it.
+
+Every game works through the whole set: each question comes up once, in a shuffled order, before any repeats, and questions a boy has got wrong before come round twice as often. Ten minutes of play covers far more than a dozen questions.
 
 - **Quiz:** answer buttons.
 - **Maze chase:** the question sits above a maze with an answer by each corner. Pupils steer with the arrow keys or WASD (or swipe on a tablet) to the right corner while two ghosts chase them. Caught means back to the middle.
@@ -105,9 +107,7 @@ Before you open the lobby, **How pupils play** sets what pupils see on their dev
 - **Find the match:** six answers on the screen; pupils tap the one for each question in turn. A wrong tap counts as a wrong answer.
 - **Matching pairs:** a memory game with the questions and answers face down. A wrong pair just turns back over; only matched pairs count.
 
-The word games (Type the answer, Anagram, Hangman) leave out questions with picture or maths answers; the setup screen says how many.
-
-In homework, each boy chooses how to play on the set's start screen, and his device remembers his choice.
+The word games (Type the answer, Anagram, Hangman) leave out questions with picture or maths answers.
 
 ## Gameshow quiz and Win or lose
 
