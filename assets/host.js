@@ -99,7 +99,8 @@ async function pupilChannel(pid) {
     answer: m => onAnswer(pid, m),
     type: m => onTyped(pid, m),
     letter: m => onLetter(pid, m),
-    match: m => onMatch(pid, m)
+    match: m => onMatch(pid, m),
+    life: m => onLife(pid, m)
   });
   if (ch) chans.set(pid, ch);
   return ch;
@@ -171,7 +172,8 @@ function stateFor(p) {
     frenzyIn: frenzyOn() ? G.frenzyUntil - (G.paused ? G.pausedAt : Date.now()) : 0,
     paused: G.phase === 'playing' && G.paused,
     score: p.score, streak: p.streak, answered: p.answered, correct: p.correct,
-    q: G.phase === 'playing' ? qPayload(p) : null,
+    q: G.phase === 'playing' && !classMode() ? qPayload(p) : null,
+    cls: G.phase === 'playing' && classMode() ? clsState(p) : null,
     lockMs: Math.max(0, p.lockUntil - Date.now()),
     final: G.phase === 'ended' ? finalFor(p) : null
   };
@@ -218,6 +220,7 @@ async function onJoin(m) {
 function onAnswer(pid, m) {
   const p = G.pupils[pid], ch = chans.get(pid);
   if (!p || !ch) return;
+  if (classMode()) return clsAnswer(p, m);
   p.lastActive = Date.now();
   if (G.phase !== 'playing' || G.paused) return send(ch, 'state', stateFor(p));
   if (p.lastResult && m.seq === p.lastResult.seq) return send(ch, 'result', p.lastResult); // resend a lost result
@@ -338,6 +341,7 @@ async function startGame() {
   G.phase = 'playing'; G.startedAt = Date.now();
   G.endAt = G.settings.minutes ? Date.now() + G.settings.minutes * 60000 : null;
   G.nextFrenzyAt = fishing() ? Date.now() + 120000 + Math.random() * 60000 : null;
+  if (classMode()) { G.endAt = null; G.cls = { order: shuffle(G.questions.map(q => q.id)).slice(0, G.settings.clsCount || 20), i: -1 }; return clsNext(); }
   Object.values(G.pupils).forEach(p => { if (!p.cur) deal(p); send(chans.get(p.pid), 'state', stateFor(p)); });
   startTick(); persist(true); render();
 }
@@ -367,9 +371,116 @@ function startTick() {
       if (left <= 0) return endGame();
     }
     if (fishing()) frenzyTick();
+    if (classMode()) clsTick();
   }, 250);
 }
 function stopTick() { clearInterval(tickTimer); tickTimer = null; }
+
+/* ---------- Class-paced games: Gameshow quiz and Win or lose ----------
+   Everyone gets the same question at once. The board shows it with a timer; when everyone has answered or time runs out,
+   it shows the right answer and how many picked each, and the teacher moves on. */
+const CLS_MS = { gameshow: 20000, winlose: 30000 };
+const BETS = [100, 250, 500];
+const classMode = () => ['gameshow', 'winlose'].includes(G.settings.mode);
+const clsQ = () => G.cls && qById(G.cls.order[G.cls.i]);
+function clsNext() {
+  const c = G.cls; c.i++;
+  if (c.i >= c.order.length) return endGame();
+  const q = clsQ();
+  Object.assign(c, { phase: 'question', perm: shuffle(q.answers.map((_, i) => i)), startAt: Date.now(), endAt: Date.now() + CLS_MS[G.settings.mode],
+    bonus: G.settings.mode === 'gameshow' && (c.i + 1) % 5 === 0, answers: {}, counts: null });
+  Object.values(G.pupils).forEach(p => { p.clsHide = null; p.clsExtra = 0; p.clsDouble = false; p.clsLast = null; });
+  broadcastState(); persist(); render();
+}
+const clsLeft = p => (G.cls.endAt + (p ? p.clsExtra || 0 : 0)) - (G.paused ? G.pausedAt : Date.now());
+function clsTick() {
+  const c = G.cls; if (!c || c.phase !== 'question') return;
+  const el = document.getElementById('cls-time'), bar = document.getElementById('cls-bar');
+  const left = clsLeft(null), all = CLS_MS[G.settings.mode];
+  if (el) el.textContent = Math.max(0, Math.ceil(left / 1000));
+  if (bar) bar.style.width = Math.max(0, Math.min(100, 100 * left / all)) + '%';
+  const longest = Math.max(0, ...Object.values(G.pupils).map(p => clsLeft(p)));
+  if (longest <= 0) clsReveal();
+}
+function clsAnswer(p, m) {
+  const c = G.cls, ch = chans.get(p.pid);
+  if (G.phase !== 'playing' || G.paused || !c || c.phase !== 'question' || m.seq !== c.i + 1 || c.answers[p.pid]) return send(ch, 'state', stateFor(p));
+  if (clsLeft(p) <= 0) return send(ch, 'state', stateFor(p));
+  const q = clsQ(), shown = +m.choice;
+  if (!(shown >= 0 && shown < q.answers.length)) return;
+  const bet = G.settings.mode === 'winlose' ? (BETS.includes(+m.bet) ? +m.bet : BETS[0]) : 0;
+  c.answers[p.pid] = { choice: c.perm[shown], shown, at: Date.now(), bet };
+  p.lastActive = Date.now();
+  send(ch, 'state', stateFor(p));
+  persist(); liveRender();
+  if (Object.keys(c.answers).length >= Object.keys(G.pupils).length) clsReveal();
+}
+/* Gameshow lifelines, once each per game: 50:50 hides two wrong answers, +10 s adds time, Double doubles this question's points */
+function onLife(pid, m) {
+  const p = G.pupils[pid], c = G.cls;
+  if (!p || G.settings.mode !== 'gameshow' || !c || c.phase !== 'question' || c.answers[pid] || G.paused) return;
+  p.life = p.life || { fifty: true, time: true, double: true };
+  if (!p.life[m.kind]) return;
+  const q = clsQ();
+  if (m.kind === 'fifty') {
+    const wrong = c.perm.map((orig, shown) => ({ orig, shown })).filter(x => x.orig !== q.correct);
+    p.clsHide = shuffle(wrong).slice(0, Math.max(1, Math.min(2, wrong.length - 1))).map(x => x.shown);
+  }
+  if (m.kind === 'time') p.clsExtra = 10000;
+  if (m.kind === 'double') p.clsDouble = true;
+  p.life[m.kind] = false;
+  send(chans.get(pid), 'state', stateFor(p)); persist();
+}
+function clsReveal() {
+  const c = G.cls; if (!c || c.phase !== 'question') return;
+  const q = clsQ(); c.phase = 'reveal';
+  c.counts = q.answers.map(() => 0);
+  Object.values(G.pupils).forEach(p => {
+    const a = c.answers[p.pid];
+    if (!a) { p.lostStreak = p.streak; p.streak = 0; p.clsLast = { none: true }; return; }
+    c.counts[a.shown]++;
+    const right = a.choice === q.correct, st = G.qstats[q.id];
+    p.log.push({ qid: q.id, choice: a.choice, right, at: a.at }); p.answered++; st.seen++;
+    let gain = 0;
+    if (right) {
+      p.streak++; p.best = Math.max(p.best, p.streak); p.correct++; st.right++;
+      if (G.settings.mode === 'winlose') gain = a.bet;
+      else { const speed = Math.max(0, 1 - (a.at - c.startAt) / (CLS_MS.gameshow + (p.clsExtra || 0))); gain = Math.round((500 + 500 * speed) * (c.bonus ? 2 : 1) * (p.clsDouble ? 2 : 1) / 10) * 10; }
+      p.score += gain;
+    } else {
+      p.lostStreak = p.streak; p.streak = 0; st.wrong[a.choice] = (st.wrong[a.choice] || 0) + 1;
+      if (G.settings.mode === 'winlose') { gain = -Math.min(a.bet, p.score); p.score += gain; }
+    }
+    p.clsLast = { right, gain, shown: a.shown, bet: a.bet };
+  });
+  broadcastState(); persist(); render();
+}
+function clsState(p) {
+  const c = G.cls; if (!c || c.i < 0) return null;
+  const q = clsQ(), a = c.answers[p.pid];
+  return {
+    mode: G.settings.mode, n: c.i + 1, of: c.order.length, phase: c.phase, bonus: c.bonus, bets: BETS,
+    q: { q: q.q, image: q.image, answers: c.perm.map(i => q.answers[i]) }, hide: p.clsHide || [],
+    endIn: c.phase === 'question' ? clsLeft(p) : 0, answered: a ? { shown: a.shown, bet: a.bet } : null,
+    life: G.settings.mode === 'gameshow' ? (p.life || { fifty: true, time: true, double: true }) : null, double: !!p.clsDouble,
+    last: c.phase === 'reveal' ? { ...(p.clsLast || { none: true }), correctIndex: c.perm.indexOf(q.correct) } : null
+  };
+}
+function clsBoardHTML() {
+  const c = G.cls; if (!c || c.i < 0) return '';
+  const q = clsQ(), reveal = c.phase === 'reveal', total = Object.keys(G.pupils).length, n = Object.keys(c.answers).length;
+  const correct = c.perm.indexOf(q.correct), max = Math.max(1, ...(c.counts || [0]));
+  const top = ranked().slice(0, 5);
+  return `<section class="cls-board">
+    <div class="cls-top"><span class="qlabel">Question ${c.n || c.i + 1} of ${c.order.length}${c.bonus ? ' · <b class="cls-bonus">Bonus round: double points</b>' : ''}</span>
+      ${reveal ? '' : `<span class="cls-count"><b id="cls-n">${n}</b> of ${total} answered</span>`}
+      ${reveal ? `<button class="btn primary" data-act="cls-next">${c.i + 1 >= c.order.length ? 'See the results' : 'Next question ▸'}</button>` : `<button class="btn" data-act="cls-reveal">Show the answer now</button>`}</div>
+    ${reveal ? '' : `<div class="cls-timer"><div class="cls-bar" id="cls-bar"></div><b id="cls-time">${Math.ceil(Math.max(0, clsLeft(null)) / 1000)}</b></div>`}
+    <div class="cls-q">${LB.qHTML(q)}</div>
+    <div class="answers cls-ans ${LB.hasImgAnswers(q) ? 'pics' : ''}">${c.perm.map((orig, j) => `<div class="ans a${j} ${reveal ? (j === correct ? 'right' : 'dim') : ''}"><span class="key">${THEME.keyLabel(j)}</span><span>${LB.ansHTML(q.answers[orig])}</span>${reveal ? `<span class="cls-tally" style="--w:${Math.round(100 * c.counts[j] / max)}%"><i></i><b>${c.counts[j]}</b></span>` : ''}</div>`).join('')}</div>
+    ${reveal ? `<div class="cls-leaders"><h2 class="side-h">Top ${top.length}</h2><ol>${top.map(p => `<li><span>${esc(p.name)}</span><b>${p.score.toLocaleString('en-GB')}</b></li>`).join('')}</ol></div>` : ''}
+  </section>`;
+}
 
 /* Pause freezes the timer, any double-weight event and every pupil screen */
 function setPaused(on) {
@@ -378,6 +489,7 @@ function setPaused(on) {
   else {
     const d = Date.now() - G.pausedAt;
     if (G.endAt) G.endAt += d;
+    if (G.cls && G.cls.phase === 'question') { G.cls.endAt += d; G.cls.startAt += d; }
     if (G.frenzyUntil) G.frenzyUntil += d;
     if (G.nextFrenzyAt) G.nextFrenzyAt += d;
     Object.values(G.pupils).forEach(p => { if (p.lockUntil > G.pausedAt) p.lockUntil += d; });
@@ -600,6 +712,7 @@ function liveRender() {
     if (b) { const top = b.scrollTop; b.innerHTML = boardRows(); b.scrollTop = top; }
     if (s) { s.innerHTML = statsHTML(); typeset(s); }
     if (c) c.textContent = Object.keys(G.pupils).length;
+    const cn = document.getElementById('cls-n'); if (cn && G.cls) cn.textContent = Object.keys(G.cls.answers || {}).length;
     const tl = document.getElementById('teams-live'); if (tl) tl.innerHTML = teamsBarHTML();
     updateRace();
     const d = document.getElementById('drawer');
@@ -691,6 +804,7 @@ function readSetup() {
   if (r) G.settings.rankBy = r.value;
   const sh = document.getElementById('shuffle'); if (sh) G.settings.shuffle = sh.checked;
   const tm = document.getElementById('teams'); if (tm) G.settings.teams = +tm.value;
+  const cc = document.getElementById('cls-count'); if (cc) G.settings.clsCount = +cc.value;
 }
 function setupHTML() {
   const r = ui.resume;
@@ -703,19 +817,24 @@ function setupHTML() {
       <h1 style="font-size:clamp(30px,5vw,48px)">${esc(G.title)}</h1>
       <p class="hint" style="margin:0">${G.questions.length} ${G.questions.length === 1 ? 'question' : 'questions'}, shuffled for each pupil and repeated until time is up.</p>
       <div class="modes" role="radiogroup" aria-label="Game mode">
-        <button class="mode ${fishing() ? '' : 'on'}" role="radio" aria-checked="${!fishing()}" data-act="mode" data-mode="classic"><b>${esc(THEME.modes().classic)}</b><span>Points for every right answer, boosted by streaks.</span></button>
+        <button class="mode ${G.settings.mode === 'classic' ? 'on' : ''}" role="radio" aria-checked="${G.settings.mode === 'classic'}" data-act="mode" data-mode="classic"><b>${esc(THEME.modes().classic)}</b><span>Points for every right answer, boosted by streaks.</span></button>
         <button class="mode fishing ${fishing() ? 'on' : ''}" role="radio" aria-checked="${fishing()}" data-act="mode" data-mode="fishing"><b>${esc(THEME.modes().fishing)}</b><span>${THEME.treasure(G.subject) ? 'Right answers bring up treasures. Streaks bring rarer, more valuable ones.' : 'Right answers catch fish. Streaks bring rarer, heavier fish.'}</span></button>
+        <button class="mode ${G.settings.mode === 'gameshow' ? 'on' : ''}" role="radio" aria-checked="${G.settings.mode === 'gameshow'}" data-act="mode" data-mode="gameshow"><b>Gameshow quiz</b><span>You set the pace. Everyone answers the same question against the clock, with lifelines and bonus rounds.</span></button>
+        <button class="mode ${G.settings.mode === 'winlose' ? 'on' : ''}" role="radio" aria-checked="${G.settings.mode === 'winlose'}" data-act="mode" data-mode="winlose"><b>Win or lose</b><span>You set the pace. Pupils bet points on each answer: right wins the bet, wrong loses it.</span></button>
       </div>
-      <div class="styles-pick"><span class="qlabel">How pupils play</span>
+      ${classMode() ? '' : `<div class="styles-pick"><span class="qlabel">How pupils play</span>
         <div class="styles" role="radiogroup" aria-label="How pupils play">${Object.entries(GAMES.STYLES).map(([k, v]) => `<button class="style-tile ${(G.settings.style || 'quiz') === k ? 'on' : ''}" role="radio" aria-checked="${(G.settings.style || 'quiz') === k}" data-act="style" data-style="${k}"><span class="st-ic st-${k}" aria-hidden="true"></span><b>${esc(v.name)}</b><span>${esc(v.about)}</span></button>`).join('')}</div></div>
-      ${wordStyle() && playable().length < G.questions.length ? `<p class="hint" style="margin:0">${playable().length ? `${G.questions.length - playable().length} of the ${G.questions.length} questions have picture or maths answers, so ${esc(GAMES.STYLES[G.settings.style].name)} leaves them out.` : `None of these questions has a written answer, so ${esc(GAMES.STYLES[G.settings.style].name)} uses answer buttons for every question.`}</p>` : ''}
+      ${wordStyle() && playable().length < G.questions.length ? `<p class="hint" style="margin:0">${playable().length ? `${G.questions.length - playable().length} of the ${G.questions.length} questions have picture or maths answers, so ${esc(GAMES.STYLES[G.settings.style].name)} leaves them out.` : `None of these questions has a written answer, so ${esc(GAMES.STYLES[G.settings.style].name)} uses answer buttons for every question.`}</p>` : ''}`}
       <div class="ed-row" style="justify-content:center">
-        <div class="field"><label for="minutes">Game length</label><select id="minutes">${[3, 5, 10, 15, 20, 30, 0].map(m => `<option value="${m}" ${G.settings.minutes === m ? 'selected' : ''}>${m ? m + ' minutes' : 'Until I end it'}</option>`).join('')}</select></div>
+        ${classMode() ? `<div class="field"><label for="cls-count">Questions</label><select id="cls-count">${[5, 10, 15, 20, 30].filter(n => n < G.questions.length).concat([G.questions.length]).map(n => `<option value="${n}" ${(G.settings.clsCount || Math.min(20, G.questions.length)) === n ? 'selected' : ''}>${n === G.questions.length ? `All ${n}` : n}</option>`).join('')}</select></div>`
+        : `<div class="field"><label for="minutes">Game length</label><select id="minutes">${[3, 5, 10, 15, 20, 30, 0].map(m => `<option value="${m}" ${G.settings.minutes === m ? 'selected' : ''}>${m ? m + ' minutes' : 'Until I end it'}</option>`).join('')}</select></div>`}
         <div class="field"><label for="teams">Teams</label><select id="teams">${[0, 2, 3, 4].map(n => `<option value="${n}" ${G.settings.teams === n ? 'selected' : ''}>${n ? n + ' teams' : 'No teams'}</option>`).join('')}</select></div>
         <label class="tog-row" style="align-self:flex-end;padding-bottom:8px"><input type="checkbox" id="shuffle" ${G.settings.shuffle ? 'checked' : ''}> Shuffle answer order</label>
         <div class="field"><label for="rankby">Rank pupils by</label><select id="rankby">${Object.entries(rankLabels()).map(([k, v]) => `<option value="${k}" ${G.settings.rankBy === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
       </div>
-      ${fishing() ? fishingRulesHTML() : `<div class="tiers">${LB.TIERS.map(t => `<div class="tier"><b>${fmtMult(t.m)}</b><span>${t.label}</span></div>`).join('')}</div>
+      ${G.settings.mode === 'gameshow' ? `<p class="hint" style="margin:0;max-width:60ch">20 seconds a question. A right answer scores 500 to 1,000 points: the faster, the more. Every fifth question is a bonus round worth double. Each pupil has three lifelines to use once in the game: 50:50 hides two wrong answers, +10 s adds time, Double doubles the next answer’s points.</p>`
+      : G.settings.mode === 'winlose' ? `<p class="hint" style="margin:0;max-width:60ch">30 seconds a question. Before the answers appear, each pupil bets 100, 250 or 500 points. A right answer wins the bet; a wrong one loses it (never below zero).</p>`
+      : fishing() ? fishingRulesHTML() : `<div class="tiers">${LB.TIERS.map(t => `<div class="tier"><b>${fmtMult(t.m)}</b><span>${t.label}</span></div>`).join('')}</div>
       <p class="hint" style="margin:0;max-width:56ch">${LB.BASE} points per correct answer, times the streak multiplier. A wrong answer resets the streak and pauses the pupil for 2 seconds.</p>`}
       <p class="err" id="setup-err" style="text-align:center"></p>
       <button class="btn primary big-go" data-act="open">Open the lobby</button>
@@ -808,13 +927,14 @@ function playingHTML() {
       <div class="stat"><div class="k">Time left</div><div class="v" id="host-time">${G.endAt ? fmtTime(G.endAt - Date.now()) : '∞'}</div></div>
       ${ui.confirmEnd
         ? `<span class="confirm">End the game for everyone? <button class="btn small danger" data-act="end">End game</button><button class="btn small ghost" data-act="no-end">Keep playing</button></span>`
-        : `${!fishing() ? '<button class="btn" data-act="present" id="present-btn" title="Show only the race, full screen (P)">Present</button>' : ''}<button class="btn ${G.paused ? 'primary' : ''}" data-act="${G.paused ? 'resume-game' : 'pause'}">${G.paused ? '▶ Resume' : '❚❚ Pause'}</button><button class="btn" data-act="ask-end">End game</button>`}
+        : `${!fishing() && !classMode() ? '<button class="btn" data-act="present" id="present-btn" title="Show only the race, full screen (P)">Present</button>' : ''}<button class="btn ${G.paused ? 'primary' : ''}" data-act="${G.paused ? 'resume-game' : 'pause'}">${G.paused ? '▶ Resume' : '❚❚ Pause'}</button><button class="btn" data-act="ask-end">End game</button>`}
     </div>
     ${kickConfirm()}
+    ${classMode() ? clsBoardHTML() + `<div id="drawer">${pupilDrawer()}</div></div>` : ''}${classMode() ? '' : `
     <div class="host-grid">
       <section style="min-width:0"><div id="teams-live">${teamsBarHTML()}</div><h2 class="side-h">Leaderboard · ranked by ${rankLabels()[G.settings.rankBy].toLowerCase()}</h2>${boardHTML()}</section>
       <aside id="stats" style="min-width:0">${statsHTML()}</aside>
-    </div><div id="drawer">${pupilDrawer()}</div></div>`;
+    </div><div id="drawer">${pupilDrawer()}</div></div>`}`;
 }
 function pupilDrawer() {
   const p = ui.pupil && G.pupils[ui.pupil];
@@ -958,6 +1078,8 @@ app.addEventListener('click', async e => {
   const act = t.dataset.act;
   switch (act) {
     case 'mode': readSetup(); G.settings.mode = t.dataset.mode; render(); break;
+    case 'cls-next': clsNext(); break;
+    case 'cls-reveal': clsReveal(); break;
     case 'style': readSetup(); G.settings.style = t.dataset.style; render(); break;
     case 'open': {
       readSetup();

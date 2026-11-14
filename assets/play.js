@@ -104,6 +104,14 @@ function onState(st) {
   if (st.phase === 'ended') { stopRetry(); clearInterval(tickT); S.final = st.final; S.screen = 'ended'; store.del(SESSION); return render(); }
   // playing
   startTick();
+  if (st.cls) {
+    if (st.cls.answered || st.cls.phase !== 'question') stopRetry();
+    const fresh = !S.cls || S.cls.n !== st.cls.n;
+    if (fresh) { S.bet = null; S.sentChoice = null; }
+    S.cls = st.cls; S.clsEndAt = Date.now() + (st.cls.endIn || 0); S.screen = 'class';
+    if (st.cls.phase === 'reveal' && st.cls.last && !st.cls.last.none && S.revealedN !== st.cls.n) { S.revealedN = st.cls.n; if (st.cls.last.right) RUNNER.boost(); else RUNNER.trip(); }
+    return render();
+  }
   if (arcade()) {
     const sameA = S.q && st.q && S.q.seq === st.q.seq;
     if (S.screen === 'arcade' && sameA) { if (st.q.shape && arc && arc.letter && !S.arcWait) { S.q = st.q; arc.letter({ shape: st.q.shape, misses: st.q.misses || [] }); } return render(); }
@@ -187,6 +195,14 @@ function onMatchResult(r) {
 }
 function updateHud() { const h = document.getElementById('hud-slot'); if (h) h.innerHTML = hud(); }
 
+function clsPick(j) {
+  const c = S.cls;
+  if (!c || c.phase !== 'question' || c.answered || S.sentChoice != null || S.paused || j >= c.q.answers.length) return;
+  S.sentChoice = j; render();
+  const seq = c.n, bet = S.bet;
+  retry(() => send('answer', { seq, choice: j, bet }));
+}
+
 /* ---------- actions ---------- */
 function answer(j) {
   if (S.paused) return;
@@ -207,6 +223,8 @@ function startTick() {
   tickT = setInterval(() => {
     if (S.paused) return;
     const el = document.getElementById('hud-time');
+    const cl = document.getElementById('cls-left');
+    if (cl && S.cls) { const left = Math.ceil((S.clsEndAt - Date.now()) / 1000); if (left > 0) cl.textContent = left; else if (S.screen === 'class' && !S.cls.answered && S.cls.phase === 'question') render(); }
     const fz = document.getElementById('frenzy-left');
     if (fz) { const f = Math.ceil((S.frenzyUntil - Date.now()) / 1000); if (f > 0) fz.textContent = f; else { S.frenzyUntil = 0; render(); } }
     if (!S.endAt) return;
@@ -260,7 +278,29 @@ function joinHTML() {
     <p class="foot"><a href="${window.APP.teacherUrl}">Teacher sign-in</a></p>
   </form></div>`;
 }
-const GAME_SCREENS = ['ready', 'question', 'checking', 'casting', 'feedback', 'arcade'];
+const GAME_SCREENS = ['ready', 'question', 'checking', 'casting', 'feedback', 'arcade', 'class'];
+/* Gameshow quiz and Win or lose: the teacher sets the pace; this screen follows the board */
+function classHTML() {
+  const c = S.cls, gs = c.mode === 'gameshow';
+  const head = `<span class="qlabel">Question ${c.n} of ${c.of}${c.bonus ? ' · <b class="cls-bonus">Bonus: double points</b>' : ''}${c.double ? ' · <b class="cls-bonus">×2 on</b>' : ''}</span>`;
+  const score = `<div class="hud pupil-hud cls-hud"><div class="stat"><div class="k">Points</div><div class="v">${(S.score || 0).toLocaleString('en-GB')}</div></div><div class="stat"><div class="k">Streak</div><div class="v">${S.streak || 0}${LB.flames(S.streak || 0)}</div></div>${c.phase === 'question' && !c.answered ? `<div class="stat"><div class="k">Time</div><div class="v" id="cls-left">${Math.max(0, Math.ceil((S.clsEndAt - Date.now()) / 1000))}</div></div>` : ''}</div>`;
+  if (c.phase === 'reveal') {
+    const L = c.last || {}, right = c.q.answers[L.correctIndex];
+    const verdict = L.none ? `<div class="verdict bad pop"><div><h3>No answer</h3><p>The answer was ${LB.ansHTML(right)}.</p></div></div>`
+      : L.right ? `<div class="verdict good pop"><div><h3>Correct! +${L.gain}</h3><p>${c.mode === 'winlose' ? `You bet ${L.bet} and won it.` : `Streak ${S.streak}`}</p></div></div>`
+      : `<div class="verdict bad pop"><div><h3>Not quite${L.gain < 0 ? ` · ${L.gain}` : ''}</h3><p>The answer was ${LB.ansHTML(right)}.${c.mode === 'winlose' && L.bet ? ` You bet ${L.bet}.` : ''}</p></div></div>`;
+    return `<div class="wrap play">${score}<div class="stage pop">${head}${LB.qHTML(c.q)}${verdict}<p class="hint" style="margin:0;text-align:center">Look at the board. The next question comes when your teacher is ready.</p></div></div>`;
+  }
+  if (c.answered) return `<div class="wrap play">${score}<div class="stage center pop">${head}<h2 style="margin:0">Answer locked in</h2><p class="hint">${LB.ansHTML(c.q.answers[c.answered.shown])}${c.answered.bet ? ` · bet ${c.answered.bet}` : ''}</p><p class="hint">Look at the board.</p></div></div>`;
+  const left = S.clsEndAt - Date.now();
+  if (left <= 0) return `<div class="wrap play">${score}<div class="stage center pop">${head}<h2 style="margin:0">Time’s up</h2><p class="hint">Look at the board.</p></div></div>`;
+  if (c.mode === 'winlose' && !S.bet) return `<div class="wrap play">${score}<div class="stage pop">${head}${LB.qHTML(c.q)}<h2 style="margin:0;text-align:center">How many points do you bet?</h2>
+    <div class="bets">${c.bets.map((b, k) => `<button class="btn big-go bet" data-act="cls-bet" data-bet="${b}"><span class="key">${k + 1}</span>${b}</button>`).join('')}</div></div></div>`;
+  const life = gs && c.life ? `<div class="lifelines"><button class="btn small" data-act="cls-life" data-kind="fifty" ${c.life.fifty ? '' : 'disabled'}>50:50</button><button class="btn small" data-act="cls-life" data-kind="time" ${c.life.time ? '' : 'disabled'}>+10 s</button><button class="btn small" data-act="cls-life" data-kind="double" ${c.life.double ? '' : 'disabled'}>Double</button></div>` : '';
+  return `<div class="wrap play">${score}<div class="stage pop">${head}${LB.qHTML(c.q)}
+    <div class="answers ${LB.hasImgAnswers(c.q) ? 'pics' : ''}">${c.q.answers.map((a, j) => c.hide.includes(j) ? `<button class="ans a${j} gone" disabled aria-hidden="true"></button>` : `<button class="ans a${j} ${S.sentChoice === j ? 'picked' : ''}" data-act="cls-answer" data-i="${j}" ${S.sentChoice != null ? 'disabled' : ''}><span class="key">${THEME.keyLabel(j)}</span><span>${LB.ansHTML(a)}</span></button>`).join('')}</div>
+    ${life}${S.bet ? `<p class="hint" style="margin:0;text-align:center">Bet: ${S.bet}</p>` : ''}</div></div>`;
+}
 function render() {
   clearInterval(app._lock);
   let h = '';
@@ -283,6 +323,7 @@ function render() {
   }
   switch (S.screen) {
     case 'join': h = joinHTML(); break;
+    case 'class': h = classHTML(); break;
     case 'connecting': h = `<div class="gate"><div class="gate-card center">${LB.mark}<h1 style="font-size:24px">Joining…</h1><p>Finding game ${esc(S.code)}</p></div></div>`; break;
     case 'lost': h = `<div class="gate"><div class="gate-card">${LB.mark}<h1 style="font-size:24px">Can’t reach your game</h1><p>Check the internet connection, then try again. If the game has finished, join a new one.</p>
       <button class="btn primary" data-act="reconnect">Try again</button><button class="btn" data-act="leave">Join a different game</button></div></div>`; break;
@@ -375,6 +416,9 @@ app.addEventListener('click', e => {
   const t = e.target.closest('[data-act]'); if (!t || t.disabled) return;
   const act = t.dataset.act;
   if (act === 'answer') answer(+t.dataset.i);
+  if (act === 'cls-answer') clsPick(+t.dataset.i);
+  if (act === 'cls-bet') { S.bet = +t.dataset.bet; render(); }
+  if (act === 'cls-life') send('life', { kind: t.dataset.kind });
   if (act === 'show' || act === 'next') nextQuestion();
   if (act === 'leave') leave('');
   if (act === 'reconnect') { S.screen = 'connecting'; connect(); }
@@ -382,6 +426,12 @@ app.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   const tag = document.activeElement && document.activeElement.tagName;
   if (tag === 'INPUT') return;
+  if (S.screen === 'class' && S.cls && S.cls.phase === 'question' && /^[1-6]$/.test(e.key)) {
+    e.preventDefault();
+    if (S.cls.mode === 'winlose' && !S.bet) { const b = S.cls.bets[+e.key - 1]; if (b) { S.bet = b; render(); } }
+    else if (!S.cls.hide.includes(+e.key - 1)) clsPick(+e.key - 1);
+    return;
+  }
   if (S.screen === 'question' && /^[1-4]$/.test(e.key)) { e.preventDefault(); answer(+e.key - 1); }
   else if ((e.key === 'Enter' || e.key === ' ') && (S.screen === 'ready' || S.screen === 'feedback') && tag !== 'BUTTON') { e.preventDefault(); nextQuestion(); }
 });

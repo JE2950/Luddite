@@ -197,8 +197,10 @@ function render() {
   else if (view.name === 'assign-new') app.innerHTML = `<div class="wrap">${header()}${renderAssignNew()}</div>`;
   else if (view.name === 'play') app.innerHTML = `<div class="wrap play">${renderPlay()}</div>`;
   else if (view.name === 'worksheet') app.innerHTML = `<div class="wrap">${header()}${renderWorksheet()}</div>`;
+  else if (view.name === 'tools') app.innerHTML = `<div class="wrap">${header()}${renderTools()}</div>`;
   typeset(app);
   if (view.name === 'worksheet') wsPreview();
+  if (view.name === 'tools') toolsDraw();
   const f = app.querySelector('[data-autofocus]'); if (f) f.focus();
 }
 
@@ -554,6 +556,63 @@ function unlockBox() {
   setTimeout(() => document.getElementById('unlock-pw').focus(), 30);
 }
 
+/* ---------- Spin the wheel and Open the box: pick a question for the class, on the projector ---------- */
+const WHEEL_COLS = ['--a1', '--a2', '--a3', '--a4'];
+function renderTools() {
+  const s = getSet(view.setId); if (!s) { view = { name: 'library', folder: 'mine' }; return renderLibrary(); }
+  const qs = (s.questions || []).filter(LB.validQ), byId = id => qs.find(q => q.id === id);
+  const pick = ui.pick && byId(ui.pick);
+  const card = pick ? `<div class="tool-card pop" role="dialog" aria-label="Question"><div class="tool-q">${LB.qHTML(pick)}</div>
+    ${ui.shown ? `<div class="tool-a"><span class="qlabel">Answer</span><div>${LB.ansHTML(pick.answers[pick.correct])}</div></div>` : ''}
+    <div class="ed-row" style="justify-content:center">${ui.shown ? '' : '<button class="btn primary" data-act="tool-show">Show the answer</button>'}<button class="btn" data-act="tool-close">${ui.tool === 'wheel' ? 'Back to the wheel' : 'Back to the boxes'}</button></div></div>` : '';
+  const body = ui.tool === 'wheel'
+    ? `<div class="wheel-wrap"><div class="wheel-pin" aria-hidden="true"></div><canvas id="wheel" width="560" height="560" aria-label="Wheel of ${ui.left.length} questions"></canvas></div>
+       <div class="ed-row" style="justify-content:center"><button class="btn primary big-go" data-act="spin" ${ui.left.length && !ui.spinning ? '' : 'disabled'}>Spin</button></div>
+       <p class="hint" style="text-align:center;margin:0">${ui.left.length} ${ui.left.length === 1 ? 'question' : 'questions'} on the wheel. Each one comes off once it has been picked.${ui.left.length < qs.length ? ' <button class="btn small ghost" data-act="tool-refill">Put them all back</button>' : ''}</p>`
+    : `<div class="boxes">${qs.map((q, i) => `<button class="box ${ui.opened.includes(q.id) ? 'opened' : ''}" data-act="open-box" data-q="${esc(q.id)}" aria-label="Box ${i + 1}${ui.opened.includes(q.id) ? ', opened' : ''}">${i + 1}</button>`).join('')}</div>
+       ${ui.opened.length ? '<p class="hint" style="text-align:center;margin:0"><button class="btn small ghost" data-act="tool-refill">Close all the boxes</button></p>' : ''}`;
+  return `<div class="toolbar"><button class="btn ghost small" data-act="ws-back">← Back to the set</button><span class="sp"></span><button class="btn small" data-act="tool-full">⛶ Full screen</button></div>
+  <div class="tools-stage stage"><div class="main-head"><div><span class="qlabel">${ui.tool === 'wheel' ? 'Spin the wheel' : 'Open the box'}</span><h1>${esc(s.title || 'Untitled set')}</h1></div>
+    <div class="head-acts" role="tablist"><button class="btn ${ui.tool === 'wheel' ? 'primary' : ''}" role="tab" aria-selected="${ui.tool === 'wheel'}" data-act="tool" data-tool="wheel">🎡 Wheel</button><button class="btn ${ui.tool === 'boxes' ? 'primary' : ''}" role="tab" aria-selected="${ui.tool === 'boxes'}" data-act="tool" data-tool="boxes">📦 Boxes</button></div></div>
+    ${pick ? card : body}</div>`;
+}
+function toolsDraw() {
+  const cv = document.getElementById('wheel'); if (!cv) return;
+  const s = getSet(view.setId), qs = (s.questions || []).filter(LB.validQ), items = ui.left.map(id => qs.find(q => q.id === id)).filter(Boolean);
+  const c = cv.getContext('2d'), R = 270, cx = 280, cy = 280, n = Math.max(1, items.length), seg = Math.PI * 2 / n;
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  c.clearRect(0, 0, 560, 560);
+  c.save(); c.translate(cx, cy); c.rotate(ui.angle || 0);
+  items.forEach((q, i) => {
+    c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, R, i * seg, (i + 1) * seg); c.closePath();
+    c.fillStyle = css(WHEEL_COLS[i === n - 1 && n % 4 === 1 && n > 1 ? 1 : i % 4]) || '#888'; c.fill(); c.strokeStyle = 'rgba(255,255,255,.7)'; c.lineWidth = 2; c.stroke();
+    c.save(); c.rotate(i * seg + seg / 2); c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillStyle = '#fff';
+    const t = LB.qText(q) || 'Picture'; c.font = `700 ${n > 16 ? 13 : n > 10 ? 16 : 19}px system-ui,sans-serif`;
+    c.fillText(t.length > 22 ? t.slice(0, 21) + '…' : t, R - 14, 0); c.restore();
+  });
+  if (!items.length) { c.fillStyle = css('--sunk') || '#ddd'; c.beginPath(); c.arc(0, 0, R, 0, 7); c.fill(); }
+  c.restore();
+  c.fillStyle = css('--surface') || '#fff'; c.beginPath(); c.arc(cx, cy, 34, 0, 7); c.fill(); c.strokeStyle = css('--accent'); c.lineWidth = 4; c.stroke();
+}
+function spinWheel() {
+  if (ui.spinning || !ui.left.length) return;
+  const n = ui.left.length, seg = Math.PI * 2 / n, k = Math.floor(Math.random() * n);
+  // The pin is at the top (-90°): finish with segment k's middle under it, after five or six whole turns
+  const start = ui.angle || 0, target = -Math.PI / 2 - (k * seg + seg / 2), turns = (5 + Math.floor(Math.random() * 2)) * Math.PI * 2;
+  const finalA = start + turns + (((target - start) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  const dur = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 4200, t0 = performance.now();
+  ui.spinning = true; const b = document.querySelector('[data-act="spin"]'); if (b) b.disabled = true;
+  const step = now => {
+    const x = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - x, 4);
+    ui.angle = start + (finalA - start) * e; toolsDraw();
+    if (x < 1) return requestAnimationFrame(step);
+    ui.spinning = false; ui.angle = finalA % (Math.PI * 2);
+    const id = ui.left[k]; ui.left.splice(k, 1); ui.pick = id; ui.shown = false;
+    setTimeout(() => { if (view.name === 'tools') render(); }, 500);
+  };
+  requestAnimationFrame(step);
+}
+
 /* ---------- worksheets ---------- */
 /* English into Latin for a usual vocab set; the other way if that leaves more single words to write */
 const wsDir = s => { const n = d => WS.build(s, { kind: 'choice', dir: d, count: 'all', seed: 1 }).total || 0; return n('ab') > n('ba') ? 'ab' : 'ba'; };
@@ -641,6 +700,7 @@ function renderView() {
       <button class="btn" data-act="play" data-id="${s.id}" ${ok ? '' : 'disabled'}>▶ Play solo</button>
       ${own ? `<button class="btn" data-act="edit" data-id="${s.id}">Edit</button>` : `<button class="btn" data-act="dup" data-id="${s.id}">Copy to my sets</button>`}
       ${ok ? `<button class="btn" data-act="worksheet" data-id="${s.id}">🖨 Worksheets</button>` : ''}
+      ${ok ? `<button class="btn" data-act="tools" data-id="${s.id}">🎡 Wheel and boxes</button>` : ''}
       <button class="btn ghost" data-act="export" data-id="${s.id}">Export to Excel</button>
     </div></div>
   <div class="toolbar"><label class="tog-row"><input type="checkbox" id="show-answers" ${show ? 'checked' : ''}> Show answers</label></div>
@@ -692,6 +752,7 @@ function renderEditor() {
       ? `<span class="confirm">Turn every question round, so each right answer becomes the question? <button class="btn small primary" data-act="swap">Swap</button><button class="btn small ghost" data-act="no-swap">Cancel</button></span>`
       : `<button class="btn" data-act="ask-swap" title="Each right answer becomes the question, and each question becomes its answer">⇄ Swap questions and answers</button>`) : ''}
     ${ok ? `<button class="btn" data-act="worksheet" data-id="${s.id}" title="Print a match up, crossword, gap fill, word search, anagrams or multiple choice sheet">🖨 Worksheets</button>` : ''}
+    ${ok ? `<button class="btn" data-act="tools" data-id="${s.id}" title="Spin the wheel or open the boxes to pick questions for the class, on the projector">🎡 Wheel and boxes</button>` : ''}
     <span class="sp"></span>
     <span class="hint">Maths: wrap it in dollar signs, e.g. <code>$\\frac{3}{4}$</code>, <code>$x^2$</code>, <code>$\\sqrt{50}$</code></span>
   </div>
@@ -1159,6 +1220,14 @@ app.addEventListener('click', async e => {
     case 'unlock': unlockBox(); break;
     case 'ludgrovify': try { localStorage.removeItem(cfg.plainKey); } catch (err) {} location.reload(); break;
     case 'worksheet': await flushAll(); view = { name: 'worksheet', setId: id, from: view.name, folder: view.folder }; ui = { ws: { kind: 'match', count: '', dir: wsDir(getSet(id)), key: true, bank: true, backwards: false, seed: wsSeed() } }; render(); break;
+    case 'tools': await flushAll(); { const set = getSet(id); THEME.takeover(THEME.subjectFor(set), () => {}); view = { name: 'tools', setId: id, from: view.name, folder: view.folder }; ui = { tool: 'wheel', left: (set.questions || []).filter(LB.validQ).map(q => q.id), opened: [], pick: null, shown: false, angle: 0 }; render(); } break;
+    case 'tool': ui.tool = t.dataset.tool; ui.pick = null; ui.shown = false; render(); break;
+    case 'spin': spinWheel(); break;
+    case 'open-box': ui.pick = t.dataset.q; ui.shown = false; if (!ui.opened.includes(ui.pick)) ui.opened.push(ui.pick); render(); break;
+    case 'tool-show': ui.shown = true; render(); break;
+    case 'tool-close': ui.pick = null; ui.shown = false; render(); break;
+    case 'tool-refill': ui.left = (getSet(view.setId).questions || []).filter(LB.validQ).map(q => q.id); ui.opened = []; ui.pick = null; render(); break;
+    case 'tool-full': { const el = document.querySelector('.tools-stage'); if (el && el.requestFullscreen) el.requestFullscreen().catch(() => {}); } break;
     case 'ws-back': view = { name: view.from || 'library', setId: view.setId, folder: view.folder || 'mine' }; ui = {}; render(); break;
     case 'ws-kind': ui.ws.kind = t.dataset.kind; ui.ws.count = ''; render(); break;
     case 'ws-seed': ui.ws.seed = wsSeed(); render(); break;

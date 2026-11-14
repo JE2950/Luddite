@@ -797,3 +797,36 @@ body.presenting .race:hover .present-exit,.present-exit:focus-visible{opacity:1}
 .pair-card.done .pc-face{border-color:var(--good);background:var(--good-soft)}
 .pair-card .pc-face img{max-height:60px;max-width:100%}
 @media (max-width:640px){.find-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pair-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* Class-paced games: Gameshow quiz and Win or lose */
+.cls-board{display:flex;flex-direction:column;gap:14px;margin-top:10px}
+.cls-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.cls-top .qlabel{flex:1}
+.cls-count{font-size:16px}.cls-count b{font-size:22px}
+.cls-bonus{color:var(--gold,#b8892b);text-transform:none;letter-spacing:0}
+.cls-timer{position:relative;height:14px;border-radius:7px;background:var(--sunk);overflow:visible}
+.cls-bar{height:100%;border-radius:7px;background:var(--accent);transition:width .25s linear}
+.cls-timer b{position:absolute;right:0;top:-34px;font:800 28px var(--display)}
+.cls-q{text-align:center}.cls-q .qtext{font-size:clamp(28px,4vw,52px)}
+.cls-ans .ans{position:relative;cursor:default}
+.cls-tally{position:absolute;left:0;right:0;bottom:0;height:8px;display:block}.cls-tally i{display:block;height:100%;width:var(--w);background:rgba(255,255,255,.75);border-radius:0 4px 4px 0}
+.cls-tally b{position:absolute;right:10px;bottom:10px;font-size:22px}
+.cls-leaders ol{margin:0;padding-left:22px;columns:2;font-size:18px}.cls-leaders li{display:flex;justify-content:space-between;gap:10px;max-width:360px}
+.bets{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}.bets .bet{min-width:120px;font-size:26px;display:flex;gap:10px;align-items:center;justify-content:center}
+.bets .key{font-size:13px;opacity:.7}
+.lifelines{display:flex;gap:8px;justify-content:center}
+.ans.gone{visibility:hidden}
+.cls-hud{grid-template-columns:repeat(3,minmax(0,1fr))}
+
+/* Spin the wheel and Open the box */
+.tools-stage{margin-top:12px;display:flex;flex-direction:column;gap:16px}
+.tools-stage:fullscreen{background:var(--paper);padding:30px;overflow:auto}
+.wheel-wrap{position:relative;width:min(560px,90vw);aspect-ratio:1;margin:0 auto}
+.wheel-wrap canvas{width:100%;height:100%;display:block}
+.wheel-pin{position:absolute;left:50%;top:-6px;transform:translateX(-50%);width:0;height:0;border-left:16px solid transparent;border-right:16px solid transparent;border-top:30px solid var(--ink);z-index:1;filter:drop-shadow(0 2px 2px rgba(0,0,0,.3))}
+.boxes{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:12px}
+.box{aspect-ratio:1;border:0;border-radius:var(--r-lg);background:var(--accent);color:var(--on-accent,#fff);font:800 clamp(26px,4vw,40px) var(--display);cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.25);transition:transform .12s}
+.box:hover{transform:translateY(-3px)}
+.box.opened{background:var(--sunk);color:var(--muted);box-shadow:none}
+.tool-card{display:flex;flex-direction:column;gap:18px;align-items:center;text-align:center;padding:30px 10px}
+.tool-q .qtext{font-size:clamp(30px,5vw,60px)}
+.tool-a{display:flex;flex-direction:column;gap:6px;font-size:clamp(24px,3.6vw,42px);font-weight:700;color:var(--good)}
