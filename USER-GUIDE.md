@@ -91,6 +91,35 @@ Use your laptop on the projector. **Your browser tab runs the game**, so keep it
 
 If you close the tab by accident, open **Host live game** on the same set within 3 hours and click **Resume it**. The pupils carry on where they were.
 
+## Ways to play
+
+Before you open the lobby, **How pupils play** sets what pupils see on their devices. Scoring, streaks, the race, the leaderboard, results and weakness sheets work the same in every way of playing, and the board still marks every answer, so the right answers never reach pupils' devices.
+
+- **Quiz:** answer buttons.
+- **Maze chase:** the question sits above a maze with an answer by each corner. Pupils steer with the arrow keys or WASD (or swipe on a tablet) to the right corner while two ghosts chase them. Caught means back to the middle.
+- **Airplane:** answers fly in from the right. Pupils fly into the right one by moving the mouse, dragging a finger or using the arrow keys. Latin sets fly a sun chariot, French a hot-air balloon, everything else a biplane.
+- **Whack-a-mole:** moles pop up holding answers. Pupils click the right mole or press its number.
+- **Type the answer:** pupils type the answer. Capitals, accents, macrons, a final full stop and a leading "the", "a", "an" or "to" don't matter; the right spelling shows afterwards.
+- **Anagram:** pupils put the answer's jumbled letters in order.
+- **Hangman:** pupils guess letters; six wrong letters and the question counts as wrong.
+- **Find the match:** six answers on the screen; pupils tap the one for each question in turn. A wrong tap counts as a wrong answer.
+- **Matching pairs:** a memory game with the questions and answers face down. A wrong pair just turns back over; only matched pairs count.
+
+The word games (Type the answer, Anagram, Hangman) leave out questions with picture or maths answers; the setup screen says how many.
+
+In homework, each boy chooses how to play on the set's start screen, and his device remembers his choice.
+
+## Gameshow quiz and Win or lose
+
+These two game modes are paced by you. Everyone gets the same question at once; the board shows it with a timer and how many have answered. When everyone has answered or time runs out, the board shows the right answer, how many picked each, and the top five. Click **Next question** to move on, or **Show the answer now** to stop the clock early. Choose how many questions on the setup screen.
+
+- **Gameshow quiz:** 20 seconds a question. A right answer scores 500 to 1,000 points, more for answering faster. Every fifth question is a bonus round worth double. Each pupil has three lifelines, once each per game: **50:50** hides two wrong answers, **+10 s** adds time, **Double** doubles that question's points.
+- **Win or lose:** 30 seconds a question. Before the answers appear, each pupil bets 100, 250 or 500 points. Right wins the bet; wrong loses it, never below zero.
+
+## Spin the wheel and Open the box
+
+Open a set and click **🎡 Wheel and boxes** to pick questions for the class on the projector. **Wheel** spins to a random question; **Show the answer** reveals it, and that question comes off the wheel. **Boxes** shows a numbered box for each question; click one to open it. **⛶ Full screen** fills the projector.
+
 ## Teams
 
 In the host settings, choose **2 teams**, **3 teams** or **4 teams**. Pupils go into the smallest team as they join; **Shuffle teams** in the lobby mixes them up again. Each pupil's points (or treasure) count towards his team. The board shows the team totals above the leaderboard, each pupil sees his team on his screen, and the results and download include a **Teams** sheet. Team names follow the subject: Romani, Graeci, Galli and Carthaginienses for Latin; Les Bleus, Les Rouges, Les Verts and Les Jaunes for French; Explorers, Navigators, Pioneers and Voyagers for Geography; Normans, Saxons, Tudors and Victorians for History.
