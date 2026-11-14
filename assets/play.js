@@ -96,7 +96,7 @@ function onState(st) {
   S.subject = st.subject || null;
   if (st.runner) S.runner = st.runner;
   S.team = st.team || null;
-  Object.assign(S, { title: st.title, name: st.name, score: st.score, streak: st.streak, answered: st.answered, correct: st.correct, mode: st.mode, kg: st.kg || 0, lure: st.lure || 1 });
+  Object.assign(S, { title: st.title, name: st.name, score: st.score, streak: st.streak, answered: st.answered, correct: st.correct, mode: st.mode, kg: st.kg || 0, lure: st.lure || 1, style: st.style || 'quiz' });
   S.frenzyUntil = st.frenzyIn ? Date.now() + st.frenzyIn : 0;
   S.paused = !!st.paused;
   S.endAt = st.endIn != null ? Date.now() + st.endIn : null;
@@ -104,6 +104,13 @@ function onState(st) {
   if (st.phase === 'ended') { stopRetry(); clearInterval(tickT); S.final = st.final; S.screen = 'ended'; store.del(SESSION); return render(); }
   // playing
   startTick();
+  if (arcade()) {
+    const sameA = S.q && st.q && S.q.seq === st.q.seq;
+    if (S.screen === 'arcade' && sameA) return render();
+    if (S.screen === 'arcade' && S.arcWait) return render();   // a result is on screen; the next question follows it
+    S.q = st.q; S.result = null; S.screen = 'arcade'; S.lockUntil = Date.now() + (st.lockMs || 0);
+    render(); arcRound(); return;
+  }
   const sameQ = S.q && st.q && S.q.seq === st.q.seq;
   if (sameQ && (S.screen === 'question' || S.screen === 'checking')) return render();
   if (S.screen === 'casting') return;
@@ -114,6 +121,7 @@ function onState(st) {
   render();
 }
 function onResult(r) {
+  if (arcade() && S.screen === 'arcade') return arcResult(r);
   if (!S.q || r.seq !== S.q.seq || S.screen !== 'checking') return;
   stopRetry();
   S.result = r;
@@ -134,6 +142,41 @@ function onResult(r) {
     if (b && S.screen === 'feedback') { b.disabled = false; b.classList.remove('locking'); b.querySelector('.lbl').textContent = 'Next question'; b.focus(); }
   }, r.lockMs);
 }
+
+/* ---------- arcade styles (games.js): the same questions as a maze, a plane or moles ---------- */
+const arcade = () => window.GAMES && GAMES.isArcade(S.style);
+let arc = null, arcT = 0;
+function arcMount() {
+  const el = document.getElementById('arcade');
+  if (!el) return;
+  if (arc && el.firstElementChild) return;
+  if (arc) arc.destroy();
+  arc = GAMES.mount(el, S.style, { onPick: j => {
+    if (S.paused || !S.q) return;
+    S.choice = j; const seq = S.q.seq;
+    retry(() => send('answer', { seq, choice: j }));
+  } });
+}
+function arcRound() {
+  clearTimeout(arcT);
+  arcMount();
+  if (!arc || !S.q) return;
+  const wait = Math.max(0, (S.lockUntil || 0) - Date.now());
+  arcT = setTimeout(() => { S.arcWait = false; if (arc && S.q) arc.question(S.q); }, wait);
+}
+function arcResult(r) {
+  if (!S.q || r.seq !== S.q.seq || S.arcWait) return;
+  stopRetry();
+  S.result = r; S.arcWait = true;
+  if (r.right) RUNNER.boost(); else RUNNER.trip();
+  Object.assign(S, { score: r.score, streak: r.streak, answered: r.answered, correct: r.correct, kg: r.kg || 0, lure: r.lure || 1 });
+  const note = r.right ? (r.fish ? `${r.fish.icon ? 'You found' : 'You caught'} ${LB.catchPhrase(r.fish, S.subject)}! ${LB.fmtCatch(r.fish.kg, S.subject)}` : `Correct! +${r.gain}`) : (fishing() ? LB.missText(S.subject) : 'Not quite');
+  if (arc) arc.result({ ...r, note });
+  updateHud();
+  S.q = r.next; S.lockUntil = Date.now() + Math.max(r.lockMs || 0, r.right ? 900 : 1800);
+  arcRound();
+}
+function updateHud() { const h = document.getElementById('hud-slot'); if (h) h.innerHTML = hud(); }
 
 /* ---------- actions ---------- */
 function answer(j) {
@@ -178,7 +221,7 @@ function hud() {
     <div class="stat"><div class="k">Total ${LB.catchNoun(S.subject)}</div><div class="v">${LB.fmtCatch(S.kg, S.subject)}</div></div>
     <div class="stat mult"><div class="k">Lure level</div><div class="v">${S.lure}${lurePips(S.lure)}</div></div>
   </div>`;
-  const showNext = S.screen === 'question' || S.screen === 'ready';
+  const showNext = S.screen === 'question' || S.screen === 'ready' || S.screen === 'arcade';
   const m = showNext ? multFor(S.streak + 1) : multFor(Math.max(1, S.streak));
   return `${teamLine()}<div class="hud pupil-hud">
     <div class="stat"><div class="k">Time left</div><div class="v" id="hud-time">${S.endAt ? fmtTime(S.endAt - Date.now()) : '∞'}</div></div>
@@ -208,10 +251,21 @@ function joinHTML() {
     <p class="foot"><a href="${window.APP.teacherUrl}">Teacher sign-in</a></p>
   </form></div>`;
 }
-const GAME_SCREENS = ['ready', 'question', 'checking', 'casting', 'feedback'];
+const GAME_SCREENS = ['ready', 'question', 'checking', 'casting', 'feedback', 'arcade'];
 function render() {
   clearInterval(app._lock);
   let h = '';
+  if (S.screen === 'arcade' && !S.paused) {
+    if (arc && document.getElementById('arcade')) { updateHud(); return; }
+    app.innerHTML = `<div class="wrap play arcade-wrap"><div id="hud-slot">${hud()}</div><div class="stage arcade-stage" id="arcade"></div></div>`;
+    document.body.classList.toggle('water', false);
+    if (S.mode === 'classic') RUNNER.show(THEME.current, S.runner); else RUNNER.hide();
+    arc = null; arcMount();
+    if (S.q && !S.arcWait) arcRound();
+    return;
+  }
+  if (arc && S.screen !== 'arcade') { arc.destroy(); arc = null; }
+  if (arc && S.paused) { arc.destroy(); arc = null; }
   if (S.paused && GAME_SCREENS.includes(S.screen)) {
     app.innerHTML = `<div class="wrap play">${hud()}<div class="stage center pop"><div class="paused-card"><div class="bars" aria-hidden="true"><i></i><i></i></div>
       <h1 style="font-size:clamp(30px,6vw,48px)">Paused</h1><p class="hint" style="margin:0">Eyes on the board. The game carries on when your teacher is ready.</p></div></div></div>`;

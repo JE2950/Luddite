@@ -702,3 +702,44 @@ body.presenting .race:hover .present-exit,.present-exit:focus-visible{opacity:1}
 .admin-msg.bad{background:var(--bad-soft);border-color:var(--bad);color:var(--ink)}
 .admin-msg.good{background:var(--good-soft);border-color:var(--good)}
 .chip.chip-admin{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:700}
+
+/* ---------- Game styles (games.js) ---------- */
+.styles-pick{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%}
+.styles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;width:100%;max-width:760px}
+.style-tile{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px;border:1.5px solid var(--line);border-radius:var(--r);background:var(--surface);color:inherit;font:inherit;cursor:pointer}
+.style-tile>span:last-child{font-size:12.5px;color:var(--muted);line-height:1.35}
+.style-tile:hover{border-color:var(--accent)}
+.style-tile.on{border-color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
+.st-ic{font-size:20px;line-height:1.1}
+.st-quiz::before{content:"📝"}.st-maze::before{content:"👻"}.st-plane::before{content:"✈️"}.st-mole::before{content:"🔨"}
+.st-type::before{content:"⌨️"}.st-anagram::before{content:"🔀"}.st-hangman::before{content:"🪢"}.st-find::before{content:"🎯"}.st-pairs::before{content:"🃏"}
+
+.arcade-stage{padding:14px}
+.arc{display:flex;flex-direction:column;gap:10px}
+.arc-q{text-align:center;min-height:1.6em}
+.arc-q .qtext{font-size:clamp(20px,3vw,30px);margin:0}
+.arc-q .q-img{max-height:120px}
+.arc-field{position:relative;border-radius:var(--r-lg);overflow:hidden;background:var(--sunk);touch-action:none;user-select:none;-webkit-user-select:none}
+.arc-field canvas{position:absolute;inset:0;display:block}
+.arc-toks{position:absolute;inset:0;pointer-events:none}
+.arc-tok{position:absolute;left:0;top:0;pointer-events:auto;display:flex;align-items:center;gap:7px;padding:6px 12px 6px 6px;border-radius:999px;border:2px solid rgba(255,255,255,.7);color:#fff;font:700 clamp(13px,1.7vw,17px)/1.2 var(--body);background:var(--a1);box-shadow:0 3px 10px rgba(0,0,0,.18);max-width:40%;cursor:pointer;transition:opacity .15s,box-shadow .15s;will-change:transform}
+.arc-tok.a1{background:var(--a2)}.arc-tok.a2{background:var(--a3)}.arc-tok.a3{background:var(--a4)}
+.arc-tok .key{flex:none;width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.28);display:grid;place-items:center;font-size:12px}
+.arc-tok .t{overflow:hidden;text-overflow:ellipsis}
+.arc-tok img{max-height:44px;max-width:80px;border-radius:4px;display:block}
+.arc-tok.picked{box-shadow:0 0 0 4px var(--ink)}
+.arc-tok.right{box-shadow:0 0 0 5px var(--good),0 0 18px var(--good)}
+.arc-tok.wrong{filter:grayscale(.6);box-shadow:0 0 0 4px var(--bad)}
+.arc-msg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.92);opacity:0;pointer-events:none;background:var(--surface);color:var(--ink);padding:14px 22px;border-radius:var(--r-lg);box-shadow:0 10px 30px rgba(0,0,0,.25);display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;transition:opacity .15s,transform .15s;max-width:80%;border-top:6px solid var(--line)}
+.arc-msg b{font-family:var(--display);font-size:clamp(20px,3vw,28px)}
+.arc-msg img{max-height:50px}
+.arc-msg.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.arc-msg.good{border-top-color:var(--good)}.arc-msg.bad{border-top-color:var(--bad)}
+.arc-ctrl{display:flex;justify-content:center}
+.dpad{display:grid;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(2,46px);gap:6px}
+.dpad button,.updown button{border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:var(--r);font-size:18px;cursor:pointer;touch-action:none}
+.dpad button:nth-child(1){grid-column:2;grid-row:1}.dpad button:nth-child(2){grid-column:1;grid-row:2}.dpad button:nth-child(3){grid-column:3;grid-row:2}.dpad button:nth-child(4){grid-column:2;grid-row:2}
+.updown{display:flex;gap:10px}.updown button{padding:10px 22px;font-weight:700;font-size:15px}
+.arc-help{margin:0;text-align:center;font-size:13px}
+@media (hover:hover) and (pointer:fine){.dpad{display:none}.updown{opacity:.75}}
+@media (max-width:640px){.arcade-stage{padding:8px}.arc-tok{max-width:46%;font-size:13px}}

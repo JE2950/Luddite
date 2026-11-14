@@ -58,7 +58,7 @@ async function boot() {
   G = {
     code: null, setId, title: data.title || 'Untitled set', questions,
     subject: THEME.subjectFor(data), kx: null,
-    settings: { minutes: 10, rankBy: 'points', mode: 'classic', shuffle: true, teams: 0 },
+    settings: { minutes: 10, rankBy: 'points', mode: 'classic', style: 'quiz', shuffle: true, teams: 0 },
     paused: false, pausedAt: null,
     biggest: null, frenzyUntil: null, nextFrenzyAt: null,
     phase: 'setup', endAt: null, startedAt: null, endedAt: null,
@@ -137,7 +137,7 @@ function stateFor(p) {
     phase: G.phase, title: G.title, name: p.name, subject: G.subject, runner: p.runner,
     team: teamOf(p) ? { name: teamOf(p)[0], colour: teamOf(p)[1] } : null,
     endIn: G.phase === 'playing' && G.endAt ? G.endAt - (G.paused ? G.pausedAt : Date.now()) : null,
-    mode: G.settings.mode, kg: p.kg, lure: LB.lureFor(p.streak + 1),
+    mode: G.settings.mode, style: G.settings.style || 'quiz', kg: p.kg, lure: LB.lureFor(p.streak + 1),
     frenzyIn: frenzyOn() ? G.frenzyUntil - (G.paused ? G.pausedAt : Date.now()) : 0,
     paused: G.phase === 'playing' && G.paused,
     score: p.score, streak: p.streak, answered: p.answered, correct: p.correct,
@@ -603,6 +603,8 @@ function setupHTML() {
         <button class="mode ${fishing() ? '' : 'on'}" role="radio" aria-checked="${!fishing()}" data-act="mode" data-mode="classic"><b>${esc(THEME.modes().classic)}</b><span>Points for every right answer, boosted by streaks.</span></button>
         <button class="mode fishing ${fishing() ? 'on' : ''}" role="radio" aria-checked="${fishing()}" data-act="mode" data-mode="fishing"><b>${esc(THEME.modes().fishing)}</b><span>${THEME.treasure(G.subject) ? 'Right answers bring up treasures. Streaks bring rarer, more valuable ones.' : 'Right answers catch fish. Streaks bring rarer, heavier fish.'}</span></button>
       </div>
+      <div class="styles-pick"><span class="qlabel">How pupils play</span>
+        <div class="styles" role="radiogroup" aria-label="How pupils play">${Object.entries(GAMES.STYLES).map(([k, v]) => `<button class="style-tile ${(G.settings.style || 'quiz') === k ? 'on' : ''}" role="radio" aria-checked="${(G.settings.style || 'quiz') === k}" data-act="style" data-style="${k}"><span class="st-ic st-${k}" aria-hidden="true"></span><b>${esc(v.name)}</b><span>${esc(v.about)}</span></button>`).join('')}</div></div>
       <div class="ed-row" style="justify-content:center">
         <div class="field"><label for="minutes">Game length</label><select id="minutes">${[3, 5, 10, 15, 20, 30, 0].map(m => `<option value="${m}" ${G.settings.minutes === m ? 'selected' : ''}>${m ? m + ' minutes' : 'Until I end it'}</option>`).join('')}</select></div>
         <div class="field"><label for="teams">Teams</label><select id="teams">${[0, 2, 3, 4].map(n => `<option value="${n}" ${G.settings.teams === n ? 'selected' : ''}>${n ? n + ' teams' : 'No teams'}</option>`).join('')}</select></div>
@@ -852,6 +854,7 @@ app.addEventListener('click', async e => {
   const act = t.dataset.act;
   switch (act) {
     case 'mode': readSetup(); G.settings.mode = t.dataset.mode; render(); break;
+    case 'style': readSetup(); G.settings.style = t.dataset.style; render(); break;
     case 'open': {
       readSetup();
       t.disabled = true; t.textContent = 'Opening…';

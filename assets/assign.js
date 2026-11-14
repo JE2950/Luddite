@@ -32,6 +32,12 @@ const cleanSet = s => ({ ...s, questions: (s.questions || []).filter(validQ).map
   return { id: q.id, q: q.q, image: LB.safeSrc(q.image) || undefined, answers: kept.map(k => k[0]), correct: kept.findIndex(k => k[1] === q.correct) };
 }) });
 const fishing = () => A && A.mode === 'fishing';
+/* How the pupil chooses to play: answer buttons, or one of the arcade games (games.js). Remembered on this device. */
+const STYLE = window.APP.storagePrefix + '.style';
+let style = (window.GAMES && GAMES.STYLES[store.get(STYLE)]) ? store.get(STYLE) : 'quiz';
+const arcadeOn = () => !!(G && window.GAMES && GAMES.isArcade(G.style));
+let arc = null, arcT = 0;
+const payload = () => ({ q: G.cur.q.q, image: G.cur.q.image, answers: G.cur.perm.map(i => G.cur.q.answers[i]) });
 const modes = () => THEME.modes();
 
 /* ---------- start ---------- */
@@ -73,7 +79,7 @@ function begin(set) {
   G = {
     set, id: crypto.randomUUID ? crypto.randomUUID() : ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)),
     runner: RUNNER.pick(THEME.subjectFor(set)), token: LB.rid(24), score: 0, kg: 0, streak: 0, best: 0, answered: 0, correct: 0, log: [], deck: [], last: null,
-    weakIds: new Set(st.weak.map(q => q.id)), endAt: A.minutes ? Date.now() + A.minutes * 60000 : null, lockUntil: 0, phase: 'ready', biggest: null
+    weakIds: new Set(st.weak.map(q => q.id)), style, endAt: A.minutes ? Date.now() + A.minutes * 60000 : null, lockUntil: 0, phase: 'ready', biggest: null
   };
   V = { screen: 'play' }; render(); startTick(); save(false);
 }
@@ -109,16 +115,25 @@ function answer(shown) {
     G.lost = G.streak; G.streak = 0; G.lockUntil = Date.now() + LB.WRONG_LOCK_MS;
     setTimeout(() => { if (V.screen === 'play' && G && G.phase === 'feedback') render(); }, LB.WRONG_LOCK_MS + 20);
   }
-  G.phase = 'feedback'; render();
+  G.phase = 'feedback';
+  if (arcadeOn() && arc) {
+    const note = right ? (G.fish ? `${G.fish.icon ? 'You found' : 'You caught'} ${LB.catchPhrase(G.fish)}! ${LB.fmtCatch(G.fish.kg)}` : `Correct! +${G.gain}`) : (fishing() ? LB.missText() : 'Not quite');
+    arc.result({ right, choice: shown, correctIndex: perm.indexOf(q.correct), note });
+    const h = document.getElementById('hud-slot'); if (h) h.innerHTML = hud();
+    clearTimeout(arcT);
+    arcT = setTimeout(() => { if (!G || G.phase === 'over' || !arc) return; deal(); arc.question(payload()); const h2 = document.getElementById('hud-slot'); if (h2) h2.innerHTML = hud(); }, right ? 900 : Math.max(1800, LB.WRONG_LOCK_MS));
+  } else render();
   if (!fishing()) { if (right) RUNNER.boost(); else RUNNER.trip(); }
   if (G.answered % 5 === 0) save(false);
 }
+function arcStop() { clearTimeout(arcT); if (arc) { arc.destroy(); arc = null; } }
 function next() {
   if (!G || Date.now() < G.lockUntil) return;
   deal(); render();
 }
 function finish() {
   if (!G || G.phase === 'over') return;
+  arcStop();
   stopTick(); G.phase = 'over'; save(true);
   history.push({ set_id: G.set.id, score: fishing() ? G.kg : G.score, answered: G.answered, correct: G.correct, best_streak: G.best, log: G.log });
   V = { screen: 'over' }; render();
@@ -205,11 +220,20 @@ function render() {
           <div class="stat"><div class="k">Best</div><div class="v">${fishing() ? LB.fmtCatch(st.best) : st.best.toLocaleString('en-GB')}</div></div>
           <div class="stat"><div class="k">Accuracy</div><div class="v">${st.acc == null ? '–' : st.acc + '%'}</div></div></div>` : ''}
         ${st.weak.length ? `<div class="review"><h2 class="side-h">Questions to practise (they come up more often)</h2><ol>${st.weak.slice(0, 8).map(q => `<li><div class="rq">${rq(q)}</div><div class="ra"><span class="right">Answer: ${LB.ansHTML(q.answers[q.correct])}</span></div></li>`).join('')}</ol></div>` : ''}
+        ${window.GAMES ? `<div class="styles-pick"><span class="qlabel">Choose a game</span><div class="styles" role="radiogroup" aria-label="Choose a game">${Object.entries(GAMES.STYLES).map(([k, v]) => `<button class="style-tile ${style === k ? 'on' : ''}" role="radio" aria-checked="${style === k}" data-a="style" data-style="${k}"><span class="st-ic st-${k}" aria-hidden="true"></span><b>${esc(v.name)}</b><span>${esc(v.about)}</span></button>`).join('')}</div></div>` : ''}
         <button class="btn primary big-go" data-a="go" data-autofocus>Play</button></div></div>`;
       break;
     }
     case 'play': {
       if (G.phase === 'ready') { deal(); }
+      if (arcadeOn()) {
+        if (arc && document.getElementById('arcade')) { const hs = document.getElementById('hud-slot'); if (hs) hs.innerHTML = hud(); return; }
+        app.innerHTML = `<div class="wrap play arcade-wrap"><div id="hud-slot">${hud()}</div><div class="stage arcade-stage" id="arcade"></div></div>`;
+        if (!fishing()) RUNNER.show(THEME.current, G.runner); else RUNNER.hide();
+        arc = GAMES.mount(document.getElementById('arcade'), G.style, { onPick: j => answer(j) });
+        arc.question(payload());
+        return;
+      }
       const done = G.phase === 'feedback', locked = done && Date.now() < G.lockUntil;
       let verdict = '';
       if (done) {
@@ -272,16 +296,17 @@ app.addEventListener('submit', e => {
 app.addEventListener('click', e => {
   const t = e.target.closest('[data-a]'); if (!t || t.disabled) return;
   const a = t.dataset.a;
-  if (a === 'exit') { stopTick(); location.href = location.pathname; }
+  if (a === 'exit') { stopTick(); arcStop(); location.href = location.pathname; }
+  if (a === 'style') { style = t.dataset.style; store.set(STYLE, style); render(); }
   if (a === 'pick') openSet(A.sets.find(s => s.id === t.dataset.id));
-  if (a === 'back') { stopTick(); G = null; V = { screen: 'pick' }; THEME.takeover(A.subject, render); }
+  if (a === 'back') { stopTick(); arcStop(); G = null; V = { screen: 'pick' }; THEME.takeover(A.subject, render); }
   if (a === 'go') begin(V.set || (G && G.set));
   if (a === 'answer') answer(+t.dataset.i);
   if (a === 'next') next();
   if (a === 'finish') finish();
 });
 document.addEventListener('keydown', e => {
-  if (!A || V.screen !== 'play' || !G) return;
+  if (!A || V.screen !== 'play' || !G || arcadeOn()) return;
   const tag = document.activeElement && document.activeElement.tagName;
   if (tag === 'INPUT') return;
   if (G.phase === 'question' && /^[1-4]$/.test(e.key)) { e.preventDefault(); answer(+e.key - 1); }
