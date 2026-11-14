@@ -771,3 +771,8 @@ body.presenting .race:hover .present-exit,.present-exit:focus-visible{opacity:1}
 .hang-key:disabled{cursor:default}
 .arc-msg b.plain{font-family:var(--body);font-size:inherit}
 @media (max-width:560px){.hang-key{width:29px;height:38px;font-size:15px}.ana-slot,.ana-tile{width:36px;height:44px;font-size:20px}}
+
+/* The hidden button for plain mode: there, but not noticeable */
+.hush{background:none;border:0;padding:0 2px;margin-left:2px;font:inherit;font-size:11px;color:var(--ink);opacity:.06;cursor:default}
+.hush:hover{opacity:.18}
+.unlock-panel{max-width:340px;display:flex;flex-direction:column;gap:10px}

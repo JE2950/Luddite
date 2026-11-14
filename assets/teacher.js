@@ -182,7 +182,7 @@ function header() {
     ${window.APP.logo()}
     <span class="chip">Teacher</span>
     <span class="saved" id="saved">Saved</span>
-    <span class="who">${hasAssign ? `<button class="btn small ${['assignments', 'assignment'].includes(view.name) ? '' : 'ghost'}" data-act="assignments">Assignments${assignments.length ? ` (${assignments.length})` : ''}</button>` : ''} ${esc(me.email)}${isAdmin ? ' <button class="btn small ghost" data-act="admin">Teachers</button>' : ''} <button class="btn small ghost" data-act="account">Password</button> <button class="btn small ghost" data-act="sign-out">Sign out</button> ${LB.helpButton('Show me round this page (?)')}</span>
+    <span class="who">${hasAssign ? `<button class="btn small ${['assignments', 'assignment'].includes(view.name) ? '' : 'ghost'}" data-act="assignments">Assignments${assignments.length ? ` (${assignments.length})` : ''}</button>` : ''} ${esc(me.email)}${isAdmin ? ' <button class="btn small ghost" data-act="admin">Teachers</button>' : ''} <button class="btn small ghost" data-act="account">Password</button> <button class="btn small ghost" data-act="sign-out">Sign out</button> ${LB.helpButton('Show me round this page (?)')}${cfg.plain ? ' <button class="btn small" data-act="ludgrovify" title="Bring back the Ludgrove name and crest">Ludgrove-ify</button>' : ' <button class="hush" data-act="unlock" tabindex="-1" aria-hidden="true">?</button>'}</span>
   </header>`;
 }
 function render() {
@@ -386,7 +386,7 @@ function renderAdmin() {
 /* ---------- assignments and revision folders ---------- */
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no I, O, 0 or 1, so codes read clearly
 const newCode = () => { const a = new Uint32Array(5); crypto.getRandomValues(a); return Array.from(a, n => CODE_CHARS[n % CODE_CHARS.length]).join(''); };
-const pupilLink = a => cfg.joinUrl + '?a=' + a.code;
+const pupilLink = a => cfg.joinUrl + '?a=' + a.code + cfg.plainParam();
 const asgTarget = a => a.set_id ? (getSet(a.set_id) || { title: 'A deleted set', questions: [] }) : { title: folderName(a.folder_id) };
 const asgSets = a => a.set_id ? [getSet(a.set_id)].filter(Boolean) : sets.filter(s => s.folder_id === a.folder_id && mine(s));
 const fmtDay = d => new Date(d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -531,6 +531,27 @@ function printCard(a, slips) {
     ${L.css}
   </style></head><body>${slips ? `<div class="grid">${Array.from({ length: 8 }, () => one(false)).join('')}</div>` : one(true)}<script>window.onload=()=>{(document.fonts?document.fonts.ready:Promise.resolve()).then(()=>setTimeout(()=>window.print(),250))}<\/script></body></html>`);
   w.document.close();
+}
+
+/* ---------- plain mode (private tutoring): a hidden button, a password, and no school branding from then on ---------- */
+function unlockBox() {
+  if (document.getElementById('unlock-box')) return;
+  const box = document.createElement('div'); box.id = 'unlock-box'; box.className = 'weak-box';
+  box.innerHTML = `<form class="weak-panel unlock-panel" autocomplete="off"><h2>Unlock?</h2><input class="in" type="password" id="unlock-pw" aria-label="Password" autocomplete="off"><p class="err" id="unlock-err" role="alert"></p><div class="ed-row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-u="close">Cancel</button><button class="btn primary">Unlock</button></div></form>`;
+  document.body.appendChild(box);
+  const close = () => box.remove();
+  box.addEventListener('click', e => { if (e.target === box || e.target.dataset.u === 'close') close(); });
+  box.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  box.querySelector('form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const pw = document.getElementById('unlock-pw').value;
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
+    const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    if (hex !== cfg.PLAIN_HASH) { document.getElementById('unlock-err').textContent = 'No.'; return; }
+    try { localStorage.setItem(cfg.plainKey, '1'); } catch (err) {}
+    location.reload();
+  });
+  setTimeout(() => document.getElementById('unlock-pw').focus(), 30);
 }
 
 /* ---------- worksheets ---------- */
@@ -1135,6 +1156,8 @@ app.addEventListener('click', async e => {
     case 'edit': view = { name: 'edit', setId: id, folder: view.folder }; ui = {}; render(); break;
     case 'view': view = { name: 'view', setId: id, folder: view.folder }; ui = { search: ui.search }; render(); window.scrollTo(0, 0); break;
     case 'export': exportSet(getSet(id)); break;
+    case 'unlock': unlockBox(); break;
+    case 'ludgrovify': try { localStorage.removeItem(cfg.plainKey); } catch (err) {} location.reload(); break;
     case 'worksheet': await flushAll(); view = { name: 'worksheet', setId: id, from: view.name, folder: view.folder }; ui = { ws: { kind: 'match', count: '', dir: wsDir(getSet(id)), key: true, bank: true, backwards: false, seed: wsSeed() } }; render(); break;
     case 'ws-back': view = { name: view.from || 'library', setId: view.setId, folder: view.folder || 'mine' }; ui = {}; render(); break;
     case 'ws-kind': ui.ws.kind = t.dataset.kind; ui.ws.count = ''; render(); break;

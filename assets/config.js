@@ -129,6 +129,18 @@ window.APP = {
   C.joinAddress = C.playHost ? C.playHost : (location.host + location.pathname.replace(/[^/]*$/, '')).replace(/\/$/, '');
   // The full join link, for the QR code on the host screen (a game code is added to it)
   C.joinUrl = C.playHost ? 'https://' + C.playHost + '/' : location.origin + location.pathname.replace(/[^/]*$/, '');
+  // Plain mode, for private tutoring: no school name or crest anywhere (pages, posters, worksheets).
+  // Turned on from a hidden, password-protected button on the teacher page; a pupil's device picks it up from a link with plain=1.
+  C.plainKey = C.storagePrefix + '.plain';
+  try {
+    const u = new URLSearchParams(location.search);
+    if (u.get('plain') === '1') localStorage.setItem(C.plainKey, '1');
+    if (u.get('plain') === '0') localStorage.removeItem(C.plainKey);
+    C.plain = localStorage.getItem(C.plainKey) === '1';
+  } catch (e) { C.plain = false; }
+  if (C.plain) { C.school = ''; C.crest = ''; document.documentElement.classList.add('plain'); }
+  C.plainParam = () => (C.plain ? '&plain=1' : '');
+  C.PLAIN_HASH = '787600ebe6d6c75b6bc0b2db0bfd6aeec78897b67d3192e2208bc8b714237841';
   // Page titles follow the app name
   document.title = document.title.replace('Ludus', C.name);
   // The logo: the school crest (when the file exists) and the name

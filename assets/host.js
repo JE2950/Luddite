@@ -669,7 +669,7 @@ function setupHTML() {
 }
 
 /* Link that opens the join page with this game's code filled in, for the QR code and for pushing to pupils' devices */
-const joinLink = () => window.APP.joinUrl + '?code=' + G.code;
+const joinLink = () => window.APP.joinUrl + '?code=' + G.code + window.APP.plainParam();
 
 /* QR code that opens the join page with this game's code filled in */
 function qrHTML() {
