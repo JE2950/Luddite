@@ -70,7 +70,7 @@ async function connect() {
   S.screen = S.screen === 'join' ? 'connecting' : S.screen; render();
   if (ch) { sb.removeChannel(ch); ch = null; }
   ch = await subscribe(LB.pupilChannel(S.code, S.chan), {
-    state: onState, result: onResult,
+    state: onState, result: onResult, letter: r => { if (arc && S.q && r.seq === S.q.seq && arc.letter) { S.q.shape = r.shape; S.q.misses = r.misses; arc.letter(r); } },
     kicked: m => leave(m.cancelled ? 'Your teacher closed the game.' : 'Your teacher has removed you from this game.'),
     replaced: () => leave('You joined this game on another laptop.')
   });
@@ -106,7 +106,7 @@ function onState(st) {
   startTick();
   if (arcade()) {
     const sameA = S.q && st.q && S.q.seq === st.q.seq;
-    if (S.screen === 'arcade' && sameA) return render();
+    if (S.screen === 'arcade' && sameA) { if (st.q.shape && arc && arc.letter && !S.arcWait) { S.q = st.q; arc.letter({ shape: st.q.shape, misses: st.q.misses || [] }); } return render(); }
     if (S.screen === 'arcade' && S.arcWait) return render();   // a result is on screen; the next question follows it
     S.q = st.q; S.result = null; S.screen = 'arcade'; S.lockUntil = Date.now() + (st.lockMs || 0);
     render(); arcRound(); return;
@@ -144,18 +144,18 @@ function onResult(r) {
 }
 
 /* ---------- arcade styles (games.js): the same questions as a maze, a plane or moles ---------- */
-const arcade = () => window.GAMES && GAMES.isArcade(S.style);
+const arcade = () => window.GAMES && GAMES.isGame(S.style);
 let arc = null, arcT = 0;
 function arcMount() {
   const el = document.getElementById('arcade');
   if (!el) return;
   if (arc && el.firstElementChild) return;
   if (arc) arc.destroy();
-  arc = GAMES.mount(el, S.style, { onPick: j => {
-    if (S.paused || !S.q) return;
-    S.choice = j; const seq = S.q.seq;
-    retry(() => send('answer', { seq, choice: j }));
-  } });
+  arc = GAMES.mount(el, S.style, {
+    onPick: j => { if (S.paused || !S.q) return; S.choice = j; const seq = S.q.seq; retry(() => send('answer', { seq, choice: j })); },
+    onType: text => { if (S.paused || !S.q) return; const seq = S.q.seq; retry(() => send('type', { seq, text })); },
+    onLetter: ch => { if (S.paused || !S.q) return; send('letter', { seq: S.q.seq, ch }); }
+  });
 }
 function arcRound() {
   clearTimeout(arcT);

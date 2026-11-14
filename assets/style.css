@@ -743,3 +743,31 @@ body.presenting .race:hover .present-exit,.present-exit:focus-visible{opacity:1}
 .arc-help{margin:0;text-align:center;font-size:13px}
 @media (hover:hover) and (pointer:fine){.dpad{display:none}.updown{opacity:.75}}
 @media (max-width:640px){.arcade-stage{padding:8px}.arc-tok{max-width:46%;font-size:13px}}
+
+/* Word games: Type the answer, Anagram, Hangman */
+.word-area{position:relative;min-height:260px;display:flex;align-items:center;justify-content:center;padding:18px 8px;border-radius:var(--r-lg);background:var(--sunk)}
+.word-play{display:flex;flex-direction:column;align-items:center;gap:16px;width:100%}
+.word-play.sent{opacity:.55;pointer-events:none}
+.type-form{display:flex;gap:10px;width:min(560px,100%)}
+.word-in{flex:1;font-size:22px;padding:12px 14px;text-align:center}
+.ana-slots{display:flex;flex-wrap:wrap;gap:18px;justify-content:center}
+.ana-word{display:flex;gap:5px}
+.ana-slot,.ana-tile{width:46px;height:52px;border-radius:8px;font:700 24px/1 var(--display);display:grid;place-items:center;cursor:pointer;text-transform:lowercase}
+.ana-slot{border:2px dashed var(--line);background:var(--surface);color:var(--ink)}
+.ana-slot.full{border-style:solid;border-color:var(--accent)}
+.ana-tiles{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;max-width:640px}
+.ana-tile{border:0;background:var(--accent);color:var(--on-accent,#fff);box-shadow:0 3px 0 rgba(0,0,0,.25)}
+.ana-tile:disabled{opacity:.2;cursor:default;box-shadow:none}
+.hang-top{display:flex;gap:22px;align-items:center;flex-wrap:wrap;justify-content:center}
+.hang-pic{width:120px;height:136px;stroke:var(--ink);stroke-width:4;stroke-linecap:round;fill:none}
+.hang-shape{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:560px}
+.hang-c{min-width:30px;padding:0 2px;height:40px;border-bottom:3px solid var(--ink);font:700 28px/40px var(--display);text-align:center}
+.hang-gap{width:18px}
+.hang-keys{display:flex;flex-direction:column;gap:6px;align-items:center}
+.hang-keys>div{display:flex;gap:5px}
+.hang-key{width:38px;height:42px;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:700 18px var(--body);cursor:pointer}
+.hang-key.hit{background:var(--good-soft);border-color:var(--good)}
+.hang-key.miss{background:var(--bad-soft);border-color:var(--bad);text-decoration:line-through}
+.hang-key:disabled{cursor:default}
+.arc-msg b.plain{font-family:var(--body);font-size:inherit}
+@media (max-width:560px){.hang-key{width:29px;height:38px;font-size:15px}.ana-slot,.ana-tile{width:36px;height:44px;font-size:20px}}

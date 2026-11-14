@@ -35,9 +35,32 @@ const fishing = () => A && A.mode === 'fishing';
 /* How the pupil chooses to play: answer buttons, or one of the arcade games (games.js). Remembered on this device. */
 const STYLE = window.APP.storagePrefix + '.style';
 let style = (window.GAMES && GAMES.STYLES[store.get(STYLE)]) ? store.get(STYLE) : 'quiz';
-const arcadeOn = () => !!(G && window.GAMES && GAMES.isArcade(G.style));
+const arcadeOn = () => !!(G && window.GAMES && GAMES.isGame(G.style));
+const wordOn = () => !!(G && window.GAMES && GAMES.isWord(G.style));
 let arc = null, arcT = 0;
-const payload = () => ({ q: G.cur.q.q, image: G.cur.q.image, answers: G.cur.perm.map(i => G.cur.q.answers[i]) });
+const payload = () => {
+  const q = G.cur.q, a = String(q.answers[q.correct]).trim(), base = { q: q.q, image: q.image };
+  if (G.style === 'type') return base;
+  if (G.style === 'anagram') return { ...base, letters: shuffle([...a].filter(c => /\p{L}/u.test(c))), lengths: a.split(/\s+/).map(w => [...w].filter(c => /\p{L}/u.test(c)).length).filter(Boolean) };
+  if (G.style === 'hangman') { G.hang = { found: [], misses: [] }; return { ...base, shape: LB.answerShape(a), misses: [] }; }
+  return { ...base, answers: G.cur.perm.map(i => q.answers[i]) };
+};
+/* Word games in homework: marked here on the device */
+function typed(text) {
+  if (G.phase !== 'question') return;
+  const q = G.cur.q, right = LB.sameAnswer(text, q.answers[q.correct]);
+  answer(null, { right, choice: right ? q.correct : String(text).slice(0, 80), typed: text, exact: right && text.trim() === String(q.answers[q.correct]).trim() });
+}
+function letter(ch) {
+  if (G.phase !== 'question' || !G.hang) return;
+  const q = G.cur.q, a = [...String(q.answers[q.correct]).trim()], c = LB.foldLetter(ch), h = G.hang;
+  if (h.found.includes(c) || h.misses.includes(c)) return;
+  (a.some(x => LB.foldLetter(x) === c) ? h.found : h.misses).push(c);
+  const shape = a.map(x => /\p{L}/u.test(x) ? (h.found.includes(LB.foldLetter(x)) ? x : '_') : x);
+  if (!shape.includes('_')) return answer(null, { right: true, choice: q.correct });
+  if (h.misses.length >= 6) return answer(null, { right: false, choice: shape.join('') });
+  if (arc) arc.letter({ shape, misses: h.misses });
+}
 const modes = () => THEME.modes();
 
 /* ---------- start ---------- */
@@ -86,7 +109,8 @@ function begin(set) {
 function deal() {
   if (!G.deck.length) {
     // Questions he has struggled with before come round twice as often
-    const ids = G.set.questions.map(q => q.id);
+    const pool = wordOn() ? G.set.questions.filter(q => LB.wordAnswer(q.answers[q.correct])) : [];
+    const ids = (pool.length ? pool : G.set.questions).map(q => q.id);
     G.deck = shuffle(ids.concat(ids.filter(id => G.weakIds.has(id))));
     if (G.deck.length > 1 && G.deck[0] === G.last) G.deck.push(G.deck.shift());
   }
@@ -95,11 +119,11 @@ function deal() {
   const perm = shuffle(q.answers.map((_, i) => i));
   G.cur = { q, perm }; G.phase = 'question'; G.pick = null;
 }
-function answer(shown) {
+function answer(shown, word) {
   if (G.phase !== 'question') return;
   const { q, perm } = G.cur;
-  if (!(shown >= 0 && shown < perm.length)) return;
-  const choice = perm[shown], right = choice === q.correct;
+  if (!word && !(shown >= 0 && shown < perm.length)) return;
+  const choice = word ? word.choice : perm[shown], right = word ? word.right : choice === q.correct;
   G.pick = shown; G.answered++;
   G.log.push({ qid: q.id, choice, right });
   G.fish = null; G.gain = 0;
@@ -118,7 +142,7 @@ function answer(shown) {
   G.phase = 'feedback';
   if (arcadeOn() && arc) {
     const note = right ? (G.fish ? `${G.fish.icon ? 'You found' : 'You caught'} ${LB.catchPhrase(G.fish)}! ${LB.fmtCatch(G.fish.kg)}` : `Correct! +${G.gain}`) : (fishing() ? LB.missText() : 'Not quite');
-    arc.result({ right, choice: shown, correctIndex: perm.indexOf(q.correct), note });
+    arc.result({ right, choice: shown, correctIndex: perm.indexOf(q.correct), answer: q.answers[q.correct], typed: word && word.typed, exact: word && word.exact, note });
     const h = document.getElementById('hud-slot'); if (h) h.innerHTML = hud();
     clearTimeout(arcT);
     arcT = setTimeout(() => { if (!G || G.phase === 'over' || !arc) return; deal(); arc.question(payload()); const h2 = document.getElementById('hud-slot'); if (h2) h2.innerHTML = hud(); }, right ? 900 : Math.max(1800, LB.WRONG_LOCK_MS));
@@ -230,7 +254,7 @@ function render() {
         if (arc && document.getElementById('arcade')) { const hs = document.getElementById('hud-slot'); if (hs) hs.innerHTML = hud(); return; }
         app.innerHTML = `<div class="wrap play arcade-wrap"><div id="hud-slot">${hud()}</div><div class="stage arcade-stage" id="arcade"></div></div>`;
         if (!fishing()) RUNNER.show(THEME.current, G.runner); else RUNNER.hide();
-        arc = GAMES.mount(document.getElementById('arcade'), G.style, { onPick: j => answer(j) });
+        arc = GAMES.mount(document.getElementById('arcade'), G.style, { onPick: j => answer(j), onType: typed, onLetter: letter });
         arc.question(payload());
         return;
       }
@@ -251,7 +275,7 @@ function render() {
     case 'over': {
       const acc = G.answered ? Math.round(100 * G.correct / G.answered) : 0;
       const wrong = new Map(); G.log.forEach(e => { if (!e.right) wrong.set(e.qid, e.choice); });
-      const review = [...wrong].map(([qid, c]) => { const q = G.set.questions.find(x => x.id === qid); return q ? { q, yours: q.answers[c], answer: q.answers[q.correct] } : null; }).filter(Boolean);
+      const review = [...wrong].map(([qid, c]) => { const q = G.set.questions.find(x => x.id === qid); return q ? { q, yours: LB.said(q, c), answer: q.answers[q.correct] } : null; }).filter(Boolean);
       h = `<div class="wrap play"><div class="stage center pop">
         <span class="qlabel">Finished · ${esc(G.set.title || '')}</span>
         <div class="hero-n">${fishing() ? LB.fmtCatch(G.kg) : G.score.toLocaleString('en-GB')}</div><span class="hint">${fishing() ? (LB.catchUnit() ? 'found' : 'caught') : 'points'}</span>

@@ -15,9 +15,12 @@
     quiz:  { name: 'Quiz',         about: 'Answer buttons, as now.' },
     maze:  { name: 'Maze chase',   about: 'Run to the corner with the right answer. Don’t get caught by the ghosts.' },
     plane: { name: 'Airplane',     about: 'Steer up and down to fly into the right answer.' },
-    mole:  { name: 'Whack-a-mole', about: 'Moles pop up holding answers. Whack the right one.' }
+    mole:  { name: 'Whack-a-mole', about: 'Moles pop up holding answers. Whack the right one.' },
+    type:    { name: 'Type the answer', about: 'Type the answer. Spelling counts; accents and capitals don’t.', words: true },
+    anagram: { name: 'Anagram',         about: 'Put the jumbled letters in order to spell the answer.', words: true },
+    hangman: { name: 'Hangman',         about: 'Guess the answer one letter at a time. Six wrong letters and it’s over.', words: true }
   };
-  const ARCADE = ['maze', 'plane', 'mole'];
+  const ARCADE = ['maze', 'plane', 'mole'], WORD = ['type', 'anagram', 'hangman'];
   /* Drawn pictures for the games (assets/games). A page can supply them itself in window.GAME_ART. */
   const IMG = {};
   const art = name => {
@@ -32,6 +35,7 @@
     a: [css('--a1') || '#c7392b', css('--a2') || '#1f6fb5', css('--a3') || '#16936b', css('--a4') || '#c98a2b'] });
 
   function mount(el, style, opts) {
+    if (WORD.includes(style)) return mountWord(el, style, opts);
     const make = { maze: Maze, plane: Plane, mole: Mole }[style];
     if (!make) return null;
     el.innerHTML = `<div class="arc arc-${style}">
@@ -371,5 +375,95 @@
     return g;
   }
 
-  window.GAMES = { STYLES, ARCADE, mount, isArcade: s => ARCADE.includes(s) };
+  /* ---------- Word games: Type the answer, Anagram, Hangman ----------
+     opts.onType(text) sends a typed answer; opts.onLetter(letter) a Hangman guess, answered by letter({ shape, misses, hit }). */
+  function mountWord(el, style, opts) {
+    el.innerHTML = `<div class="arc wordg wordg-${style}"><div class="arc-q" aria-live="polite"></div>
+      <div class="word-area"><div class="word-play"></div><div class="arc-msg" aria-live="assertive"></div></div><p class="arc-help hint"></p></div>`;
+    const root = el.firstElementChild, qEl = root.querySelector('.arc-q'), play = root.querySelector('.word-play'), msg = root.querySelector('.arc-msg');
+    let S = { q: null, waiting: false, dead: false };
+    const help = { type: 'Type the answer and press Enter.', anagram: 'Click the letters in order, or type them. Backspace takes the last one back.', hangman: 'Click a letter or type it. Six wrong letters and the question is lost.' }[style];
+    root.querySelector('.arc-help').textContent = help;
+    const send = text => { if (S.waiting || !S.q) return; S.waiting = true; play.classList.add('sent'); opts.onType(text); };
+    let anag = null;
+    function draw() {
+      const q = S.q;
+      if (style === 'type') {
+        play.innerHTML = `<form class="type-form" autocomplete="off"><input class="in word-in" id="word-in" maxlength="80" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Your answer" placeholder="Type the answer"><button class="btn primary">Check</button></form>`;
+        const f = play.querySelector('form'), inp = play.querySelector('input');
+        f.addEventListener('submit', e => { e.preventDefault(); const v = inp.value.trim(); if (v) { inp.disabled = true; send(v); } });
+        setTimeout(() => inp.focus(), 30);
+      } else if (style === 'anagram') {
+        const lengths = q.lengths && q.lengths.length ? q.lengths : [q.letters.length];
+        anag = { tiles: q.letters.map((c, i) => ({ c, i, used: false })), slots: [] };
+        lengths.forEach((n, w) => { for (let k = 0; k < n; k++) anag.slots.push({ w, tile: null }); });
+        renderAnag();
+      } else if (style === 'hangman') renderHang(q.shape, q.misses || []);
+    }
+    function renderAnag() {
+      const words = []; anag.slots.forEach((s2, k) => { (words[s2.w] = words[s2.w] || []).push([s2, k]); });
+      play.innerHTML = `<div class="ana-slots">${words.map(ws => `<span class="ana-word">${ws.map(([s2, k]) => `<button class="ana-slot ${s2.tile ? 'full' : ''}" data-slot="${k}" aria-label="${s2.tile ? 'Take back ' + esc(s2.tile.c) : 'Empty'}">${s2.tile ? esc(s2.tile.c) : ''}</button>`).join('')}</span>`).join('')}</div>
+        <div class="ana-tiles">${anag.tiles.map((t, k) => `<button class="ana-tile" data-tile="${k}" ${t.used ? 'disabled' : ''}>${esc(t.c)}</button>`).join('')}</div>
+        <button class="btn ghost small ana-clear">Clear</button>`;
+    }
+    function anagPut(k) {
+      const t = anag.tiles[k], slot = anag.slots.find(s2 => !s2.tile); if (!t || t.used || !slot || S.waiting) return;
+      t.used = true; slot.tile = t; renderAnag();
+      if (anag.slots.every(s2 => s2.tile)) {
+        const words = []; anag.slots.forEach(s2 => { words[s2.w] = (words[s2.w] || '') + s2.tile.c; });
+        send(words.join(' '));
+      }
+    }
+    function anagBack(k) { const s2 = k == null ? [...anag.slots].reverse().find(x => x.tile) : anag.slots[k]; if (!s2 || !s2.tile || S.waiting) return; s2.tile.used = false; s2.tile = null; renderAnag(); }
+    const ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+    function renderHang(shape, misses) {
+      const m = misses.length;
+      const parts = ['<line x1="20" y1="150" x2="120" y2="150"/>', '<line x1="45" y1="150" x2="45" y2="15"/><line x1="45" y1="15" x2="105" y2="15"/><line x1="105" y1="15" x2="105" y2="35"/>', '<circle cx="105" cy="48" r="13"/>', '<line x1="105" y1="61" x2="105" y2="100"/>', '<line x1="105" y1="72" x2="88" y2="88"/><line x1="105" y1="72" x2="122" y2="88"/>', '<line x1="105" y1="100" x2="90" y2="128"/><line x1="105" y1="100" x2="120" y2="128"/>'];
+      const tried = new Set([...misses, ...shape.filter(c => /\p{L}/u.test(c)).map(c => L.foldLetter(c))]);
+      play.innerHTML = `<div class="hang-top"><svg class="hang-pic" viewBox="0 0 140 160" aria-label="${m} of 6 wrong letters">${parts.slice(0, m).join('')}</svg>
+        <div><div class="hang-shape">${shape.map(c => c === ' ' ? '<span class="hang-gap"></span>' : `<span class="hang-c ${c === '_' ? 'blank' : ''}">${c === '_' ? '' : esc(c)}</span>`).join('')}</div>
+        <p class="hint" style="margin:6px 0 0">${m ? `Wrong: ${misses.map(esc).join(' ')} · ${6 - m} left` : '6 wrong letters allowed'}</p></div></div>
+        <div class="hang-keys">${ROWS.map(r => `<div>${[...r].map(c => `<button class="hang-key ${misses.includes(c) ? 'miss' : tried.has(c) ? 'hit' : ''}" data-key="${c}" ${tried.has(c) ? 'disabled' : ''}>${c}</button>`).join('')}</div>`).join('')}</div>`;
+    }
+    play.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b || b.disabled) return;
+      if (b.dataset.tile != null) anagPut(+b.dataset.tile);
+      else if (b.dataset.slot != null) anagBack(+b.dataset.slot);
+      else if (b.classList.contains('ana-clear')) { anag.slots.forEach(s2 => { if (s2.tile) { s2.tile.used = false; s2.tile = null; } }); renderAnag(); }
+      else if (b.dataset.key && !S.waiting) { b.disabled = true; opts.onLetter(b.dataset.key); }
+    });
+    const onKey = e => {
+      if (S.dead || !S.q || S.waiting || e.ctrlKey || e.metaKey || e.altKey) return;
+      const tag = document.activeElement && document.activeElement.tagName; if (tag === 'INPUT') return;
+      if (style === 'anagram') {
+        if (e.key === 'Backspace') { e.preventDefault(); anagBack(); return; }
+        const k = anag && anag.tiles.findIndex(t => !t.used && L.foldLetter(t.c) === L.foldLetter(e.key));
+        if (e.key.length === 1 && k >= 0) { e.preventDefault(); anagPut(k); }
+      } else if (style === 'hangman' && /^\p{L}$/u.test(e.key)) {
+        const c = L.foldLetter(e.key), b = play.querySelector(`[data-key="${c}"]`);
+        if (b && !b.disabled) { e.preventDefault(); b.disabled = true; opts.onLetter(c); }
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return {
+      question(q) {
+        S = { q, waiting: false, dead: false }; play.classList.remove('sent'); msg.className = 'arc-msg'; msg.innerHTML = '';
+        qEl.innerHTML = L.qHTML(q);
+        if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise([qEl]).catch(() => {});
+        draw();
+      },
+      letter(r) { if (S.q && r) { S.q.shape = r.shape; S.q.misses = r.misses; renderHang(r.shape, r.misses); } },
+      result(r) {
+        S.waiting = true;
+        if (style === 'hangman' && r.answer) renderHang([...String(r.answer).trim()], (S.q && S.q.misses) || []);
+        msg.className = 'arc-msg show ' + (r.right ? 'good' : 'bad');
+        const ans = esc(String(r.answer || '').trim());
+        msg.innerHTML = r.right ? `<b>${esc(r.note || 'Correct!')}</b>${r.typed && r.exact === false ? `<span>Answer: <b class="plain">${ans}</b></span>` : ''}` : `<b>${esc(r.note || 'Not quite')}</b><span>It was <b class="plain">${ans}</b></span>`;
+      },
+      pause() {},
+      destroy() { S.dead = true; document.removeEventListener('keydown', onKey); el.innerHTML = ''; }
+    };
+  }
+
+  window.GAMES = { STYLES, ARCADE, WORD, mount, isArcade: s => ARCADE.includes(s), isWord: s => WORD.includes(s), isGame: s => ARCADE.includes(s) || WORD.includes(s) };
 })();

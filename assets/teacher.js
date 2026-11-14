@@ -459,7 +459,7 @@ function renderAssignment() {
     return `<tr><td><button class="title-link" data-act="pupil-row" data-name="${esc(p.name.toLowerCase())}"><b>${esc(p.name)}</b></button></td><td class="num">${p.plays}</td>
       <td class="num">${fish ? LB_fmtKg(p.best) : p.best.toLocaleString('en-GB')}</td><td class="num">${p.correct}/${p.answered}</td>
       <td class="num">${p.answered ? Math.round(100 * p.correct / p.answered) + '%' : '–'}</td><td class="num">${weak.length}</td><td>${p.last ? fmtDay(p.last) : ''}</td></tr>
-      ${open ? `<tr><td colspan="7" style="background:var(--sunk)">${weak.length ? `<b>Questions to practise</b><ul style="margin:6px 0 0;padding-left:20px">${weak.map(r => { const q = qFor(r.set_id, r.qid); return q ? `<li>${esc(LB.qText(q))}: <span class="hint">right ${r.right}, wrong ${r.wrong}; answer ${LB.ansHTML(q.answers[q.correct])}${r.wrongs.length ? `; put ${[...new Set(r.wrongs)].map(i => LB.ansHTML(q.answers[i])).join(', ')}` : ''}</span></li>` : ''; }).join('')}</ul>` : 'No weak questions.'}</td></tr>` : ''}`;
+      ${open ? `<tr><td colspan="7" style="background:var(--sunk)">${weak.length ? `<b>Questions to practise</b><ul style="margin:6px 0 0;padding-left:20px">${weak.map(r => { const q = qFor(r.set_id, r.qid); return q ? `<li>${esc(LB.qText(q))}: <span class="hint">right ${r.right}, wrong ${r.wrong}; answer ${LB.ansHTML(q.answers[q.correct])}${r.wrongs.length ? `; put ${[...new Set(r.wrongs)].map(i => LB.ansHTML(LB.said(q, i))).join(', ')}` : ''}</span></li>` : ''; }).join('')}</ul>` : 'No weak questions.'}</td></tr>` : ''}`;
   }).join('');
   return `<div class="toolbar"><button class="btn ghost small" data-act="assignments">← Assignments</button></div>
   <div class="main-head"><div><span class="qlabel">${a.set_id ? 'Assignment' : 'Revision folder'} · ${esc(asgTarget(a).title || 'Untitled set')}${a.due_at ? ' · due ' + fmtDay(a.due_at) : ''}</span><h1>${esc(a.title || asgTarget(a).title)}</h1></div>
@@ -492,7 +492,7 @@ function assignmentCSV(a) {
   pupilSummaries(a).forEach(p => [...p.per.values()].forEach(r => {
     const q = qFor(r.set_id, r.qid), s = getSet(r.set_id); if (!q) return;
     rows.push([String(lastBy.get(p.name.toLowerCase()) || '').slice(0, 10), a.title, s.title || 'Untitled set', THEME.label(THEME.subjectFor(s)), p.name, LB.qText(q), LB.ansText(q.answers[q.correct]),
-      r.seen, r.right, r.wrong, r.wrong === 0 ? 'Right' : r.right === 0 ? 'Wrong' : 'Mixed', r.last ? 'Right' : 'Wrong', r.wrong > 0 ? 'Yes' : 'No', [...new Set(r.wrongs)].map(i => LB.ansText(q.answers[i])).join(' | ')]);
+      r.seen, r.right, r.wrong, r.wrong === 0 ? 'Right' : r.right === 0 ? 'Wrong' : 'Mixed', r.last ? 'Right' : 'Wrong', r.wrong > 0 ? 'Yes' : 'No', [...new Set(r.wrongs)].map(i => LB.ansText(LB.said(q, i))).join(' | ')]);
   }));
   const cell = v => { v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const csv = '﻿' + [cols.join(','), ...rows.map(r => r.map(cell).join(','))].join('\r\n');

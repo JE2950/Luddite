@@ -139,6 +139,16 @@ L.CATCH_ALIAS = {
   'history-knights-sword': 'french-sword-of-joan-of-arc', 'history-napoleons-hat': 'french-napoleons-hat', 'history-the-crown-jewels': 'french-royal-crown',
   'history-the-great-diamond': 'geography-the-great-diamond', 'history-the-golden-eagle': 'latin-golden-eagle'
 };
+/* What a pupil gave for a question: the answer he picked (its index), or the words he typed (a string) */
+L.said = (q, choice) => typeof choice === 'string' ? choice : (q.answers || [])[choice];
+/* Typed answers: right if they match once case, accents, macrons, spare spaces, end punctuation and a leading 'the', 'a', 'an' or 'to' are set aside */
+L.foldLetter = c => String(c || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+L.foldAnswer = s => L.foldLetter(String(s || '')).replace(/[’‘`]/g, "'").replace(/[.!?;:,]+$/, '').replace(/\s+/g, ' ').trim().replace(/^(the|a|an|to) /, '');
+L.sameAnswer = (typed, answer) => !!String(typed || '').trim() && L.foldAnswer(typed) === L.foldAnswer(answer);
+/* Answers a word game can use: written answers, not pictures or maths */
+L.wordAnswer = a => !L.isImg(a) && !/\$[^$]+\$/.test(String(a)) && /\p{L}/u.test(String(a)) && String(a).trim().length <= 40;
+/* The shape of an answer for Hangman: letters hidden, spaces and punctuation shown */
+L.answerShape = a => [...String(a).trim()].map(c => /\p{L}/u.test(c) ? '_' : c);
 L.catchArt = (name, subject, size) => {
   let key = (subject ? subject : 'fish') + '-' + L.slug(name);
   if (!L.CATCH_ART.has(key) && L.CATCH_ALIAS[key]) key = L.CATCH_ALIAS[key];

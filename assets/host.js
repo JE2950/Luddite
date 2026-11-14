@@ -96,7 +96,9 @@ async function pupilChannel(pid) {
   if (chans.has(pid)) return chans.get(pid);
   const ch = await subscribe(LB.pupilChannel(G.code, G.pupils[pid].chan), {
     hello: () => { const p = G.pupils[pid]; if (p) { p.lastActive = Date.now(); send(ch, 'state', stateFor(p)); } },
-    answer: m => onAnswer(pid, m)
+    answer: m => onAnswer(pid, m),
+    type: m => onTyped(pid, m),
+    letter: m => onLetter(pid, m)
   });
   if (ch) chans.set(pid, ch);
   return ch;
@@ -111,9 +113,12 @@ function newPupil(name, pub, chan) {
   let pid; do { pid = rid(10); } while (G.pupils[pid]);   // pid is this tab's own label for the pupil; it is never sent anywhere
   return { pid, pub, chan, name, runner: RUNNER.deal(G.subject, G.runnerBag || (G.runnerBag = [])), score: 0, kg: 0, catches: 0, biggest: null, streak: 0, best: 0, answered: 0, correct: 0, deck: [], last: null, cur: null, perm: null, log: [], seq: 0, lockUntil: 0, lastActive: Date.now(), lastResult: null, joinedAt: Date.now() };
 }
+const wordStyle = () => window.GAMES && GAMES.isWord(G.settings.style);
+const playable = () => wordStyle() ? G.questions.filter(q => LB.wordAnswer(q.answers[q.correct])) : G.questions;
 function deal(p) {
+  p.hang = null; p.jumble = null;
   if (!p.deck.length) {
-    p.deck = shuffle(G.questions.map(q => q.id));
+    p.deck = shuffle((playable().length ? playable() : G.questions).map(q => q.id));
     if (p.deck.length > 1 && p.deck[0] === p.last) p.deck.push(p.deck.shift());
   }
   p.cur = p.deck.shift(); p.last = p.cur; p.seq++;
@@ -130,7 +135,13 @@ function qPayload(p) {
   const q = qById(p.cur);
   if (!q) return null;
   const perm = p.perm && p.perm.length === q.answers.length ? p.perm : q.answers.map((_, i) => i);
-  return { seq: p.seq, q: q.q, image: q.image, answers: perm.map(i => q.answers[i]) };
+  const base = { seq: p.seq, q: q.q, image: q.image };
+  // Word games: no answer choices. Anagram gets the letters jumbled; Hangman the shape, with the letters found so far.
+  const st = G.settings.style, a = String(q.answers[q.correct]);
+  if (st === 'type') return base;
+  if (st === 'anagram') return { ...base, letters: p.jumble || (p.jumble = shuffle([...a].filter(c => /\p{L}/u.test(c)))), lengths: a.trim().split(/\s+/).map(w => [...w].filter(c => /\p{L}/u.test(c)).length).filter(Boolean) };
+  if (st === 'hangman') { const h = p.hang || { found: [], misses: [] }; return { ...base, shape: LB.answerShape(a).map((c, k) => c === '_' && h.found.includes(LB.foldLetter([...a.trim()][k])) ? [...a.trim()][k] : c), misses: h.misses }; }
+  return { ...base, answers: perm.map(i => q.answers[i]) };
 }
 function stateFor(p) {
   return {
@@ -197,7 +208,42 @@ function onAnswer(pid, m) {
   if (!q || !(shown >= 0 && shown < q.answers.length)) return;
   const perm = p.perm && p.perm.length === q.answers.length ? p.perm : q.answers.map((_, i) => i);
   const choice = perm[shown];                       // original answer index
-  const right = choice === q.correct;
+  mark(p, q, choice === q.correct, choice, { choice: shown, correctIndex: perm.indexOf(q.correct) });
+}
+/* Word games: the pupil typed his answer. Right if it matches once case, accents and spare words are set aside. */
+function onTyped(pid, m) {
+  const p = G.pupils[pid], ch = chans.get(pid);
+  if (!p || !ch) return;
+  p.lastActive = Date.now();
+  if (G.phase !== 'playing' || G.paused) return send(ch, 'state', stateFor(p));
+  if (p.lastResult && m.seq === p.lastResult.seq) return send(ch, 'result', p.lastResult);
+  if (m.seq !== p.seq) return send(ch, 'state', stateFor(p));
+  const q = qById(p.cur); if (!q) return;
+  const text = String(m.text || '').slice(0, 80).trim();
+  if (!text) return;
+  const right = LB.sameAnswer(text, q.answers[q.correct]);
+  const exact = right && text.normalize('NFC') === String(q.answers[q.correct]).trim().normalize('NFC');
+  mark(p, q, right, right ? q.correct : text, { typed: text, exact });
+}
+/* Hangman: the pupil guesses a letter; the board says where it comes. Six misses and the question counts as wrong. */
+function onLetter(pid, m) {
+  const p = G.pupils[pid], ch = chans.get(pid);
+  if (!p || !ch || G.phase !== 'playing' || G.paused || m.seq !== p.seq) return;
+  const q = qById(p.cur); if (!q) return;
+  const a = [...String(q.answers[q.correct]).trim()], c = LB.foldLetter(String(m.ch || '').slice(0, 1));
+  if (!/^\p{L}$/u.test(c)) return;
+  const h = p.hang || (p.hang = { found: [], misses: [] });
+  if (h.found.includes(c) || h.misses.includes(c)) return send(ch, 'state', stateFor(p));
+  const hit = a.some(x => LB.foldLetter(x) === c);
+  (hit ? h.found : h.misses).push(c);
+  const done = a.every(x => !/\p{L}/u.test(x) || h.found.includes(LB.foldLetter(x)));
+  if (done) return mark(p, q, true, q.correct, { letters: true });
+  if (h.misses.length >= 6) return mark(p, q, false, a.map(x => /\p{L}/u.test(x) && !h.found.includes(LB.foldLetter(x)) ? '_' : x).join(''), { letters: true });
+  p.lastActive = Date.now(); persist();
+  send(ch, 'letter', { seq: p.seq, ch: c, hit, shape: qPayload(p).shape, misses: h.misses });
+}
+function mark(p, q, right, choice, extra) {
+  const ch = chans.get(p.pid), st = G.qstats[p.cur];
   p.log.push({ qid: q.id, choice, right, at: Date.now() });
   p.answered++; st.seen++;
   let gain = 0, catchMade = null;
@@ -217,18 +263,19 @@ function onAnswer(pid, m) {
     p.lockUntil = 0;
   } else {
     p.lostStreak = p.streak; p.streak = 0;
-    st.wrong[choice] = (st.wrong[choice] || 0) + 1;
+    const key = typeof choice === 'string' ? 't:' + choice : choice;   // typed answers are kept as words, picks as their number
+    st.wrong[key] = (st.wrong[key] || 0) + 1;
     p.lockUntil = Date.now() + LB.WRONG_LOCK_MS;
   }
   const seq = p.seq;
   deal(p);
   p.lastResult = {
-    seq, choice: shown, right, correctIndex: perm.indexOf(q.correct), gain, fish: catchMade, kg: p.kg, lure: LB.lureFor(p.streak + 1),
+    seq, ...extra, right, answer: q.answers[q.correct], gain, fish: catchMade, kg: p.kg, lure: LB.lureFor(p.streak + 1),
     score: p.score, streak: p.streak, lost: right ? 0 : p.lostStreak, answered: p.answered, correct: p.correct,
     lockMs: right ? 0 : LB.WRONG_LOCK_MS, next: qPayload(p)
   };
   send(ch, 'result', p.lastResult);
-  if (!fishing() && race) { updateRace(); const rid = G.settings.teams && p.team != null ? 'team' + p.team : pid; if (right) race.boost(rid); else race.trip(rid); }
+  if (!fishing() && race) { updateRace(); const rid = G.settings.teams && p.team != null ? 'team' + p.team : p.pid; if (right) race.boost(rid); else race.trip(rid); }
   persist(); liveRender();
 }
 
@@ -345,7 +392,7 @@ function reviewFor(p) {
   // Each question the pupil got wrong at least once: their latest wrong answer and the right one
   const seen = new Map();
   (p.log || []).forEach(e => { if (!e.right) seen.set(e.qid, e.choice); });
-  return [...seen].slice(-30).map(([qid, choice]) => { const q = qById(qid); return q ? { q: LB.qText(q), yours: LB.ansText(q.answers[choice]), answer: LB.ansText(q.answers[q.correct]) } : null; }).filter(Boolean);
+  return [...seen].slice(-30).map(([qid, choice]) => { const q = qById(qid); return q ? { q: LB.qText(q), yours: LB.ansText(LB.said(q, choice)), answer: LB.ansText(q.answers[q.correct]) } : null; }).filter(Boolean);
 }
 function finalFor(p) {
   const list = ranked();
@@ -356,7 +403,8 @@ function questionRows() {
   return G.questions.map(q => {
     const st = G.qstats[q.id];
     const top = Object.entries(st.wrong).sort((a, b) => b[1] - a[1])[0];
-    return { q, st, pct: st.seen ? st.right / st.seen : null, topWrong: top ? { text: LB.ansText(q.answers[top[0]]), raw: q.answers[top[0]], n: top[1] } : null };
+    const raw = top ? (top[0].startsWith('t:') ? top[0].slice(2) : q.answers[top[0]]) : null;
+    return { q, st, pct: st.seen ? st.right / st.seen : null, topWrong: top ? { text: LB.ansText(raw), raw, n: top[1] } : null };
   });
 }
 /* One row per pupil per question they met: how often they saw it, got it right and got it wrong,
@@ -375,7 +423,7 @@ function pupilQuestionRows() {
     });
     G.questions.forEach(q => {
       const r = by.get(q.id); if (!r) return;
-      const wrongs = [...new Set(r.wrongAnswers)].map(i => LB.ansText(q.answers[i]));
+      const wrongs = [...new Set(r.wrongAnswers)].map(i => LB.ansText(LB.said(q, i)));
       const result = r.wrong === 0 ? 'Right' : r.right === 0 ? 'Wrong' : 'Mixed';
       rows.push({ Date: date, Set: G.title, Subject: subject, Pupil: p.name, Question: LB.qText(q), 'Correct answer': LB.ansText(q.answers[q.correct]),
         'Times asked': r.seen, 'Times right': r.right, 'Times wrong': r.wrong, Result: result,
@@ -427,7 +475,7 @@ async function download() {
   XLSX.utils.book_append_sheet(wb, pq, 'By pupil and question');
   XLSX.utils.book_append_sheet(wb, s2, 'Questions');
   const log = [['Name', 'Question', 'Their answer', 'Correct answer', 'Right?']];
-  ranked().forEach(p => (p.log || []).forEach(e => { const q = qById(e.qid); if (q) log.push([p.name, LB.qText(q), LB.ansText(q.answers[e.choice]), LB.ansText(q.answers[q.correct]), e.right ? 'Yes' : 'No']); }));
+  ranked().forEach(p => (p.log || []).forEach(e => { const q = qById(e.qid); if (q) log.push([p.name, LB.qText(q), LB.ansText(LB.said(q, e.choice)), LB.ansText(q.answers[q.correct]), e.right ? 'Yes' : 'No']); }));
   const s3 = XLSX.utils.aoa_to_sheet(log); s3['!cols'] = [{ wch: 20 }, { wch: 50 }, { wch: 18 }, { wch: 18 }, { wch: 8 }];
   XLSX.utils.book_append_sheet(wb, s3, 'Every answer');
   const d = new Date(G.startedAt || Date.now());
@@ -605,6 +653,7 @@ function setupHTML() {
       </div>
       <div class="styles-pick"><span class="qlabel">How pupils play</span>
         <div class="styles" role="radiogroup" aria-label="How pupils play">${Object.entries(GAMES.STYLES).map(([k, v]) => `<button class="style-tile ${(G.settings.style || 'quiz') === k ? 'on' : ''}" role="radio" aria-checked="${(G.settings.style || 'quiz') === k}" data-act="style" data-style="${k}"><span class="st-ic st-${k}" aria-hidden="true"></span><b>${esc(v.name)}</b><span>${esc(v.about)}</span></button>`).join('')}</div></div>
+      ${wordStyle() && playable().length < G.questions.length ? `<p class="hint" style="margin:0">${playable().length ? `${G.questions.length - playable().length} of the ${G.questions.length} questions have picture or maths answers, so ${esc(GAMES.STYLES[G.settings.style].name)} leaves them out.` : `None of these questions has a written answer, so ${esc(GAMES.STYLES[G.settings.style].name)} uses answer buttons for every question.`}</p>` : ''}
       <div class="ed-row" style="justify-content:center">
         <div class="field"><label for="minutes">Game length</label><select id="minutes">${[3, 5, 10, 15, 20, 30, 0].map(m => `<option value="${m}" ${G.settings.minutes === m ? 'selected' : ''}>${m ? m + ' minutes' : 'Until I end it'}</option>`).join('')}</select></div>
         <div class="field"><label for="teams">Teams</label><select id="teams">${[0, 2, 3, 4].map(n => `<option value="${n}" ${G.settings.teams === n ? 'selected' : ''}>${n ? n + ' teams' : 'No teams'}</option>`).join('')}</select></div>
@@ -727,7 +776,7 @@ function pupilDrawer() {
     <h3 class="side-h" style="margin-top:16px">Answers, newest first</h3>
     ${log.length ? `<ol class="plog">${log.map(e => { const q = qById(e.qid); if (!q) return ''; return `<li class="${e.right ? 'ok' : 'no'}">
         <span class="mk" aria-label="${e.right ? 'Right' : 'Wrong'}">${e.right ? '✓' : '✗'}</span>
-        <div><div class="plog-q">${esc(LB.qText(q))}</div><div class="hint">Answered <strong>${LB.ansHTML(q.answers[e.choice])}</strong>${e.right ? '' : ` · right answer <strong>${LB.ansHTML(q.answers[q.correct])}</strong>`}</div></div></li>`; }).join('')}</ol>`
+        <div><div class="plog-q">${esc(LB.qText(q))}</div><div class="hint">Answered <strong>${LB.ansHTML(LB.said(q, e.choice))}</strong>${e.right ? '' : ` · right answer <strong>${LB.ansHTML(q.answers[q.correct])}</strong>`}</div></div></li>`; }).join('')}</ol>`
       : '<p class="hint">No answers yet.</p>'}
     ${G.phase === 'playing' ? `<div class="ed-row" style="margin-top:12px">
       ${p.allowRejoinUntil > Date.now()
