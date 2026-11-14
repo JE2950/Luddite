@@ -39,6 +39,7 @@ const arcadeOn = () => !!(G && window.GAMES && GAMES.isGame(G.style));
 const wordOn = () => !!(G && window.GAMES && GAMES.isWord(G.style));
 let arc = null, arcT = 0;
 const payload = () => {
+  if (boardOn()) return newBoard();
   const q = G.cur.q, a = String(q.answers[q.correct]).trim(), base = { q: q.q, image: q.image };
   if (G.style === 'type') return base;
   if (G.style === 'anagram') return { ...base, letters: shuffle([...a].filter(c => /\p{L}/u.test(c))), lengths: a.split(/\s+/).map(w => [...w].filter(c => /\p{L}/u.test(c)).length).filter(Boolean) };
@@ -124,7 +125,21 @@ function answer(shown, word) {
   const { q, perm } = G.cur;
   if (!word && !(shown >= 0 && shown < perm.length)) return;
   const choice = word ? word.choice : perm[shown], right = word ? word.right : choice === q.correct;
-  G.pick = shown; G.answered++;
+  G.pick = shown;
+  scoreLocal(q, right, choice);
+  if (!right && !arcadeOn()) setTimeout(() => { if (V.screen === 'play' && G && G.phase === 'feedback') render(); }, LB.WRONG_LOCK_MS + 20);
+  G.phase = 'feedback';
+  if (arcadeOn() && arc) {
+    const note = right ? (G.fish ? `${G.fish.icon ? 'You found' : 'You caught'} ${LB.catchPhrase(G.fish)}! ${LB.fmtCatch(G.fish.kg)}` : `Correct! +${G.gain}`) : (fishing() ? LB.missText() : 'Not quite');
+    arc.result({ right, choice: shown, correctIndex: perm.indexOf(q.correct), answer: q.answers[q.correct], typed: word && word.typed, exact: word && word.exact, note });
+    const h = document.getElementById('hud-slot'); if (h) h.innerHTML = hud();
+    clearTimeout(arcT);
+    arcT = setTimeout(() => { if (!G || G.phase === 'over' || !arc) return; deal(); arc.question(payload()); const h2 = document.getElementById('hud-slot'); if (h2) h2.innerHTML = hud(); }, right ? 900 : Math.max(1800, LB.WRONG_LOCK_MS));
+  } else render();
+}
+/* One marked answer: the log, the streak and the points or the catch */
+function scoreLocal(q, right, choice) {
+  G.answered++;
   G.log.push({ qid: q.id, choice, right });
   G.fish = null; G.gain = 0;
   if (right) {
@@ -135,20 +150,31 @@ function answer(shown, word) {
       if (!G.biggest || f.kg > G.biggest.kg) G.biggest = f;
     } else { G.gain = Math.round(LB.BASE * multFor(G.streak)); G.score += G.gain; }
     G.weakIds.delete(q.id);
-  } else {
-    G.lost = G.streak; G.streak = 0; G.lockUntil = Date.now() + LB.WRONG_LOCK_MS;
-    setTimeout(() => { if (V.screen === 'play' && G && G.phase === 'feedback') render(); }, LB.WRONG_LOCK_MS + 20);
-  }
-  G.phase = 'feedback';
-  if (arcadeOn() && arc) {
-    const note = right ? (G.fish ? `${G.fish.icon ? 'You found' : 'You caught'} ${LB.catchPhrase(G.fish)}! ${LB.fmtCatch(G.fish.kg)}` : `Correct! +${G.gain}`) : (fishing() ? LB.missText() : 'Not quite');
-    arc.result({ right, choice: shown, correctIndex: perm.indexOf(q.correct), answer: q.answers[q.correct], typed: word && word.typed, exact: word && word.exact, note });
-    const h = document.getElementById('hud-slot'); if (h) h.innerHTML = hud();
-    clearTimeout(arcT);
-    arcT = setTimeout(() => { if (!G || G.phase === 'over' || !arc) return; deal(); arc.question(payload()); const h2 = document.getElementById('hud-slot'); if (h2) h2.innerHTML = hud(); }, right ? 900 : Math.max(1800, LB.WRONG_LOCK_MS));
-  } else render();
+  } else { G.lost = G.streak; G.streak = 0; G.lockUntil = Date.now() + LB.WRONG_LOCK_MS; }
   if (!fishing()) { if (right) RUNNER.boost(); else RUNNER.trip(); }
   if (G.answered % 5 === 0) save(false);
+}
+/* Matching games in homework: a board of up to six questions, each pair marked here */
+const boardOn = () => !!(G && window.GAMES && GAMES.isBoard(G.style));
+function newBoard() {
+  const items = [];
+  while (items.length < Math.min(6, G.set.questions.length)) { deal(); if (!items.includes(G.cur.q)) items.push(G.cur.q); else if (G.set.questions.length <= items.length) break; }
+  G.board = { items, order: shuffle(items.map((_, i) => i)), done: [] };
+  return { board: { items: items.map(q => ({ q: q.q, image: q.image })), answers: G.board.order.map(i => items[i].answers[items[i].correct]), done: [] } };
+}
+function matchLocal(item, ans) {
+  const b = G.board; if (!b || b.done.includes(item)) return;
+  const q = b.items[item], pq = b.items[b.order[ans]], pa = pq.answers[pq.correct];
+  const right = b.order[ans] === item || (!LB.isImg(pa) && LB.sameAnswer(LB.ansText(pa), LB.ansText(q.answers[q.correct])));
+  const r = { item, ans, right };
+  if (right || G.style === 'find') {
+    scoreLocal(q, right, right ? q.correct : (LB.ansText(pa) || '(a picture)'));
+    Object.assign(r, { gain: G.gain, fish: G.fish, lockMs: right ? 0 : 1200 });
+    if (right) b.done.push(item);
+  }
+  arc.matchResult(r);
+  const h = document.getElementById('hud-slot'); if (h) h.innerHTML = hud();
+  if (b.done.length === b.items.length) { clearTimeout(arcT); arcT = setTimeout(() => { if (G && arc && G.phase !== 'over') arc.question(newBoard()); }, 1100); }
 }
 function arcStop() { clearTimeout(arcT); if (arc) { arc.destroy(); arc = null; } }
 function next() {
@@ -254,7 +280,7 @@ function render() {
         if (arc && document.getElementById('arcade')) { const hs = document.getElementById('hud-slot'); if (hs) hs.innerHTML = hud(); return; }
         app.innerHTML = `<div class="wrap play arcade-wrap"><div id="hud-slot">${hud()}</div><div class="stage arcade-stage" id="arcade"></div></div>`;
         if (!fishing()) RUNNER.show(THEME.current, G.runner); else RUNNER.hide();
-        arc = GAMES.mount(document.getElementById('arcade'), G.style, { onPick: j => answer(j), onType: typed, onLetter: letter });
+        arc = GAMES.mount(document.getElementById('arcade'), G.style, { onPick: j => answer(j), onType: typed, onLetter: letter, onMatch: matchLocal });
         arc.question(payload());
         return;
       }

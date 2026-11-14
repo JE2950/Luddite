@@ -98,7 +98,8 @@ async function pupilChannel(pid) {
     hello: () => { const p = G.pupils[pid]; if (p) { p.lastActive = Date.now(); send(ch, 'state', stateFor(p)); } },
     answer: m => onAnswer(pid, m),
     type: m => onTyped(pid, m),
-    letter: m => onLetter(pid, m)
+    letter: m => onLetter(pid, m),
+    match: m => onMatch(pid, m)
   });
   if (ch) chans.set(pid, ch);
   return ch;
@@ -116,8 +117,21 @@ function newPupil(name, pub, chan) {
 const wordStyle = () => window.GAMES && GAMES.isWord(G.settings.style);
 const playStyle = () => (wordStyle() && !playable().length ? 'quiz' : G.settings.style || 'quiz');   // a word game needs written answers
 const playable = () => wordStyle() ? G.questions.filter(q => LB.wordAnswer(q.answers[q.correct])) : G.questions;
+const boardStyle = () => window.GAMES && GAMES.isBoard(G.settings.style);
+/* Matching games deal a board of up to six questions at once; the pupil pairs each with its answer */
+function dealBoard(p) {
+  const items = [];
+  while (items.length < Math.min(6, G.questions.length)) {
+    if (!p.deck.length) p.deck = shuffle(G.questions.map(q => q.id)).filter(id => !items.includes(id));
+    if (!p.deck.length) break;
+    items.push(p.deck.shift());
+  }
+  p.seq++; p.board = { items, done: [], order: shuffle(items.map((_, i) => i)) };
+  p.cur = items[0]; p.last = p.cur;
+}
 function deal(p) {
   p.hang = null; p.jumble = null;
+  if (boardStyle()) return dealBoard(p);
   if (!p.deck.length) {
     p.deck = shuffle((playable().length ? playable() : G.questions).map(q => q.id));
     if (p.deck.length > 1 && p.deck[0] === p.last) p.deck.push(p.deck.shift());
@@ -133,6 +147,10 @@ const frenzyOn = () => !!(G.frenzyUntil && Date.now() < G.frenzyUntil);
 const val = p => (fishing() ? p.kg : p.score);            // the 'points' measure for the current mode
 const fmtVal = v => (fishing() ? LB.fmtCatch(v) : v.toLocaleString('en-GB'));
 function qPayload(p) {
+  if (boardStyle() && p.board) {
+    const qs = p.board.items.map(qById);
+    return { seq: p.seq, board: { items: qs.map(q => ({ q: q.q, image: q.image })), answers: p.board.order.map(i => qs[i].answers[qs[i].correct]), done: p.board.done } };
+  }
   const q = qById(p.cur);
   if (!q) return null;
   const perm = p.perm && p.perm.length === q.answers.length ? p.perm : q.answers.map((_, i) => i);
@@ -244,7 +262,52 @@ function onLetter(pid, m) {
   send(ch, 'letter', { seq: p.seq, ch: c, hit, shape: qPayload(p).shape, misses: h.misses });
 }
 function mark(p, q, right, choice, extra) {
-  const ch = chans.get(p.pid), st = G.qstats[p.cur];
+  const ch = chans.get(p.pid);
+  const { gain, catchMade } = score(p, q, right, choice);
+  const seq = p.seq;
+  deal(p);
+  p.lastResult = {
+    seq, ...extra, right, answer: q.answers[q.correct], gain, fish: catchMade, kg: p.kg, lure: LB.lureFor(p.streak + 1),
+    score: p.score, streak: p.streak, lost: right ? 0 : p.lostStreak, answered: p.answered, correct: p.correct,
+    lockMs: right ? 0 : LB.WRONG_LOCK_MS, next: qPayload(p)
+  };
+  send(ch, 'result', p.lastResult);
+  raceStep(p, right);
+  persist(); liveRender();
+}
+function raceStep(p, right) { if (!fishing() && race) { updateRace(); const rid = G.settings.teams && p.team != null ? 'team' + p.team : p.pid; if (right) race.boost(rid); else race.trip(rid); } }
+/* Matching games: the pupil paired question 'item' on his board with answer 'ans'.
+   Find the match counts a wrong pair as a wrong answer; in Matching pairs (a memory game) a wrong pair only turns the cards back. */
+function onMatch(pid, m) {
+  const p = G.pupils[pid], ch = chans.get(pid);
+  if (!p || !ch) return;
+  p.lastActive = Date.now();
+  if (G.phase !== 'playing' || G.paused || !p.board) return send(ch, 'state', stateFor(p));
+  const key = m.seq + ':' + m.item + ':' + m.ans;
+  if (p.lastMatch && p.lastMatch.key === key) return send(ch, 'mresult', p.lastMatch.r);
+  if (m.seq !== p.seq) return send(ch, 'state', stateFor(p));
+  const b = p.board, item = +m.item, ans = +m.ans;
+  if (!(item >= 0 && item < b.items.length && ans >= 0 && ans < b.items.length) || b.done.includes(item)) return;
+  const q = qById(b.items[item]), picked = qById(b.items[b.order[ans]]);
+  const pickedA = picked.answers[picked.correct];
+  const right = b.order[ans] === item || (!LB.isImg(pickedA) && LB.sameAnswer(LB.ansText(pickedA), LB.ansText(q.answers[q.correct])));
+  let r = { seq: m.seq, item, ans, right };
+  if (right || G.settings.style === 'find') {
+    p.cur = q.id;
+    const { gain, catchMade } = score(p, q, right, right ? q.correct : (LB.ansText(pickedA) || '(a picture)'));
+    if (right) b.done.push(item);
+    r = { ...r, gain, fish: catchMade, kg: p.kg, lure: LB.lureFor(p.streak + 1), score: p.score, streak: p.streak, lost: right ? 0 : p.lostStreak,
+      answered: p.answered, correct: p.correct, answer: q.answers[q.correct], lockMs: right ? 0 : 1200 };
+    if (b.done.length === b.items.length) { deal(p); r.next = qPayload(p); }
+    raceStep(p, right);
+  }
+  p.lastMatch = { key, r };
+  send(ch, 'mresult', r);
+  persist(); liveRender();
+}
+/* Marks one answer: the log, the question's statistics, the streak and the points or the catch */
+function score(p, q, right, choice) {
+  const st = G.qstats[q.id];
   p.log.push({ qid: q.id, choice, right, at: Date.now() });
   p.answered++; st.seen++;
   let gain = 0, catchMade = null;
@@ -268,16 +331,7 @@ function mark(p, q, right, choice, extra) {
     st.wrong[key] = (st.wrong[key] || 0) + 1;
     p.lockUntil = Date.now() + LB.WRONG_LOCK_MS;
   }
-  const seq = p.seq;
-  deal(p);
-  p.lastResult = {
-    seq, ...extra, right, answer: q.answers[q.correct], gain, fish: catchMade, kg: p.kg, lure: LB.lureFor(p.streak + 1),
-    score: p.score, streak: p.streak, lost: right ? 0 : p.lostStreak, answered: p.answered, correct: p.correct,
-    lockMs: right ? 0 : LB.WRONG_LOCK_MS, next: qPayload(p)
-  };
-  send(ch, 'result', p.lastResult);
-  if (!fishing() && race) { updateRace(); const rid = G.settings.teams && p.team != null ? 'team' + p.team : p.pid; if (right) race.boost(rid); else race.trip(rid); }
-  persist(); liveRender();
+  return { gain, catchMade };
 }
 
 async function startGame() {

@@ -18,9 +18,11 @@
     mole:  { name: 'Whack-a-mole', about: 'Moles pop up holding answers. Whack the right one.' },
     type:    { name: 'Type the answer', about: 'Type the answer. Spelling counts; accents and capitals don’t.', words: true },
     anagram: { name: 'Anagram',         about: 'Put the jumbled letters in order to spell the answer.', words: true },
-    hangman: { name: 'Hangman',         about: 'Guess the answer one letter at a time. Six wrong letters and it’s over.', words: true }
+    hangman: { name: 'Hangman',         about: 'Guess the answer one letter at a time. Six wrong letters and it’s over.', words: true },
+    find:    { name: 'Find the match',  about: 'Six answers on the board. Tap the one that matches each question.', board: true },
+    pairs:   { name: 'Matching pairs',  about: 'Turn over two cards at a time to find each question and its answer.', board: true }
   };
-  const ARCADE = ['maze', 'plane', 'mole'], WORD = ['type', 'anagram', 'hangman'];
+  const ARCADE = ['maze', 'plane', 'mole'], WORD = ['type', 'anagram', 'hangman'], BOARD = ['find', 'pairs'];
   /* Drawn pictures for the games (assets/games). A page can supply them itself in window.GAME_ART. */
   const IMG = {};
   const art = name => {
@@ -36,6 +38,7 @@
 
   function mount(el, style, opts) {
     if (WORD.includes(style)) return mountWord(el, style, opts);
+    if (BOARD.includes(style)) return mountMatch(el, style, opts);
     const make = { maze: Maze, plane: Plane, mole: Mole }[style];
     if (!make) return null;
     el.innerHTML = `<div class="arc arc-${style}">
@@ -465,5 +468,74 @@
     };
   }
 
-  window.GAMES = { STYLES, ARCADE, WORD, mount, isArcade: s => ARCADE.includes(s), isWord: s => WORD.includes(s), isGame: s => ARCADE.includes(s) || WORD.includes(s) };
+  /* ---------- Matching games: Find the match, Matching pairs ----------
+     question({ board: { items: [{ q, image }], answers: [answer], done: [itemIndex] } }); opts.onMatch(item, ans);
+     matchResult({ item, ans, right, ... }) after each pair is marked. */
+  function mountMatch(el, style, opts) {
+    el.innerHTML = `<div class="arc matchg matchg-${style}"><div class="arc-q" aria-live="polite"></div>
+      <div class="word-area"><div class="match-play"></div><div class="arc-msg" aria-live="assertive"></div></div><p class="arc-help hint"></p></div>`;
+    const root = el.firstElementChild, qEl = root.querySelector('.arc-q'), play = root.querySelector('.match-play'), msg = root.querySelector('.arc-msg');
+    root.querySelector('.arc-help').textContent = style === 'find' ? 'Tap or click the answer that matches the question at the top.' : 'Turn over two cards. A question and its answer stay face up.';
+    let B = null, cur = 0, busy = false, open = [], cards = [], dead = false, msgT = 0;
+    const flash = (good, html, ms = 900) => { clearTimeout(msgT); msg.className = 'arc-msg show ' + (good ? 'good' : 'bad'); msg.innerHTML = html; msgT = setTimeout(() => { msg.className = 'arc-msg'; }, ms); };
+    const typeset = () => { if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise([root]).catch(() => {}); };
+    function nextPrompt() {
+      const left = B.items.map((_, i) => i).filter(i => !B.done.includes(i));
+      if (!left.length) { qEl.innerHTML = '<span class="hint">Well done. Next board coming…</span>'; return; }
+      if (!left.includes(cur)) cur = left[0];
+      qEl.innerHTML = L.qHTML(B.items[cur]);
+    }
+    function drawFind() {
+      play.innerHTML = `<div class="find-grid">${B.answers.map((a, j) => `<button class="find-ans a${j % 4} ${B.taken.includes(j) ? 'gone' : ''}" data-ans="${j}" ${B.taken.includes(j) ? 'disabled' : ''}>${L.ansHTML(a)}</button>`).join('')}</div>`;
+      nextPrompt(); typeset();
+    }
+    function drawPairs() {
+      play.innerHTML = `<div class="pair-grid">${cards.map((c, k) => `<button class="pair-card ${c.up || c.done ? 'up' : ''} ${c.done ? 'done' : ''} ${c.kind}" data-card="${k}" aria-label="${c.up || c.done ? '' : 'Face-down card'}">
+        <span class="pc-back" aria-hidden="true"></span><span class="pc-face">${c.kind === 'q' ? L.qHTML(B.items[c.i]) : L.ansHTML(B.answers[c.i])}</span></button>`).join('')}</div>`;
+      typeset();
+    }
+    play.addEventListener('click', e => {
+      if (busy || dead || !B) return;
+      const fa = e.target.closest('[data-ans]'), pc = e.target.closest('[data-card]');
+      if (fa && style === 'find') { busy = true; fa.classList.add('picked'); B.pending = +fa.dataset.ans; opts.onMatch(cur, +fa.dataset.ans); }
+      if (pc && style === 'pairs') {
+        const c = cards[+pc.dataset.card]; if (c.up || c.done) return;
+        c.up = true; open.push(c); drawPairs();
+        if (open.length === 2) {
+          const [a, b] = open;
+          if (a.kind === b.kind) { busy = true; setTimeout(() => { a.up = b.up = false; open = []; busy = false; drawPairs(); }, 900); return; }
+          const qc = a.kind === 'q' ? a : b, ac = a.kind === 'q' ? b : a;
+          busy = true; B.pending = { qc, ac }; opts.onMatch(qc.i, ac.i);
+        }
+      }
+    });
+    return {
+      multi: true,
+      question(q) {
+        B = { ...q.board, taken: [], done: (q.board.done || []).slice() };
+        busy = false; open = []; cur = 0; msg.className = 'arc-msg';
+        if (style === 'find') drawFind();
+        else {
+          cards = L.shuffle([...B.items.map((_, i) => ({ kind: 'q', i })), ...B.answers.map((_, i) => ({ kind: 'a', i }))]);
+          qEl.innerHTML = '<span class="qlabel">Find the pairs</span>'; drawPairs();
+        }
+      },
+      matchResult(r) {
+        if (!B) return;
+        if (style === 'find') {
+          if (r.right) { B.done.push(r.item); B.taken.push(r.ans); flash(true, `<b>${r.fish ? 'Found it!' : 'Correct! +' + (r.gain || 0)}</b>`, 700); }
+          else flash(false, `<b>Not quite</b><span>Try another</span>`, 1100);
+          setTimeout(() => { busy = false; drawFind(); }, r.right ? 250 : (r.lockMs || 1100));
+        } else {
+          const { qc, ac } = B.pending || {};
+          if (r.right && qc) { qc.done = ac.done = true; open = []; busy = false; B.done.push(r.item); flash(true, `<b>${r.gain ? 'Pair! +' + r.gain : 'Pair!'}</b>`, 700); drawPairs(); }
+          else setTimeout(() => { if (qc) qc.up = false; if (ac) ac.up = false; open = []; busy = false; drawPairs(); }, 1000);
+        }
+      },
+      result() {}, pause() {},
+      destroy() { dead = true; clearTimeout(msgT); el.innerHTML = ''; }
+    };
+  }
+
+  window.GAMES = { STYLES, ARCADE, WORD, BOARD, mount, isArcade: s => ARCADE.includes(s), isWord: s => WORD.includes(s), isBoard: s => BOARD.includes(s), isGame: s => ARCADE.includes(s) || WORD.includes(s) || BOARD.includes(s) };
 })();

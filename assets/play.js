@@ -70,7 +70,7 @@ async function connect() {
   S.screen = S.screen === 'join' ? 'connecting' : S.screen; render();
   if (ch) { sb.removeChannel(ch); ch = null; }
   ch = await subscribe(LB.pupilChannel(S.code, S.chan), {
-    state: onState, result: onResult, letter: r => { if (arc && S.q && r.seq === S.q.seq && arc.letter) { S.q.shape = r.shape; S.q.misses = r.misses; arc.letter(r); } },
+    state: onState, result: onResult, mresult: onMatchResult, letter: r => { if (arc && S.q && r.seq === S.q.seq && arc.letter) { S.q.shape = r.shape; S.q.misses = r.misses; arc.letter(r); } },
     kicked: m => leave(m.cancelled ? 'Your teacher closed the game.' : 'Your teacher has removed you from this game.'),
     replaced: () => leave('You joined this game on another laptop.')
   });
@@ -154,7 +154,8 @@ function arcMount() {
   arc = GAMES.mount(el, S.style, {
     onPick: j => { if (S.paused || !S.q) return; S.choice = j; const seq = S.q.seq; retry(() => send('answer', { seq, choice: j })); },
     onType: text => { if (S.paused || !S.q) return; const seq = S.q.seq; retry(() => send('type', { seq, text })); },
-    onLetter: ch => { if (S.paused || !S.q) return; send('letter', { seq: S.q.seq, ch }); }
+    onLetter: ch => { if (S.paused || !S.q) return; send('letter', { seq: S.q.seq, ch }); },
+    onMatch: (item, ans) => { if (S.paused || !S.q) return; const seq = S.q.seq; retry(() => send('match', { seq, item, ans })); }
   });
 }
 function arcRound() {
@@ -175,6 +176,14 @@ function arcResult(r) {
   updateHud();
   S.q = r.next; S.lockUntil = Date.now() + Math.max(r.lockMs || 0, r.right ? 900 : 1800);
   arcRound();
+}
+/* Matching games: each pair is marked on its own; a finished board brings the next one */
+function onMatchResult(r) {
+  if (!arc || !S.q || r.seq !== S.q.seq) return;
+  stopRetry();
+  if (r.score != null) { Object.assign(S, { score: r.score, streak: r.streak, answered: r.answered, correct: r.correct, kg: r.kg || 0, lure: r.lure || 1 }); if (r.right) RUNNER.boost(); else RUNNER.trip(); }
+  arc.matchResult(r); updateHud();
+  if (r.next) { const nx = r.next; S.arcWait = true; setTimeout(() => { S.q = nx; S.arcWait = false; if (arc) arc.question(nx); }, 1100); }
 }
 function updateHud() { const h = document.getElementById('hud-slot'); if (h) h.innerHTML = hud(); }
 

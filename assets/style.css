@@ -776,3 +776,24 @@ body.presenting .race:hover .present-exit,.present-exit:focus-visible{opacity:1}
 .hush{background:none;border:0;padding:0 2px;margin-left:2px;font:inherit;font-size:11px;color:var(--ink);opacity:.06;cursor:default}
 .hush:hover{opacity:.18}
 .unlock-panel{max-width:340px;display:flex;flex-direction:column;gap:10px}
+
+/* Matching games: Find the match, Matching pairs */
+.match-play{width:100%;display:flex;justify-content:center}
+.find-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;width:min(760px,100%)}
+.find-ans{min-height:78px;border:0;border-radius:var(--r-lg);color:#fff;font:700 clamp(15px,2vw,20px)/1.25 var(--body);padding:10px;cursor:pointer;background:var(--a1);box-shadow:0 4px 0 rgba(0,0,0,.2);transition:transform .12s,opacity .3s}
+.find-ans.a1{background:var(--a2)}.find-ans.a2{background:var(--a3)}.find-ans.a3{background:var(--a4)}
+.find-ans:hover{transform:translateY(-2px)}
+.find-ans.picked{box-shadow:0 0 0 4px var(--ink)}
+.find-ans.gone{opacity:0;pointer-events:none}
+.find-ans img{max-height:60px;max-width:100%}
+.pair-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;width:min(820px,100%)}
+.pair-card{position:relative;min-height:96px;border:0;border-radius:var(--r-lg);padding:0;cursor:pointer;background:none;perspective:600px}
+.pair-card .pc-back,.pair-card .pc-face{position:absolute;inset:0;border-radius:inherit;display:grid;place-items:center;padding:8px;backface-visibility:hidden;transition:transform .35s}
+.pair-card .pc-back{background:var(--accent) repeating-linear-gradient(45deg,rgba(255,255,255,.08) 0 8px,transparent 8px 16px);box-shadow:0 4px 0 rgba(0,0,0,.2)}
+.pair-card .pc-face{background:var(--surface);border:2px solid var(--line);transform:rotateY(180deg);font:700 clamp(13px,1.8vw,18px)/1.25 var(--body);color:var(--ink)}
+.pair-card.q .pc-face{font-family:var(--question,var(--display))}
+.pair-card.q .pc-face .qtext{font-size:inherit;margin:0}
+.pair-card.up .pc-back{transform:rotateY(180deg)}.pair-card.up .pc-face{transform:rotateY(0)}
+.pair-card.done .pc-face{border-color:var(--good);background:var(--good-soft)}
+.pair-card .pc-face img{max-height:60px;max-width:100%}
+@media (max-width:640px){.find-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pair-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
