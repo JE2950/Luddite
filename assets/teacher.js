@@ -565,16 +565,104 @@ function renderTools() {
   const card = pick ? `<div class="tool-card pop" role="dialog" aria-label="Question"><div class="tool-q">${LB.qHTML(pick)}</div>
     ${ui.shown ? `<div class="tool-a"><span class="qlabel">Answer</span><div>${LB.ansHTML(pick.answers[pick.correct])}</div></div>` : ''}
     <div class="ed-row" style="justify-content:center">${ui.shown ? '' : '<button class="btn primary" data-act="tool-show">Show the answer</button>'}<button class="btn" data-act="tool-close">${ui.tool === 'wheel' ? 'Back to the wheel' : 'Back to the boxes'}</button></div></div>` : '';
-  const body = ui.tool === 'wheel'
+  const body = ui.tool === 'class' ? cqHTML() : ui.tool === 'wheel'
     ? `<div class="wheel-wrap"><div class="wheel-pin" aria-hidden="true"></div><canvas id="wheel" width="560" height="560" aria-label="Wheel of ${ui.left.length} questions"></canvas></div>
        <div class="ed-row" style="justify-content:center"><button class="btn primary big-go" data-act="spin" ${ui.left.length && !ui.spinning ? '' : 'disabled'}>Spin</button></div>
        <p class="hint" style="text-align:center;margin:0">${ui.left.length} ${ui.left.length === 1 ? 'question' : 'questions'} on the wheel. Each one comes off once it has been picked.${ui.left.length < qs.length ? ' <button class="btn small ghost" data-act="tool-refill">Put them all back</button>' : ''}</p>`
     : `<div class="boxes">${qs.map((q, i) => `<button class="box ${ui.opened.includes(q.id) ? 'opened' : ''}" data-act="open-box" data-q="${esc(q.id)}" aria-label="Box ${i + 1}${ui.opened.includes(q.id) ? ', opened' : ''}">${i + 1}</button>`).join('')}</div>
        ${ui.opened.length ? '<p class="hint" style="text-align:center;margin:0"><button class="btn small ghost" data-act="tool-refill">Close all the boxes</button></p>' : ''}`;
   return `<div class="toolbar"><button class="btn ghost small" data-act="ws-back">← Back to the set</button><span class="sp"></span><button class="btn small" data-act="tool-full">⛶ Full screen</button></div>
-  <div class="tools-stage stage"><div class="main-head"><div><span class="qlabel">${ui.tool === 'wheel' ? 'Spin the wheel' : 'Open the box'}</span><h1>${esc(s.title || 'Untitled set')}</h1></div>
-    <div class="head-acts" role="tablist"><button class="btn ${ui.tool === 'wheel' ? 'primary' : ''}" role="tab" aria-selected="${ui.tool === 'wheel'}" data-act="tool" data-tool="wheel">🎡 Wheel</button><button class="btn ${ui.tool === 'boxes' ? 'primary' : ''}" role="tab" aria-selected="${ui.tool === 'boxes'}" data-act="tool" data-tool="boxes">📦 Boxes</button></div></div>
-    ${pick ? card : body}</div>`;
+  <div class="tools-stage stage"><div class="main-head"><div><span class="qlabel">${ui.tool === 'class' ? 'Class quiz' : ui.tool === 'wheel' ? 'Spin the wheel' : 'Open the box'}</span><h1>${esc(s.title || 'Untitled set')}</h1></div>
+    <div class="head-acts" role="tablist"><button class="btn ${ui.tool === 'class' ? 'primary' : ''}" role="tab" aria-selected="${ui.tool === 'class'}" data-act="tool" data-tool="class">📺 Class quiz</button><button class="btn ${ui.tool === 'wheel' ? 'primary' : ''}" role="tab" aria-selected="${ui.tool === 'wheel'}" data-act="tool" data-tool="wheel">🎡 Wheel</button><button class="btn ${ui.tool === 'boxes' ? 'primary' : ''}" role="tab" aria-selected="${ui.tool === 'boxes'}" data-act="tool" data-tool="boxes">📦 Boxes</button></div></div>
+    ${pick && ui.tool !== 'class' ? card : body}</div>`;
+}
+/* ---------- Class quiz: a gameshow on the projector for a class without devices.
+   Boys write on mini whiteboards; the teacher clicks the answer the class agrees on. ---------- */
+let cqTimer = null;
+const cqStop = () => { clearInterval(cqTimer); cqTimer = null; };
+function cqSetup(prev) {
+  const n = (getSet(view.setId).questions || []).filter(LB.validQ).length;
+  return { phase: 'setup', count: prev ? prev.count : Math.min(10, n), secs: prev ? prev.secs : 30, lives: prev ? prev.lives : true };
+}
+function cqStart(ids) {
+  const c = ui.cq, qs = (getSet(view.setId).questions || []).filter(LB.validQ);
+  const order = ids || shuffle(qs.map(q => q.id)).slice(0, c.count || qs.length);
+  Object.assign(c, { order, i: -1, score: 0, right: 0, streak: 0, best: 0, log: [], life: { fifty: c.lives, time: c.lives && c.secs > 0, double: c.lives } });
+  cqNext();
+}
+function cqNext() {
+  const c = ui.cq; cqStop(); c.i++;
+  if (c.i >= c.order.length) { c.phase = 'over'; return render(); }
+  const q = cqQ();
+  Object.assign(c, { phase: 'think', pick: null, gone: [], dbl: false, timeUp: false, bonus: (c.i + 1) % 5 === 0, perm: shuffle(q.answers.map((_, j) => j)), endAt: c.secs ? Date.now() + c.secs * 1000 : null });
+  render(); cqTick();
+}
+const cqQ = () => { const c = ui.cq; return (getSet(view.setId).questions || []).find(q => q.id === c.order[c.i]); };
+function cqTick() {
+  const c = ui.cq; if (!c.endAt) return;
+  cqTimer = setInterval(() => {
+    if (view.name !== 'tools' || ui.tool !== 'class' || !ui.cq || ui.cq.phase !== 'think') return cqStop();
+    const left = Math.max(0, c.endAt - Date.now());
+    const bar = document.getElementById('cq-bar'), t = document.getElementById('cq-time');
+    if (bar) bar.style.width = (100 * left / (c.secs * 1000)) + '%';
+    if (t) t.textContent = Math.ceil(left / 1000);
+    if (!left) { cqStop(); c.timeUp = true; render(); }
+  }, 200);
+}
+function cqLock() {
+  const c = ui.cq; if (c.phase !== 'think' || c.pick == null) return;
+  cqStop();
+  const q = cqQ(), right = c.perm[c.pick] === q.correct;
+  c.gain = right ? 1000 * (c.bonus ? 2 : 1) * (c.dbl ? 2 : 1) : 0;
+  c.score += c.gain; c.streak = right ? c.streak + 1 : 0; c.best = Math.max(c.best, c.streak); if (right) c.right++;
+  c.log.push({ qid: q.id, right, said: q.answers[c.perm[c.pick]] });
+  c.phase = 'reveal'; render();
+}
+function cqLife(k) {
+  const c = ui.cq; if (c.phase !== 'think' || !c.life[k]) return;
+  c.life[k] = false;
+  if (k === 'fifty') {
+    const q = cqQ(), wrong = c.perm.map((o, j) => j).filter(j => c.perm[j] !== q.correct);
+    c.gone = shuffle(wrong).slice(0, Math.max(0, Math.min(2, c.perm.length - 2)));
+    if (c.gone.includes(c.pick)) c.pick = null;
+  }
+  if (k === 'time' && c.endAt) { c.endAt += 15000; c.secs = Math.max(c.secs, Math.ceil((c.endAt - Date.now()) / 1000)); if (c.timeUp) { c.timeUp = false; cqTick(); } }
+  if (k === 'double') c.dbl = true;
+  render();
+}
+function cqHTML() {
+  const c = ui.cq, n = (getSet(view.setId).questions || []).filter(LB.validQ).length;
+  if (c.phase === 'setup') return `<div class="cq-setup">
+    <p class="hint" style="margin:0;max-width:62ch">For a class without devices. Put each question on the board; the boys write their answer on whiteboards and hold them up. Agree the class answer, click it (or press 1 to 4), then <b>Lock in</b>. Every right answer scores 1,000, every fifth question is a bonus round worth double, and the class has three lifelines to use once each.</p>
+    <div class="ed-row" style="justify-content:center">
+      <div class="field"><label for="cq-count">Questions</label><select id="cq-count">${[5, 10, 15, 20, 30].filter(x => x < n).concat([n]).map(x => `<option value="${x}" ${c.count === x ? 'selected' : ''}>${x === n ? `All ${x}` : x}</option>`).join('')}</select></div>
+      <div class="field"><label for="cq-secs">Thinking time</label><select id="cq-secs">${[[0, 'No timer'], [20, '20 seconds'], [30, '30 seconds'], [45, '45 seconds'], [60, '1 minute']].map(([v, l]) => `<option value="${v}" ${c.secs === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <label class="tog-row" style="align-self:flex-end;padding-bottom:8px"><input type="checkbox" id="cq-lives" ${c.lives ? 'checked' : ''}> Lifelines</label>
+    </div>
+    <div class="ed-row" style="justify-content:center"><button class="btn primary big-go" data-act="cq-start" ${n ? '' : 'disabled'}>Start the quiz</button></div></div>`;
+  if (c.phase === 'over') {
+    const wrong = c.log.filter(e => !e.right), qs = getSet(view.setId).questions || [];
+    return `<div class="cq-over">
+      <span class="qlabel">Final score</span><div class="cq-final">${c.score.toLocaleString('en-GB')}</div>
+      <p class="cq-sum">${c.right} of ${c.order.length} right · best streak ${c.best}</p>
+      ${wrong.length ? `<div class="review"><h2 class="side-h">To go over</h2><ol>${wrong.map(e => { const q = qs.find(x => x.id === e.qid); return q ? `<li><div class="rq">${LB.qHTML(q)}</div><div class="ra"><span class="right">Answer: ${LB.ansHTML(q.answers[q.correct])}</span> <span class="hint">· the class said ${LB.ansHTML(e.said)}</span></div></li>` : ''; }).join('')}</ol></div>` : '<p class="cq-sum">Every question right.</p>'}
+      <div class="ed-row" style="justify-content:center">${wrong.length ? '<button class="btn primary" data-act="cq-again-wrong">Play the ones we got wrong</button>' : ''}<button class="btn" data-act="cq-again">New quiz</button></div></div>`;
+  }
+  const q = cqQ(), reveal = c.phase === 'reveal', correct = c.perm.indexOf(q.correct);
+  const left = c.endAt ? Math.max(0, c.endAt - Date.now()) : 0;
+  return `<section class="cls-board cq-board">
+    <div class="cls-top"><span class="qlabel">Question ${c.i + 1} of ${c.order.length}${c.bonus ? ' · <b class="cls-bonus">Bonus round: double points</b>' : ''}${c.dbl ? ' · <b class="cls-bonus">Double</b>' : ''}</span>
+      <span class="cq-score"><span class="qlabel">Score</span> <b>${c.score.toLocaleString('en-GB')}</b>${c.streak > 1 ? ` <span class="cq-streak">🔥 ${c.streak} in a row</span>` : ''}</span></div>
+    ${!reveal && c.endAt ? (c.timeUp ? '<div class="cq-boards pop">Boards up!</div>' : `<div class="cls-timer"><div class="cls-bar" id="cq-bar" style="width:${100 * left / (c.secs * 1000)}%"></div><b id="cq-time">${Math.ceil(left / 1000)}</b></div>`) : ''}
+    <div class="cls-q">${LB.qHTML(q)}</div>
+    <div class="answers cls-ans cq-ans ${LB.hasImgAnswers(q) ? 'pics' : ''}">${c.perm.map((orig, j) => `<button class="ans a${j} ${c.gone.includes(j) ? 'gone' : ''} ${reveal ? (j === correct ? 'right' : j === c.pick ? 'wrong' : 'dim') : c.pick === j ? 'picked' : c.pick != null ? 'unpicked' : ''}" data-act="cq-pick" data-j="${j}" ${reveal || c.gone.includes(j) ? 'disabled' : ''} aria-pressed="${c.pick === j}"><span class="key">${THEME.keyLabel(j)}</span><span>${LB.ansHTML(q.answers[orig])}</span></button>`).join('')}</div>
+    ${reveal
+      ? `<div class="cq-verdict ${c.gain ? 'good' : 'bad'} pop">${c.gain ? `Right! +${c.gain.toLocaleString('en-GB')}` : `Not this time. The answer is ${LB.ansHTML(q.answers[q.correct])}.`}</div>
+         <div class="ed-row" style="justify-content:center"><button class="btn primary big-go" data-act="cq-next">${c.i + 1 >= c.order.length ? 'See the final score' : 'Next question ▸'}</button></div>`
+      : `<div class="ed-row" style="justify-content:center">
+          ${c.lives ? `<div class="lifelines">${[['fifty', '50:50'], ['time', '+15 s'], ['double', 'Double']].filter(([k]) => k !== 'time' || c.endAt).map(([k, l]) => `<button class="btn" data-act="cq-life" data-k="${k}" ${c.life[k] ? '' : 'disabled'}>${l}</button>`).join('')}</div>` : ''}
+          <button class="btn primary big-go" data-act="cq-lock" ${c.pick == null ? 'disabled' : ''}>Lock in the class's answer</button></div>`}
+  </section>`;
 }
 function toolsDraw() {
   const cv = document.getElementById('wheel'); if (!cv) return;
@@ -700,6 +788,7 @@ function renderView() {
       <button class="btn" data-act="play" data-id="${s.id}" ${ok ? '' : 'disabled'}>▶ Play solo</button>
       ${own ? `<button class="btn" data-act="edit" data-id="${s.id}">Edit</button>` : `<button class="btn" data-act="dup" data-id="${s.id}">Copy to my sets</button>`}
       ${ok ? `<button class="btn" data-act="worksheet" data-id="${s.id}">🖨 Worksheets</button>` : ''}
+      ${ok ? `<button class="btn" data-act="tools" data-tool="class" data-id="${s.id}">📺 Class quiz</button>` : ''}
       ${ok ? `<button class="btn" data-act="tools" data-id="${s.id}">🎡 Wheel and boxes</button>` : ''}
       <button class="btn ghost" data-act="export" data-id="${s.id}">Export to Excel</button>
     </div></div>
@@ -752,6 +841,7 @@ function renderEditor() {
       ? `<span class="confirm">Turn every question round, so each right answer becomes the question? <button class="btn small primary" data-act="swap">Swap</button><button class="btn small ghost" data-act="no-swap">Cancel</button></span>`
       : `<button class="btn" data-act="ask-swap" title="Each right answer becomes the question, and each question becomes its answer">⇄ Swap questions and answers</button>`) : ''}
     ${ok ? `<button class="btn" data-act="worksheet" data-id="${s.id}" title="Print a match up, crossword, gap fill, word search, anagrams or multiple choice sheet">🖨 Worksheets</button>` : ''}
+    ${ok ? `<button class="btn" data-act="tools" data-tool="class" data-id="${s.id}" title="A gameshow on the projector for a class without devices: boys answer on whiteboards and you click the class's answer">📺 Class quiz</button>` : ''}
     ${ok ? `<button class="btn" data-act="tools" data-id="${s.id}" title="Spin the wheel or open the boxes to pick questions for the class, on the projector">🎡 Wheel and boxes</button>` : ''}
     <span class="sp"></span>
     <span class="hint">Maths: wrap it in dollar signs, e.g. <code>$\\frac{3}{4}$</code>, <code>$x^2$</code>, <code>$\\sqrt{50}$</code></span>
@@ -1220,15 +1310,22 @@ app.addEventListener('click', async e => {
     case 'unlock': unlockBox(); break;
     case 'ludgrovify': try { localStorage.removeItem(cfg.plainKey); } catch (err) {} location.reload(); break;
     case 'worksheet': await flushAll(); view = { name: 'worksheet', setId: id, from: view.name, folder: view.folder }; ui = { ws: { kind: 'match', count: '', dir: wsDir(getSet(id)), key: true, bank: true, backwards: false, seed: wsSeed() } }; render(); break;
-    case 'tools': await flushAll(); { const set = getSet(id); THEME.takeover(THEME.subjectFor(set), () => {}); view = { name: 'tools', setId: id, from: view.name, folder: view.folder }; ui = { tool: 'wheel', left: (set.questions || []).filter(LB.validQ).map(q => q.id), opened: [], pick: null, shown: false, angle: 0 }; render(); } break;
-    case 'tool': ui.tool = t.dataset.tool; ui.pick = null; ui.shown = false; render(); break;
+    case 'tools': await flushAll(); { const set = getSet(id); THEME.takeover(THEME.subjectFor(set), () => {}); view = { name: 'tools', setId: id, from: view.name, folder: view.folder }; ui = { tool: t.dataset.tool || 'wheel', left: (set.questions || []).filter(LB.validQ).map(q => q.id), opened: [], pick: null, shown: false, angle: 0 }; ui.cq = cqSetup(); render(); } break;
+    case 'tool': cqStop(); ui.tool = t.dataset.tool; ui.pick = null; ui.shown = false; if (ui.tool === 'class') ui.cq = cqSetup(ui.cq); render(); break;
+    case 'cq-start': ui.cq.count = +document.getElementById('cq-count').value; ui.cq.secs = +document.getElementById('cq-secs').value; ui.cq.lives = document.getElementById('cq-lives').checked; cqStart(); break;
+    case 'cq-pick': if (ui.cq.phase === 'think') { ui.cq.pick = +t.dataset.j; render(); } break;
+    case 'cq-lock': cqLock(); break;
+    case 'cq-life': cqLife(t.dataset.k); break;
+    case 'cq-next': cqNext(); break;
+    case 'cq-again': ui.cq = cqSetup(ui.cq); render(); break;
+    case 'cq-again-wrong': { const ids = ui.cq.log.filter(e => !e.right).map(e => e.qid); cqStart(shuffle(ids)); } break;
     case 'spin': spinWheel(); break;
     case 'open-box': ui.pick = t.dataset.q; ui.shown = false; if (!ui.opened.includes(ui.pick)) ui.opened.push(ui.pick); render(); break;
     case 'tool-show': ui.shown = true; render(); break;
     case 'tool-close': ui.pick = null; ui.shown = false; render(); break;
     case 'tool-refill': ui.left = (getSet(view.setId).questions || []).filter(LB.validQ).map(q => q.id); ui.opened = []; ui.pick = null; render(); break;
-    case 'tool-full': { const el = document.querySelector('.tools-stage'); if (el && el.requestFullscreen) el.requestFullscreen().catch(() => {}); } break;
-    case 'ws-back': view = { name: view.from || 'library', setId: view.setId, folder: view.folder || 'mine' }; ui = {}; render(); break;
+    case 'tool-full': { const el = document.documentElement; if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else if (el.requestFullscreen) el.requestFullscreen().catch(() => {}); } break;
+    case 'ws-back': cqStop(); view = { name: view.from || 'library', setId: view.setId, folder: view.folder || 'mine' }; ui = {}; render(); break;
     case 'ws-kind': ui.ws.kind = t.dataset.kind; ui.ws.count = ''; render(); break;
     case 'ws-seed': ui.ws.seed = wsSeed(); render(); break;
     case 'ws-print': wsPrint(); break;
@@ -1430,6 +1527,12 @@ app.addEventListener('change', e => {
 
 document.addEventListener('keydown', e => {
   if (e.key === '?' && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '') && !LB.tour.open() && TOURS[view.name]) { e.preventDefault(); LB.tour.start(TOURS[view.name]()); return; }
+  if (view.name === 'tools' && ui.tool === 'class' && ui.cq && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) {
+    const c = ui.cq;
+    if (c.phase === 'think' && /^[1-4]$/.test(e.key) && +e.key <= c.perm.length && !c.gone.includes(+e.key - 1)) { e.preventDefault(); c.pick = +e.key - 1; render(); }
+    else if (e.key === 'Enter' && (document.activeElement || {}).tagName !== 'BUTTON') { e.preventDefault(); if (c.phase === 'think') cqLock(); else if (c.phase === 'reveal') cqNext(); }
+    return;
+  }
   if (view.name !== 'play' || !game) return;
   const tag = document.activeElement && document.activeElement.tagName;
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;

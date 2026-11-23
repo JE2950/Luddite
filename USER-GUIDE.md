@@ -116,6 +116,14 @@ These two game modes are paced by you. Everyone gets the same question at once; 
 - **Gameshow quiz:** 20 seconds a question. A right answer scores 500 to 1,000 points, more for answering faster. Every fifth question is a bonus round worth double. Each pupil has three lifelines, once each per game: **50:50** hides two wrong answers, **+10 s** adds time, **Double** doubles that question's points.
 - **Win or lose:** 30 seconds a question. Before the answers appear, each pupil bets 100, 250 or 500 points. Right wins the bet; wrong loses it, never below zero.
 
+## Class quiz (no devices)
+
+For a lesson without devices. Open a set and click **📺 Class quiz**. Choose how many questions, how long the boys get to think (or no timer) and whether to use lifelines, then click **Start the quiz**.
+
+Each question goes up on the board with four coloured answers. The boys write their answer on whiteboards; when the timer runs out the board says **Boards up!** Agree the class answer, click it (or press 1 to 4), then click **Lock in the class's answer** (or press Enter). The board shows whether the class got it right. Press Enter again for the next question.
+
+A right answer scores 1,000. Every fifth question is a bonus round worth double. The class has three lifelines, once each: **50:50** hides two wrong answers, **+15 s** adds thinking time, **Double** doubles that question's points. At the end the board shows the score and the questions the class got wrong; **Play the ones we got wrong** runs a quick quiz on just those. **⛶ Full screen** fills the projector; press Esc to leave it.
+
 ## Spin the wheel and Open the box
 
 Open a set and click **🎡 Wheel and boxes** to pick questions for the class on the projector. **Wheel** spins to a random question; **Show the answer** reveals it, and that question comes off the wheel. **Boxes** shows a numbered box for each question; click one to open it. **⛶ Full screen** fills the projector.
