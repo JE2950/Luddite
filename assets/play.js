@@ -53,8 +53,8 @@ async function join(code, name) {
       try { if (!LB.kx.validPub(m.hpub)) throw 0; chan = await LB.kx.secret(k.priv, m.hpub, code); } catch (e) { return; }
       if (settled) return;
       settled = true; clearTimeout(t); sb.removeChannel(lobby);
-      // A Le Petit Bistro game: hand the pupil's channel to the bistro page
-      if (m.game === 'bistro') { store.set(window.APP.storagePrefix + '.bistro', { code, chan, name: m.name, at: Date.now() }); location.href = 'bistro/#play'; return; }
+      // A game page (Le Petit Bistro, Officina Scribarum): hand the pupil's channel to that page
+      if (m.game === 'bistro' || m.game === 'officina') { store.set(window.APP.storagePrefix + '.' + m.game, { code, chan, name: m.name, at: Date.now() }); location.href = m.game + '/#play'; return; }
       S.chan = chan; S.name = m.name;
       store.set(SESSION, { code, chan, name: m.name, at: Date.now() });
       connect();

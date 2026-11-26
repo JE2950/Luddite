@@ -206,6 +206,16 @@ A French game that runs on the same site and the same join system as the quizzes
 - **Solo and tutorials:** anyone with the link can play Service classique or Mode arcade on one device, and each mode has a step-by-step tutorial. No sign-in needed.
 - **Class games:** on the Mode arcade screen, click **Ouvrir une partie de classe**. This needs a Ludus teacher sign-in, like hosting a quiz. Pupils join at playludus.co.uk with the code and their first name (or scan the QR code), and Ludus sends them to the bistro.
   - **Brigades:** the whole class. Each pupil runs a kitchen on their own device (Mode arcade or Service classique) and their team's takings add up on the board. Choose the team size and the length.
-  - **Cuisine partagée:** up to 4 chefs share one kitchen across their devices, with the kitchen shown on the board.
+  - **Cuisines partagées:** the class splits into kitchens of 2 to 4 chefs. Each kitchen shares one map across its chefs' devices, every kitchen shows on the board, and the board ranks them at the end. Four teams of three works well.
 - Music plays from the board only. Pupils hear their own customers' orders on their device.
-- The free Supabase plan allows 100 live messages a second. Brigades uses about 10 for a class of 30, and a shared kitchen about 30, so you can run one class game at a time comfortably.
+- Live traffic: the Supabase Pro plan allows 500 live messages a second. Brigades uses about 10 for a class of 30, and each shared kitchen about 30, so a class of 30 in shared kitchens of three (10 kitchens) uses about 300. Keep the board's tab open while a game runs.
+
+## Officina Scribarum (Latin scribes' workshop)
+
+The Latin partner to the bistro, built on the CE Level 1 sentences, grammar tables and vocabulary from Fuga Romana. Open it from **Games → Officina Scribarum**, or share **playludus.co.uk/officina**.
+
+- **Officium (desk):** citizens queue at the scribe's desk. Translate a sentence, choose the right form to fill a gap, parse a highlighted word, or put scrambled Latin back in order. A wrong answer shows the correct one with the English.
+- **Officina (arcade):** messages arrive in English at the top. Take a wax tablet, collect the right Latin words from the shelves (some shelves hold wrong forms), seal the tablet on a seal desk and hand it to the messenger.
+- **Gradus:** Ch 2–22, Ch 2–46 or the whole of Level 1. The board on the right shows the grammar table for each topic in play.
+- Each mode has a tutorial. Class games work as in the bistro (Turmae and shared workshops), with the same sign-in and join code.
+- Text only: no Latin audio. Music uses the Ludus Latin tracks.
