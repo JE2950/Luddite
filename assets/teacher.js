@@ -30,6 +30,8 @@ let hasTags = true;         // false until the tags column exists in the databas
 let isAdmin = false;        // can add teachers and set passwords
 let folders = [];
 let sets = [];
+let assignments = [];       // this teacher's assignments and revision folders
+let hasAssign = true;       // false until supabase/assignments.sql has been run
 let view = { name: 'library', folder: 'mine' };
 let ui = {};
 let game = null;
@@ -38,7 +40,10 @@ const mkQ = (q = '', answers = ['', '', '', ''], correct = 0) => ({ id: uid(), q
 const getSet = id => sets.find(s => s.id === id);
 const mine = s => me && s.owner === me.id;
 const folderName = id => (folders.find(f => f.id === id) || {}).name || 'Unfiled';
-const validQ = q => q.q.trim() && q.answers.filter(a => String(a).trim()).length >= 2 && String(q.answers[q.correct] ?? '').trim();
+const hasDupes = q => { const ks = q.answers.map(a => String(a).trim().toLowerCase()).filter(Boolean); return new Set(ks).size < ks.length; };
+const validQ = q => LB.validQ(q);
+const ansIn = a => LB.asAnswer(a);    // an image address pasted as an answer becomes a picture
+const qIn = (text, q) => { const t = String(text || '').trim(); if (/^(img:)?https:\/\/\S+\.(png|jpe?g|gif|webp|svg)(\?\S*)?$/i.test(t)) { q.image = t.replace(/^img:/i, ''); q.q = ''; } return q; };
 const ownerLabel = s => (s.owner_email || '').split('@')[0] || 'a teacher';
 
 /* ---------- feedback ---------- */
@@ -80,7 +85,7 @@ async function flushSave(set) {
 }
 function saveRow(set) {
   return sb.from('sets')
-    .update(hasTags ? { title: set.title, folder_id: set.folder_id, questions: set.questions, tags: set.tags || [] } : { title: set.title, folder_id: set.folder_id, questions: set.questions })
+    .update(hasTags ? { title: set.title, folder_id: set.folder_id, questions: set.questions, tags: set.tags || [], subject: set.subject || null } : { title: set.title, folder_id: set.folder_id, questions: set.questions })
     .eq('id', set.id);
 }
 async function flushAll() {
@@ -102,6 +107,7 @@ window.addEventListener('load', () => typeset(app));
 function renderSignIn(msg) {
   app.innerHTML = `<div class="gate"><form class="gate-card" id="signin">
     ${window.APP.logo()}
+    ${window.APP.schoolLine()}
     <h1 style="font-size:24px">Teacher sign-in</h1>
     <div class="field"><label for="email">School email</label><input class="in" id="email" type="email" autocomplete="username" required></div>
     <div class="field"><label for="password">Password</label><input class="in" id="password" type="password" autocomplete="current-password" required></div>
@@ -164,6 +170,8 @@ async function loadLibrary() {
   folders = f.data;
   sb.from('admins').select('user_id').eq('user_id', me.id).maybeSingle().then(r => { isAdmin = !!(r && r.data); if (isAdmin && view.name !== 'play') render(); }, () => {});
   hasTags = s.data.length ? 'tags' in s.data[0] : hasTags;
+  const asg = await sb.from('assignments').select('*').order('created_at', { ascending: false });
+  hasAssign = !asg.error; assignments = asg.error ? [] : asg.data;
   sets = s.data.map(x => ({ ...x, questions: Array.isArray(x.questions) ? x.questions : [], tags: Array.isArray(x.tags) ? x.tags : [] }));
   render();
 }
@@ -174,7 +182,7 @@ function header() {
     ${window.APP.logo()}
     <span class="chip">Teacher</span>
     <span class="saved" id="saved">Saved</span>
-    <span class="who">${esc(me.email)}${isAdmin ? ' <button class="btn small ghost" data-act="admin">Teachers</button>' : ''} <button class="btn small ghost" data-act="account">Password</button> <button class="btn small ghost" data-act="sign-out">Sign out</button></span>
+    <span class="who">${hasAssign ? `<button class="btn small ${['assignments', 'assignment'].includes(view.name) ? '' : 'ghost'}" data-act="assignments">Assignments${assignments.length ? ` (${assignments.length})` : ''}</button>` : ''} ${esc(me.email)}${isAdmin ? ' <button class="btn small ghost" data-act="admin">Teachers</button>' : ''} <button class="btn small ghost" data-act="account">Password</button> <button class="btn small ghost" data-act="sign-out">Sign out</button> ${LB.helpButton('Show me round this page (?)')}${cfg.plain ? ' <button class="btn small" data-act="ludgrovify" title="Bring back the Ludgrove name and crest">Ludgrove-ify</button>' : ' <button class="hush" data-act="unlock" tabindex="-1" aria-hidden="true">?</button>'}</span>
   </header>`;
 }
 function render() {
@@ -184,16 +192,60 @@ function render() {
   else if (view.name === 'view') app.innerHTML = `<div class="wrap">${header()}${renderView()}</div>`;
   else if (view.name === 'account') app.innerHTML = `<div class="wrap">${header()}${renderAccount()}</div>`;
   else if (view.name === 'admin') app.innerHTML = `<div class="wrap">${header()}${renderAdmin()}</div>`;
-  else if (view.name === 'play') app.innerHTML = `<div class="wrap">${renderPlay()}</div>`;
+  else if (view.name === 'assignments') app.innerHTML = `<div class="wrap">${header()}${renderAssignments()}</div>`;
+  else if (view.name === 'assignment') app.innerHTML = `<div class="wrap">${header()}${renderAssignment()}</div>`;
+  else if (view.name === 'assign-new') app.innerHTML = `<div class="wrap">${header()}${renderAssignNew()}</div>`;
+  else if (view.name === 'play') app.innerHTML = `<div class="wrap play">${renderPlay()}</div>`;
+  else if (view.name === 'worksheet') app.innerHTML = `<div class="wrap">${header()}${renderWorksheet()}</div>`;
+  else if (view.name === 'tools') app.innerHTML = `<div class="wrap">${header()}${renderTools()}</div>`;
   typeset(app);
+  if (view.name === 'worksheet') wsPreview();
+  if (view.name === 'tools') toolsDraw();
   const f = app.querySelector('[data-autofocus]'); if (f) f.focus();
 }
 
-/* ---------- library ---------- */
+/* ---------- guided tours, one per page (the ? button) ---------- */
+const TOURS = {
+  library: () => [
+    { sel: '.rail', title: 'Your library', text: 'My sets holds everything you have made. Unfiled is anything not yet in a folder. Other teachers’ sets lets you play or copy what colleagues have made. Your own folders sit underneath; + New folder adds one.' },
+    { sel: '#search', title: 'Find a set', text: 'Type part of a name or a tag. A subject works too: type Latin, French, Geography or History. In Other teachers’ sets you can also search by teacher.' },
+    { sel: '[data-act="new-set"]', title: 'Make a set', text: 'Opens an empty set in the editor. Type questions in, or paste them from Excel or Quizlet. It saves as you go.' },
+    { sel: '.card', title: 'Each set', text: 'Host live game runs it on the board with the class joining on their laptops. Play solo tries it yourself. Assign gives pupils a code to play it on their own. The coloured label shows the subject, which sets the look, music, runners and treasures.' },
+    { sel: '[data-act="assignments"]', title: 'Assignments', text: 'Every code you have handed out, with each pupil’s plays, scores and the questions they keep getting wrong. Open a folder and use Share for revision to give pupils a choice of sets.' },
+    { sel: '[data-act="help"]', title: 'Help on every page', text: 'Each page has its own short tour. Press this button, or the ? key, whenever you want it again. Arrow keys move through it and Esc closes it.' }
+  ],
+  edit: () => [
+    { sel: '#set-title', title: 'Name the set', text: 'Pupils see this name on the board and in revision folders.' },
+    { sel: '#set-subject', title: 'Subject', text: 'Latin, French, Geography or History gives the game that subject’s look, music, runners and fishing treasures. Leave it on the first option and Ludus works the subject out from the questions. None keeps the Ludgrove look.' },
+    { sel: '.q', title: 'A question', text: 'Type the question, then two to four answers. The round button marks the right one. If two answers are the same, a warning appears, because pupils would only see one of them.' },
+    { sel: '.q-pic, .pic-btn', title: 'Pictures', text: 'Add a picture to the question, or press the picture button beside an answer to make that answer a picture. Pasting a picture’s web address into an answer box does the same. Use it for flags, maps and diagrams.' },
+    { sel: '[data-act="toggle-import"]', title: 'Import questions', text: 'Paste rows from Excel, paste a Quizlet export, or upload a spreadsheet. With Quizlet you choose which way round the questions go, and cards that share a word are combined so no wrong answer is ever another right one.' },
+    { sel: '[data-act="ask-swap"]', title: 'Swap questions and answers', text: 'Turns the whole set round: each right answer becomes the question and the question becomes its answer. Run it again to swap back.' },
+    { sel: '[data-act="worksheet"]', title: 'Worksheets', text: 'Prints this set as a match up, crossword, gap fill, word search, anagrams or multiple choice sheet, with the answers on a separate page.' },
+    { sel: '.q-prev', title: 'What pupils see', text: 'A preview of the question as it will look on a pupil’s screen, with the right answer marked.' },
+    { sel: '[data-act="host-link"], [data-act="play"]', title: 'Use it', text: 'Host live game runs it with the class. Play solo lets you try it first.' }
+  ],
+  worksheet: () => [
+    { sel: '.ws-kinds', title: 'Kind of sheet', text: 'Pick one. The preview changes straight away. Crosswords and word searches need answers made of letters, so questions with picture or number answers are left out of those.' },
+    { sel: '#ws-count', title: 'How many', text: 'Choose how many questions go on the sheet. If you choose fewer than the set has, they are picked at random.' },
+    { sel: '#ws-dir', title: 'Which way round', text: 'Each option shows a pair from this set, so you can see which word is the clue and which the pupils write. Sheets start English into Latin for a usual vocab set. Only single words are written, and an entry such as “rēx, rēgis” uses its first word.' },
+    { sel: '[data-act="ws-seed"]', title: 'New layout', text: 'Shuffles the order, the grid and the questions picked. What you see in the preview is what prints.' },
+    { sel: '[data-act="ws-print"]', title: 'Print', text: 'Prints the sheet, with the answers on the next page if that box is ticked. Choose Save as PDF in the print box to keep a copy.' }
+  ],
+  assignments: () => [
+    { sel: '.tbl, .empty', title: 'Your codes', text: 'Each row is a code pupils use to play on their own. Click a title to see the results. To make a new one, click Assign on a set, or open a folder and click Share for revision.' }
+  ],
+  assignment: () => [
+    { sel: '.join-banner', title: 'How pupils get in', text: 'Pupils go to the address, type the code, then their first name and the first letter of their surname. Scanning the QR code fills the code in for them.' },
+    { sel: '[data-act="print-card"]', title: 'Print it', text: 'Print poster gives one large sheet for the wall. Print slips gives eight small ones to a page to cut up and hand out. Both take on the set’s subject design.' },
+    { sel: '.tbl', title: 'Results', text: 'One row per pupil: plays, best score, accuracy and how many questions they still get wrong. Click a name to see those questions.' },
+    { sel: '[data-act="toggle-open"]', title: 'Close or reopen', text: 'Closing stops new plays on this code and keeps the results. Delete removes the code and every saved play.' }
+  ]
+};
 function matches(s, q) {
   if (!q) return true;
   q = q.toLowerCase().replace(/^#/, '');
-  return (s.title || '').toLowerCase().includes(q) || (s.tags || []).some(t => t.toLowerCase().includes(q)) || (!mine(s) && ownerLabel(s).toLowerCase().includes(q));
+  return (s.title || '').toLowerCase().includes(q) || THEME.label(THEME.subjectFor(s)).toLowerCase() === q || (s.tags || []).some(t => t.toLowerCase().includes(q)) || (!mine(s) && ownerLabel(s).toLowerCase().includes(q));
 }
 function setsIn(f) {
   if (f === 'mine') return sets.filter(mine);
@@ -214,6 +266,7 @@ function renderLibrary() {
   rail += ui.newFolder
     ? `<form class="inline-form" data-form="new-folder"><label class="sr" for="new-folder-name">Folder name</label><input id="new-folder-name" placeholder="e.g. Year 8 set 4" data-autofocus maxlength="60"><button class="btn small primary">Add</button></form>`
     : `<button class="btn ghost small" data-act="new-folder" style="justify-content:flex-start">+ New folder</button>`;
+  rail += `<h3>Games</h3><a class="fold" style="text-decoration:none;color:inherit" href="bistro/" title="A French restaurant game: solo, tutorials and class games"><span class="lbl">🥖 Le Petit Bistro</span></a>`;
   rail += `</nav>`;
 
   let head = `<div class="main-head"><div>`;
@@ -222,6 +275,7 @@ function renderLibrary() {
   } else head += `<h1>${esc(curName)}</h1>`;
   head += `<p>${f === 'school' ? 'View or play any set, or copy it into your own sets to edit it.' : `${list.length} ${list.length === 1 ? 'set' : 'sets'}${ui.search ? ' matching your search' : ''}`}</p></div><div class="head-acts">`;
   head += `<label class="sr" for="search">Search sets</label><input class="in search" id="search" type="search" placeholder="${f === 'school' ? 'Search by name, tag or teacher' : 'Search by name or tag'}" value="${esc(ui.search || '')}">`;
+  if (isFolder && ui.renaming !== f && hasAssign) head += `<button class="btn small" data-act="assign-new" data-folder="${f}">Share for revision</button>`;
   if (isFolder && ui.renaming !== f) head += `<button class="btn small ghost" data-act="rename-folder">Rename</button><button class="btn small ghost danger" data-act="ask-del-folder">Delete folder</button>`;
   if (f !== 'school') head += `<button class="btn primary" data-act="new-set">+ New set</button>`;
   head += `</div></div>`;
@@ -245,6 +299,7 @@ function cardHTML(s) {
   let acts;
   if (ui.confirmSet === s.id) acts = `<div class="confirm">Delete this set for good? <button class="btn small danger" data-act="del-set" data-id="${s.id}">Delete</button><button class="btn small ghost" data-act="cancel">Keep</button></div>`;
   else acts = `<div class="acts">${ok ? `<a class="btn small primary" href="host.html?set=${encodeURIComponent(s.id)}">Host live game</a>` : '<button class="btn small primary" disabled>Host live game</button>'}<button class="btn small" data-act="play" data-id="${s.id}" ${ok ? '' : 'disabled'}>▶ Play solo</button>`
+    + (hasAssign && ok ? `<button class="btn small" data-act="assign-new" data-id="${s.id}">Assign</button>` : '')
     + `<button class="btn small" data-act="view" data-id="${s.id}">View</button>`
     + (own ? `<button class="btn small" data-act="edit" data-id="${s.id}">Edit</button>` : '')
     + `</div><div class="acts minor"><button class="btn small ghost" data-act="dup" data-id="${s.id}">${own ? 'Duplicate' : 'Copy to my sets'}</button>`
@@ -260,7 +315,8 @@ function cardHTML(s) {
   </article>`;
 }
 
-const tagsHTML = s => (s.tags && s.tags.length) ? `<div class="tags">${s.tags.map(t => `<button class="tag-chip" data-act="tag" data-tag="${esc(t)}" title="Show sets tagged ${esc(t)}">${esc(t)}</button>`).join('')}</div>` : '';
+const subjChip = s => { const k = THEME.subjectFor(s); return k ? `<button class="tag-chip subj subj-${k}" data-act="tag" data-tag="${esc(THEME.label(k))}" title="Show ${esc(THEME.label(k))} sets">${esc(THEME.label(k))}</button>` : ''; };
+const tagsHTML = s => ((s.tags && s.tags.length) || THEME.subjectFor(s)) ? `<div class="tags">${subjChip(s)}${(s.tags || []).map(t => `<button class="tag-chip" data-act="tag" data-tag="${esc(t)}" title="Show sets tagged ${esc(t)}">${esc(t)}</button>`).join('')}</div>` : '';
 
 /* ---------- change password ---------- */
 function renderAccount() {
@@ -296,7 +352,8 @@ async function adminCall(body) {
   }
   return data || {};
 }
-const tempPassword = () => { const w = ['maple','harbour','comet','pebble','lantern','orbit','meadow','falcon','tulip','quartz','ember','glacier']; const a = new Uint32Array(3); crypto.getRandomValues(a); return w[a[0] % w.length] + '-' + w[a[1] % w.length] + '-' + (10 + a[2] % 90); };
+/* Starting passwords pass any Supabase strength rule: capital, small letters, digits and a symbol */
+const tempPassword = () => { const w = ['Maple','Harbour','Comet','Pebble','Lantern','Orbit','Meadow','Falcon','Tulip','Quartz','Ember','Glacier']; const a = new Uint32Array(3); crypto.getRandomValues(a); return w[a[0] % w.length] + '-' + w[a[1] % w.length].toLowerCase() + '-' + (10 + a[2] % 90); };
 async function loadTeachers() {
   ui.teachers = null; ui.adminErr = ''; render();
   const r = await adminCall({ action: 'list' });
@@ -308,24 +365,411 @@ function renderAdmin() {
   const fmtD = d => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Never';
   return `<div class="toolbar"><button class="btn ghost small" data-act="back">← All sets</button></div>
   <div class="main-head"><div><h1>Teachers</h1><p>Add colleagues, and set a new password if someone is locked out.</p></div></div>
-  ${ui.adminNote ? `<div class="ro note-ok" role="status">${ui.adminNote}</div>` : ''}
-  ${ui.adminErr ? `<div class="confirm" role="alert">${esc(ui.adminErr)}</div>` : ''}
   <form class="panel-form wide" id="add-teacher">
     <h2>Add a teacher</h2>
     <div class="ed-row">
-      <div class="field" style="flex:2;min-width:220px"><label for="new-email">School email</label><input class="in" id="new-email" type="email" required style="width:100%"></div>
+      <div class="field" style="flex:2;min-width:220px"><label for="new-email">School email</label><input class="in" id="new-email" type="email" required style="width:100%" value="${esc(ui.newEmail || '')}"></div>
       <div class="field" style="flex:1;min-width:180px"><label for="new-pw">Starting password</label><input class="in mono-in" id="new-pw" value="${esc(ui.newPw || (ui.newPw = tempPassword()))}" minlength="8" required style="width:100%"></div>
       <button class="btn primary" id="add-btn">Add teacher</button>
     </div>
+    ${ui.adminErr ? `<div class="admin-msg bad" role="alert"><b>That didn’t work.</b> ${esc(ui.adminErr)}</div>` : ''}
+    ${ui.adminNote ? `<div class="admin-msg good" role="status">${ui.adminNote}</div>` : ''}
     <p class="hint" style="margin:0">Give them the email and starting password. They can change it under <b>Password</b> once signed in.</p>
   </form>
   ${t == null && !ui.adminErr ? '<div class="loading">Loading teachers…</div>' : ''}
-  ${t ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Email</th><th>Added</th><th>Last signed in</th><th></th></tr></thead><tbody>
-    ${t.map(u => `<tr><td>${esc(u.email)}${u.you ? ' <span class="chip">You</span>' : ''}${u.admin ? ' <span class="chip">Admin</span>' : ''}</td><td>${fmtD(u.created_at)}</td><td>${fmtD(u.last_sign_in_at)}</td>
+  ${t == null && ui.adminErr ? '<p class="hint">The list of teachers couldn’t load. The reason is in the box above.</p>' : ''}
+  ${t ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Email</th><th>Role</th><th>Added</th><th>Last signed in</th><th></th></tr></thead><tbody>
+    ${t.map(u => `<tr><td>${esc(u.email)}${u.you ? ' <span class="chip">You</span>' : ''}</td><td>${u.admin ? '<span class="chip chip-admin">Admin</span>' : 'Teacher'}</td><td>${fmtD(u.created_at)}</td><td>${fmtD(u.last_sign_in_at)}</td>
       <td style="text-align:right">${ui.removing === u.id
         ? `<span class="confirm">Remove ${esc(u.email)}? Their sets and folders are deleted too. <button class="btn small danger" data-act="admin-remove" data-id="${u.id}">Remove</button><button class="btn small ghost" data-act="admin-cancel">Keep</button></span>`
         : `<button class="btn small" data-act="admin-pw" data-id="${u.id}" data-email="${esc(u.email)}">Set new password</button>${u.you ? '' : ` <button class="btn small ghost danger" data-act="admin-ask-remove" data-id="${u.id}">Remove</button>`}`}</td></tr>`).join('')}
   </tbody></table></div>` : ''}`;
+}
+
+/* ---------- assignments and revision folders ---------- */
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no I, O, 0 or 1, so codes read clearly
+const newCode = () => { const a = new Uint32Array(5); crypto.getRandomValues(a); return Array.from(a, n => CODE_CHARS[n % CODE_CHARS.length]).join(''); };
+const pupilLink = a => cfg.joinUrl + '?a=' + a.code + cfg.plainParam();
+const asgTarget = a => a.set_id ? (getSet(a.set_id) || { title: 'A deleted set', questions: [] }) : { title: folderName(a.folder_id) };
+const asgSets = a => a.set_id ? [getSet(a.set_id)].filter(Boolean) : sets.filter(s => s.folder_id === a.folder_id && mine(s));
+const fmtDay = d => new Date(d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const qrSVG = (text, cell = 4) => { try { const q = window.qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: cell, margin: 0, scalable: true }); } catch (e) { return ''; } };
+
+function renderAssignNew() {
+  const set = view.setId && getSet(view.setId), isFolder = !!view.folderId;
+  const name = isFolder ? folderName(view.folderId) : (set && set.title) || 'Untitled set';
+  const n = isFolder ? sets.filter(s => s.folder_id === view.folderId && mine(s)).length : 0;
+  return `<div class="toolbar"><button class="btn ghost small" data-act="back">← All sets</button></div>
+  <form class="panel-form wide" id="assign-form">
+    <h1>${isFolder ? 'Share a folder for revision' : 'Set an assignment'}</h1>
+    <p class="hint" style="margin:0">${isFolder ? `Pupils choose from the ${n} ${n === 1 ? 'set' : 'sets'} in <b>${esc(name)}</b>, including any you add later, and replay them as often as they like.` : `Pupils play <b>${esc(name)}</b> on their own, as often as they like.`} They sign in with a code and their first name and surname initial. Every play is saved for you to see.</p>
+    <div class="ed-row">
+      <div class="field" style="flex:2;min-width:220px"><label for="as-title">Title pupils see</label><input class="in" id="as-title" maxlength="80" value="${esc(isFolder && !/revision/i.test(name) ? name + ' revision' : name)}" style="width:100%"></div>
+      <div class="field"><label for="as-mode">Mode</label><select id="as-mode"><option value="classic">${esc(window.APP.modes.classic)}</option><option value="fishing">${esc(window.APP.modes.fishing)}</option></select></div>
+      <div class="field"><label for="as-min">Each round</label><select id="as-min">${[3, 5, 10, 15, 0].map(m => `<option value="${m}" ${m === 5 ? 'selected' : ''}>${m ? m + ' minutes' : 'Until they finish'}</option>`).join('')}</select></div>
+      <div class="field"><label for="as-due">Due (optional)</label><input class="in" id="as-due" type="date"></div>
+    </div>
+    <p class="err" id="as-err"></p>
+    <div class="ed-row"><button class="btn primary" id="as-btn">Create code</button></div>
+  </form>`;
+}
+async function createAssignment() {
+  const btn = document.getElementById('as-btn'), err = document.getElementById('as-err');
+  btn.disabled = true; btn.textContent = 'Creating…';
+  const due = document.getElementById('as-due').value;
+  const row = { title: document.getElementById('as-title').value.trim(), mode: document.getElementById('as-mode').value, minutes: +document.getElementById('as-min').value,
+    due_at: due ? new Date(due + 'T18:00:00').toISOString() : null, set_id: view.setId || null, folder_id: view.folderId || null };
+  for (let i = 0; i < 5; i++) {
+    const { data, error } = await sb.from('assignments').insert({ ...row, code: newCode() }).select('*').single();
+    if (!error) { assignments.unshift(data); view = { name: 'assignment', id: data.id }; ui = {}; render(); loadResults(); return; }
+    if (!/duplicate|unique/i.test(error.message)) { console.error(error); err.textContent = 'Couldn’t create the code. Check your connection and try again.'; break; }
+  }
+  btn.disabled = false; btn.textContent = 'Create code';
+}
+
+function renderAssignments() {
+  return `<div class="toolbar"><button class="btn ghost small" data-act="back">← All sets</button></div>
+  <div class="main-head"><div><h1>Assignments</h1><p>Codes pupils use to play on their own. To make one, click <b>Assign</b> on a set, or open a folder and click <b>Share for revision</b>.</p></div></div>
+  ${assignments.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Title</th><th>Code</th><th>What</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody>
+    ${assignments.map(a => `<tr><td><button class="title-link" data-act="assignment" data-id="${a.id}"><b>${esc(a.title || asgTarget(a).title)}</b></button></td>
+      <td class="num"><b>${esc(a.code)}</b></td><td>${a.set_id ? 'Set: ' : 'Revision folder: '}${esc(asgTarget(a).title || 'Untitled set')}</td>
+      <td>${a.due_at ? fmtDay(a.due_at) : '<span class="hint">–</span>'}</td><td>${a.open ? 'Open' : '<span class="hint">Closed</span>'}</td>
+      <td style="text-align:right"><button class="btn small" data-act="assignment" data-id="${a.id}">Results</button></td></tr>`).join('')}
+  </tbody></table></div>` : '<div class="empty"><h2>No assignments yet</h2><p>Click <b>Assign</b> on any set to make one.</p></div>'}`;
+}
+
+/* Results: one row per pupil, built from every play on this code */
+function pupilSummaries(a) {
+  const by = new Map();
+  (ui.attempts || []).forEach(t => {
+    const key = t.pupil.toLowerCase();
+    const p = by.get(key) || { name: t.pupil, plays: 0, best: 0, answered: 0, correct: 0, last: null, per: new Map() };
+    p.plays++; p.best = Math.max(p.best, Number(t.score) || 0); p.answered += t.answered; p.correct += t.correct;
+    if (!p.last || t.updated_at > p.last) p.last = t.updated_at;
+    (t.log || []).forEach(e => { const k = t.set_id + '|' + e.qid; const r = p.per.get(k) || { set_id: t.set_id, qid: e.qid, seen: 0, right: 0, wrong: 0, wrongs: [], last: null }; r.seen++; if (e.right) r.right++; else { r.wrong++; r.wrongs.push(e.choice); } r.last = e.right; p.per.set(k, r); });
+    by.set(key, p);
+  });
+  return [...by.values()].sort((x, y) => x.name.localeCompare(y.name));
+}
+const qFor = (setId, qid) => { const s = getSet(setId); return s && s.questions.find(q => q.id === qid); };
+function renderAssignment() {
+  const a = assignments.find(x => x.id === view.id);
+  if (!a) { view = { name: 'assignments' }; return renderAssignments(); }
+  const link = pupilLink(a), ps = pupilSummaries(a), fish = a.mode === 'fishing';
+  const rows = ps.map(p => {
+    const weak = [...p.per.values()].filter(r => r.wrong > 0 && r.wrong >= r.right);
+    const open = ui.openPupil === p.name.toLowerCase();
+    return `<tr><td><button class="title-link" data-act="pupil-row" data-name="${esc(p.name.toLowerCase())}"><b>${esc(p.name)}</b></button></td><td class="num">${p.plays}</td>
+      <td class="num">${fish ? LB_fmtKg(p.best) : p.best.toLocaleString('en-GB')}</td><td class="num">${p.correct}/${p.answered}</td>
+      <td class="num">${p.answered ? Math.round(100 * p.correct / p.answered) + '%' : '–'}</td><td class="num">${weak.length}</td><td>${p.last ? fmtDay(p.last) : ''}</td></tr>
+      ${open ? `<tr><td colspan="7" style="background:var(--sunk)">${weak.length ? `<b>Questions to practise</b><ul style="margin:6px 0 0;padding-left:20px">${weak.map(r => { const q = qFor(r.set_id, r.qid); return q ? `<li>${esc(LB.qText(q))}: <span class="hint">right ${r.right}, wrong ${r.wrong}; answer ${LB.ansHTML(q.answers[q.correct])}${r.wrongs.length ? `; put ${[...new Set(r.wrongs)].map(i => LB.ansHTML(LB.said(q, i))).join(', ')}` : ''}</span></li>` : ''; }).join('')}</ul>` : 'No weak questions.'}</td></tr>` : ''}`;
+  }).join('');
+  return `<div class="toolbar"><button class="btn ghost small" data-act="assignments">← Assignments</button></div>
+  <div class="main-head"><div><span class="qlabel">${a.set_id ? 'Assignment' : 'Revision folder'} · ${esc(asgTarget(a).title || 'Untitled set')}${a.due_at ? ' · due ' + fmtDay(a.due_at) : ''}</span><h1>${esc(a.title || asgTarget(a).title)}</h1></div>
+    <div class="head-acts"><button class="btn" data-act="print-card" data-id="${a.id}">Print poster</button><button class="btn" data-act="print-slips" data-id="${a.id}">Print slips</button>
+      <button class="btn" data-act="toggle-open" data-id="${a.id}">${a.open ? 'Close' : 'Reopen'}</button><button class="btn ghost danger" data-act="ask-del-asg">Delete</button></div></div>
+  ${ui.confirmAsg ? `<div class="confirm" style="margin-bottom:16px">Delete this code and all ${(ui.attempts || []).length} saved plays? <button class="btn small danger" data-act="del-asg" data-id="${a.id}">Delete</button><button class="btn small ghost" data-act="cancel-asg">Keep</button></div>` : ''}
+  <section class="join-banner" style="margin-bottom:20px">
+    <div><span class="qlabel">Go to</span><div class="join-url">${esc(cfg.joinAddress)}</div></div>
+    <div><span class="qlabel">Code</span><div class="join-code">${esc(a.code)}</div></div>
+    <div><span class="qlabel">Or scan</span><div class="join-qr">${qrSVG(link)}</div></div>
+  </section>
+  <p class="hint">Direct link: <a href="${esc(link)}" target="_blank" rel="noopener">${esc(link)}</a> ${a.open ? '' : '· <b>Closed:</b> pupils can’t open this code until you reopen it.'}</p>
+  <div class="main-head" style="margin-top:24px"><div><h2 style="font-size:24px">Results</h2><p>${ui.attempts == null ? 'Loading…' : `${ps.length} ${ps.length === 1 ? 'pupil' : 'pupils'}, ${ui.attempts.length} ${ui.attempts.length === 1 ? 'play' : 'plays'}. Click a name to see the questions he keeps getting wrong.`}</p></div>
+    <div class="head-acts"><button class="btn small" data-act="refresh-results">Refresh</button><button class="btn small primary" data-act="asg-csv" ${ps.length ? '' : 'disabled'}>⇩ Pupil weaknesses (CSV)</button></div></div>
+  ${ps.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Pupil</th><th>Plays</th><th>Best</th><th>Correct</th><th>Accuracy</th><th>To practise</th><th>Last played</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : ui.attempts ? '<div class="empty"><h2>No plays yet</h2><p>Results appear here as pupils play. Click Refresh to check.</p></div>' : ''}`;
+}
+const LB_fmtKg = kg => (Math.round(kg * 10) / 10).toLocaleString('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kg';
+async function loadResults() {
+  ui.attempts = null; render();
+  const { data, error } = await sb.from('attempts').select('id,set_id,pupil,score,answered,correct,best_streak,log,finished,started_at,updated_at').eq('assignment_id', view.id).order('started_at');
+  ui.attempts = error ? [] : data;
+  if (error) toast('Couldn’t load the results. Check your connection.', true);
+  if (view.name === 'assignment') render();
+}
+function assignmentCSV(a) {
+  const cols = ['Last played', 'Assignment', 'Set', 'Subject', 'Pupil', 'Question', 'Correct answer', 'Times asked', 'Times right', 'Times wrong', 'Result', 'Last attempt', 'Weakness', 'Their wrong answers'];
+  const lastBy = new Map(); (ui.attempts || []).forEach(t => { const k = t.pupil.toLowerCase(); if (!lastBy.has(k) || t.updated_at > lastBy.get(k)) lastBy.set(k, t.updated_at); });
+  const rows = [];
+  pupilSummaries(a).forEach(p => [...p.per.values()].forEach(r => {
+    const q = qFor(r.set_id, r.qid), s = getSet(r.set_id); if (!q) return;
+    rows.push([String(lastBy.get(p.name.toLowerCase()) || '').slice(0, 10), a.title, s.title || 'Untitled set', THEME.label(THEME.subjectFor(s)), p.name, LB.qText(q), LB.ansText(q.answers[q.correct]),
+      r.seen, r.right, r.wrong, r.wrong === 0 ? 'Right' : r.right === 0 ? 'Wrong' : 'Mixed', r.last ? 'Right' : 'Wrong', r.wrong > 0 ? 'Yes' : 'No', [...new Set(r.wrongs)].map(i => LB.ansText(LB.said(q, i))).join(' | ')]);
+  }));
+  const cell = v => { v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const csv = '﻿' + [cols.join(','), ...rows.map(r => r.map(cell).join(','))].join('\r\n');
+  const el = document.createElement('a');
+  el.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  el.download = `${cfg.name} - ${(a.title || 'assignment').replace(/[\\/:*?"<>|]/g, '')} - by pupil and question.csv`;
+  document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(el.href), 2000);
+}
+/* Printable poster (one per page) or slips (eight per page) with the QR code, code and address,
+   in the look of the set's subject (Latin, French, Geography, History), or Ludgrove navy for anything else */
+function asgSubject(a) {
+  if (a.set_id) return THEME.subjectFor(getSet(a.set_id) || {});
+  const tally = {}; sets.filter(s => s.folder_id === a.folder_id && mine(s)).forEach(s => { const k = THEME.subjectFor(s); if (k) tally[k] = (tally[k] || 0) + 1; });
+  return Object.keys(tally).sort((x, y) => tally[y] - tally[x])[0] || null;
+}
+const PRINT_LOOK = WS.LOOK;   // the subject print looks live in worksheets.js, shared with the host's weakness sheets
+function printCard(a, slips) {
+  const link = pupilLink(a), title = esc(a.title || asgTarget(a).title || '');
+  const subj = asgSubject(a), L = PRINT_LOOK[subj] || PRINT_LOOK.none;
+  const base = location.href.replace(/[^/]*([?#].*)?$/, '');
+  const crest = !subj && cfg.crest ? `<img class="crest" src="${esc(base + cfg.crest)}" alt="">` : '';
+  const one = big => `<div class="c ${big ? 'big' : ''}">${big ? '<div class="stripe"></div>' : ''}${crest && big ? crest : ''}<div class="logo">${esc(cfg.school || '')} · ${esc(cfg.name)}${subj ? ' · ' + esc(THEME.label(subj)) : ''}</div><h1>${title}</h1>
+    <div class="qr">${qrSVG(link, big ? 8 : 3)}</div>
+    <ol><li>Go to <b>${esc(cfg.joinAddress)}</b></li><li>Type the code <b class="code">${esc(a.code)}</b></li><li>Type your first name and the first letter of your surname</li></ol>
+    ${a.due_at ? `<p class="due">Due ${esc(new Date(a.due_at).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }))}</p>` : ''}</div>`;
+  const w = window.open('', '_blank');
+  if (!w) return toast('Your browser blocked the print window. Allow pop-ups for this site and try again.', true);
+  w.document.write(`<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><title>${title} – ${esc(a.code)}</title><link rel="stylesheet" href="${esc(base)}assets/fonts.css"><style>
+    @page{size:A4;margin:12mm} *{box-sizing:border-box} body{margin:0;font-family:${L.body};color:${L.ink};-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:6mm} .c{padding:5mm;break-inside:avoid;text-align:center}
+    .c.big{padding:10mm 4mm;margin-top:6mm} .logo{font:700 10px/1.4 Arial,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:${L.accent}}
+    .stripe{margin:-10mm -4mm 8mm} .crest{display:block;width:22mm;height:22mm;margin:0 auto 4mm;padding:3mm;background:#002664;border-radius:3mm}
+    h1{font-family:${L.face};font-size:18px;margin:2mm 0 3mm;color:${L.ink}} .big h1{font-size:36px;margin:4mm 0 8mm} .qr svg{width:32mm;height:32mm} .big .qr svg{width:90mm;height:90mm}
+    ol{text-align:left;margin:3mm auto 0;padding-left:5mm;max-width:80mm;font-size:12px;line-height:1.6} .big ol{font-size:22px;max-width:150mm;margin-top:10mm} ol b{color:${L.accent}}
+    .code{font-family:"Courier New",monospace;font-size:1.3em;letter-spacing:.12em} .due{font-size:12px;margin:2mm 0 0;color:${L.accent}} .big .due{font-size:20px}
+    ${L.css}
+  </style></head><body>${slips ? `<div class="grid">${Array.from({ length: 8 }, () => one(false)).join('')}</div>` : one(true)}<script>window.onload=()=>{(document.fonts?document.fonts.ready:Promise.resolve()).then(()=>setTimeout(()=>window.print(),250))}<\/script></body></html>`);
+  w.document.close();
+}
+
+/* ---------- plain mode (private tutoring): a hidden button, a password, and no school branding from then on ---------- */
+function unlockBox() {
+  if (document.getElementById('unlock-box')) return;
+  const box = document.createElement('div'); box.id = 'unlock-box'; box.className = 'weak-box';
+  box.innerHTML = `<form class="weak-panel unlock-panel" autocomplete="off"><h2>Unlock?</h2><input class="in" type="password" id="unlock-pw" aria-label="Password" autocomplete="off"><p class="err" id="unlock-err" role="alert"></p><div class="ed-row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-u="close">Cancel</button><button class="btn primary">Unlock</button></div></form>`;
+  document.body.appendChild(box);
+  const close = () => box.remove();
+  box.addEventListener('click', e => { if (e.target === box || e.target.dataset.u === 'close') close(); });
+  box.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  box.querySelector('form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const pw = document.getElementById('unlock-pw').value;
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
+    const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    if (hex !== cfg.PLAIN_HASH) { document.getElementById('unlock-err').textContent = 'No.'; return; }
+    try { localStorage.setItem(cfg.plainKey, '1'); } catch (err) {}
+    location.reload();
+  });
+  setTimeout(() => document.getElementById('unlock-pw').focus(), 30);
+}
+
+/* ---------- Spin the wheel and Open the box: pick a question for the class, on the projector ---------- */
+const WHEEL_COLS = ['--a1', '--a2', '--a3', '--a4'];
+function renderTools() {
+  const s = getSet(view.setId); if (!s) { view = { name: 'library', folder: 'mine' }; return renderLibrary(); }
+  const qs = (s.questions || []).filter(LB.validQ), byId = id => qs.find(q => q.id === id);
+  const pick = ui.pick && byId(ui.pick);
+  const card = pick ? `<div class="tool-card pop" role="dialog" aria-label="Question"><div class="tool-q">${LB.qHTML(pick)}</div>
+    ${ui.shown ? `<div class="tool-a"><span class="qlabel">Answer</span><div>${LB.ansHTML(pick.answers[pick.correct])}</div></div>` : ''}
+    <div class="ed-row" style="justify-content:center">${ui.shown ? '' : '<button class="btn primary" data-act="tool-show">Show the answer</button>'}<button class="btn" data-act="tool-close">${ui.tool === 'wheel' ? 'Back to the wheel' : 'Back to the boxes'}</button></div></div>` : '';
+  const body = ui.tool === 'class' ? cqHTML() : ui.tool === 'wheel'
+    ? `<div class="wheel-wrap"><div class="wheel-pin" aria-hidden="true"></div><canvas id="wheel" width="560" height="560" aria-label="Wheel of ${ui.left.length} questions"></canvas></div>
+       <div class="ed-row" style="justify-content:center"><button class="btn primary big-go" data-act="spin" ${ui.left.length && !ui.spinning ? '' : 'disabled'}>Spin</button></div>
+       <p class="hint" style="text-align:center;margin:0">${ui.left.length} ${ui.left.length === 1 ? 'question' : 'questions'} on the wheel. Each one comes off once it has been picked.${ui.left.length < qs.length ? ' <button class="btn small ghost" data-act="tool-refill">Put them all back</button>' : ''}</p>`
+    : `<div class="boxes">${qs.map((q, i) => `<button class="box ${ui.opened.includes(q.id) ? 'opened' : ''}" data-act="open-box" data-q="${esc(q.id)}" aria-label="Box ${i + 1}${ui.opened.includes(q.id) ? ', opened' : ''}">${i + 1}</button>`).join('')}</div>
+       ${ui.opened.length ? '<p class="hint" style="text-align:center;margin:0"><button class="btn small ghost" data-act="tool-refill">Close all the boxes</button></p>' : ''}`;
+  return `<div class="toolbar"><button class="btn ghost small" data-act="ws-back">← Back to the set</button><span class="sp"></span><button class="btn small" data-act="tool-full">⛶ Full screen</button></div>
+  <div class="tools-stage stage"><div class="main-head"><div><span class="qlabel">${ui.tool === 'class' ? 'Class quiz' : ui.tool === 'wheel' ? 'Spin the wheel' : 'Open the box'}</span><h1>${esc(s.title || 'Untitled set')}</h1></div>
+    <div class="head-acts" role="tablist"><button class="btn ${ui.tool === 'class' ? 'primary' : ''}" role="tab" aria-selected="${ui.tool === 'class'}" data-act="tool" data-tool="class">📺 Class quiz</button><button class="btn ${ui.tool === 'wheel' ? 'primary' : ''}" role="tab" aria-selected="${ui.tool === 'wheel'}" data-act="tool" data-tool="wheel">🎡 Wheel</button><button class="btn ${ui.tool === 'boxes' ? 'primary' : ''}" role="tab" aria-selected="${ui.tool === 'boxes'}" data-act="tool" data-tool="boxes">📦 Boxes</button></div></div>
+    ${pick && ui.tool !== 'class' ? card : body}</div>`;
+}
+/* ---------- Class quiz: a gameshow on the projector for a class without devices.
+   Boys write on mini whiteboards; the teacher clicks the answer the class agrees on. ---------- */
+let cqTimer = null;
+const cqStop = () => { clearInterval(cqTimer); cqTimer = null; };
+function cqSetup(prev) {
+  const n = (getSet(view.setId).questions || []).filter(LB.validQ).length;
+  return { phase: 'setup', count: prev ? prev.count : Math.min(10, n), secs: prev ? prev.secs : 30, lives: prev ? prev.lives : true };
+}
+function cqStart(ids) {
+  const c = ui.cq, qs = (getSet(view.setId).questions || []).filter(LB.validQ);
+  const order = ids || shuffle(qs.map(q => q.id)).slice(0, c.count || qs.length);
+  Object.assign(c, { order, i: -1, score: 0, right: 0, streak: 0, best: 0, log: [], life: { fifty: c.lives, time: c.lives && c.secs > 0, double: c.lives } });
+  cqNext();
+}
+function cqNext() {
+  const c = ui.cq; cqStop(); c.i++;
+  if (c.i >= c.order.length) { c.phase = 'over'; return render(); }
+  const q = cqQ();
+  Object.assign(c, { phase: 'think', pick: null, gone: [], dbl: false, timeUp: false, bonus: (c.i + 1) % 5 === 0, perm: shuffle(q.answers.map((_, j) => j)), endAt: c.secs ? Date.now() + c.secs * 1000 : null });
+  render(); cqTick();
+}
+const cqQ = () => { const c = ui.cq; return (getSet(view.setId).questions || []).find(q => q.id === c.order[c.i]); };
+function cqTick() {
+  const c = ui.cq; if (!c.endAt) return;
+  cqTimer = setInterval(() => {
+    if (view.name !== 'tools' || ui.tool !== 'class' || !ui.cq || ui.cq.phase !== 'think') return cqStop();
+    const left = Math.max(0, c.endAt - Date.now());
+    const bar = document.getElementById('cq-bar'), t = document.getElementById('cq-time');
+    if (bar) bar.style.width = (100 * left / (c.secs * 1000)) + '%';
+    if (t) t.textContent = Math.ceil(left / 1000);
+    if (!left) { cqStop(); c.timeUp = true; render(); }
+  }, 200);
+}
+function cqLock() {
+  const c = ui.cq; if (c.phase !== 'think' || c.pick == null) return;
+  cqStop();
+  const q = cqQ(), right = c.perm[c.pick] === q.correct;
+  c.gain = right ? 1000 * (c.bonus ? 2 : 1) * (c.dbl ? 2 : 1) : 0;
+  c.score += c.gain; c.streak = right ? c.streak + 1 : 0; c.best = Math.max(c.best, c.streak); if (right) c.right++;
+  c.log.push({ qid: q.id, right, said: q.answers[c.perm[c.pick]] });
+  c.phase = 'reveal'; render();
+}
+function cqLife(k) {
+  const c = ui.cq; if (c.phase !== 'think' || !c.life[k]) return;
+  c.life[k] = false;
+  if (k === 'fifty') {
+    const q = cqQ(), wrong = c.perm.map((o, j) => j).filter(j => c.perm[j] !== q.correct);
+    c.gone = shuffle(wrong).slice(0, Math.max(0, Math.min(2, c.perm.length - 2)));
+    if (c.gone.includes(c.pick)) c.pick = null;
+  }
+  if (k === 'time' && c.endAt) { c.endAt += 15000; c.secs = Math.max(c.secs, Math.ceil((c.endAt - Date.now()) / 1000)); if (c.timeUp) { c.timeUp = false; cqTick(); } }
+  if (k === 'double') c.dbl = true;
+  render();
+}
+function cqHTML() {
+  const c = ui.cq, n = (getSet(view.setId).questions || []).filter(LB.validQ).length;
+  if (c.phase === 'setup') return `<div class="cq-setup">
+    <p class="hint" style="margin:0;max-width:62ch">For a class without devices. Put each question on the board; the boys write their answer on whiteboards and hold them up. Agree the class answer, click it (or press 1 to 4), then <b>Lock in</b>. Every right answer scores 1,000, every fifth question is a bonus round worth double, and the class has three lifelines to use once each.</p>
+    <div class="ed-row" style="justify-content:center">
+      <div class="field"><label for="cq-count">Questions</label><select id="cq-count">${[5, 10, 15, 20, 30].filter(x => x < n).concat([n]).map(x => `<option value="${x}" ${c.count === x ? 'selected' : ''}>${x === n ? `All ${x}` : x}</option>`).join('')}</select></div>
+      <div class="field"><label for="cq-secs">Thinking time</label><select id="cq-secs">${[[0, 'No timer'], [20, '20 seconds'], [30, '30 seconds'], [45, '45 seconds'], [60, '1 minute']].map(([v, l]) => `<option value="${v}" ${c.secs === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <label class="tog-row" style="align-self:flex-end;padding-bottom:8px"><input type="checkbox" id="cq-lives" ${c.lives ? 'checked' : ''}> Lifelines</label>
+    </div>
+    <div class="ed-row" style="justify-content:center"><button class="btn primary big-go" data-act="cq-start" ${n ? '' : 'disabled'}>Start the quiz</button></div></div>`;
+  if (c.phase === 'over') {
+    const wrong = c.log.filter(e => !e.right), qs = getSet(view.setId).questions || [];
+    return `<div class="cq-over">
+      <span class="qlabel">Final score</span><div class="cq-final">${c.score.toLocaleString('en-GB')}</div>
+      <p class="cq-sum">${c.right} of ${c.order.length} right · best streak ${c.best}</p>
+      ${wrong.length ? `<div class="review"><h2 class="side-h">To go over</h2><ol>${wrong.map(e => { const q = qs.find(x => x.id === e.qid); return q ? `<li><div class="rq">${LB.qHTML(q)}</div><div class="ra"><span class="right">Answer: ${LB.ansHTML(q.answers[q.correct])}</span> <span class="hint">· the class said ${LB.ansHTML(e.said)}</span></div></li>` : ''; }).join('')}</ol></div>` : '<p class="cq-sum">Every question right.</p>'}
+      <div class="ed-row" style="justify-content:center">${wrong.length ? '<button class="btn primary" data-act="cq-again-wrong">Play the ones we got wrong</button>' : ''}<button class="btn" data-act="cq-again">New quiz</button></div></div>`;
+  }
+  const q = cqQ(), reveal = c.phase === 'reveal', correct = c.perm.indexOf(q.correct);
+  const left = c.endAt ? Math.max(0, c.endAt - Date.now()) : 0;
+  return `<section class="cls-board cq-board">
+    <div class="cls-top"><span class="qlabel">Question ${c.i + 1} of ${c.order.length}${c.bonus ? ' · <b class="cls-bonus">Bonus round: double points</b>' : ''}${c.dbl ? ' · <b class="cls-bonus">Double</b>' : ''}</span>
+      <span class="cq-score"><span class="qlabel">Score</span> <b>${c.score.toLocaleString('en-GB')}</b>${c.streak > 1 ? ` <span class="cq-streak">🔥 ${c.streak} in a row</span>` : ''}</span></div>
+    ${!reveal && c.endAt ? (c.timeUp ? '<div class="cq-boards pop">Boards up!</div>' : `<div class="cls-timer"><div class="cls-bar" id="cq-bar" style="width:${100 * left / (c.secs * 1000)}%"></div><b id="cq-time">${Math.ceil(left / 1000)}</b></div>`) : ''}
+    <div class="cls-q">${LB.qHTML(q)}</div>
+    <div class="answers cls-ans cq-ans ${LB.hasImgAnswers(q) ? 'pics' : ''}">${c.perm.map((orig, j) => `<button class="ans a${j} ${c.gone.includes(j) ? 'gone' : ''} ${reveal ? (j === correct ? 'right' : j === c.pick ? 'wrong' : 'dim') : c.pick === j ? 'picked' : c.pick != null ? 'unpicked' : ''}" data-act="cq-pick" data-j="${j}" ${reveal || c.gone.includes(j) ? 'disabled' : ''} aria-pressed="${c.pick === j}"><span class="key">${THEME.keyLabel(j)}</span><span>${LB.ansHTML(q.answers[orig])}</span></button>`).join('')}</div>
+    ${reveal
+      ? `<div class="cq-verdict ${c.gain ? 'good' : 'bad'} pop">${c.gain ? `Right! +${c.gain.toLocaleString('en-GB')}` : `Not this time. The answer is ${LB.ansHTML(q.answers[q.correct])}.`}</div>
+         <div class="ed-row" style="justify-content:center"><button class="btn primary big-go" data-act="cq-next">${c.i + 1 >= c.order.length ? 'See the final score' : 'Next question ▸'}</button></div>`
+      : `<div class="ed-row" style="justify-content:center">
+          ${c.lives ? `<div class="lifelines">${[['fifty', '50:50'], ['time', '+15 s'], ['double', 'Double']].filter(([k]) => k !== 'time' || c.endAt).map(([k, l]) => `<button class="btn" data-act="cq-life" data-k="${k}" ${c.life[k] ? '' : 'disabled'}>${l}</button>`).join('')}</div>` : ''}
+          <button class="btn primary big-go" data-act="cq-lock" ${c.pick == null ? 'disabled' : ''}>Lock in the class's answer</button></div>`}
+  </section>`;
+}
+function toolsDraw() {
+  const cv = document.getElementById('wheel'); if (!cv) return;
+  const s = getSet(view.setId), qs = (s.questions || []).filter(LB.validQ), items = ui.left.map(id => qs.find(q => q.id === id)).filter(Boolean);
+  const c = cv.getContext('2d'), R = 270, cx = 280, cy = 280, n = Math.max(1, items.length), seg = Math.PI * 2 / n;
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  c.clearRect(0, 0, 560, 560);
+  c.save(); c.translate(cx, cy); c.rotate(ui.angle || 0);
+  items.forEach((q, i) => {
+    c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, R, i * seg, (i + 1) * seg); c.closePath();
+    c.fillStyle = css(WHEEL_COLS[i === n - 1 && n % 4 === 1 && n > 1 ? 1 : i % 4]) || '#888'; c.fill(); c.strokeStyle = 'rgba(255,255,255,.7)'; c.lineWidth = 2; c.stroke();
+    c.save(); c.rotate(i * seg + seg / 2); c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillStyle = '#fff';
+    const t = LB.qText(q) || 'Picture'; c.font = `700 ${n > 16 ? 13 : n > 10 ? 16 : 19}px system-ui,sans-serif`;
+    c.fillText(t.length > 22 ? t.slice(0, 21) + '…' : t, R - 14, 0); c.restore();
+  });
+  if (!items.length) { c.fillStyle = css('--sunk') || '#ddd'; c.beginPath(); c.arc(0, 0, R, 0, 7); c.fill(); }
+  c.restore();
+  c.fillStyle = css('--surface') || '#fff'; c.beginPath(); c.arc(cx, cy, 34, 0, 7); c.fill(); c.strokeStyle = css('--accent'); c.lineWidth = 4; c.stroke();
+}
+function spinWheel() {
+  if (ui.spinning || !ui.left.length) return;
+  const n = ui.left.length, seg = Math.PI * 2 / n, k = Math.floor(Math.random() * n);
+  // The pin is at the top (-90°): finish with segment k's middle under it, after five or six whole turns
+  const start = ui.angle || 0, target = -Math.PI / 2 - (k * seg + seg / 2), turns = (5 + Math.floor(Math.random() * 2)) * Math.PI * 2;
+  const finalA = start + turns + (((target - start) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  const dur = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 4200, t0 = performance.now();
+  ui.spinning = true; const b = document.querySelector('[data-act="spin"]'); if (b) b.disabled = true;
+  const step = now => {
+    const x = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - x, 4);
+    ui.angle = start + (finalA - start) * e; toolsDraw();
+    if (x < 1) return requestAnimationFrame(step);
+    ui.spinning = false; ui.angle = finalA % (Math.PI * 2);
+    const id = ui.left[k]; ui.left.splice(k, 1); ui.pick = id; ui.shown = false;
+    setTimeout(() => { if (view.name === 'tools') render(); }, 500);
+  };
+  requestAnimationFrame(step);
+}
+
+/* ---------- worksheets ---------- */
+/* English into Latin for a usual vocab set; the other way if that leaves more single words to write */
+const wsDir = s => { const n = d => WS.build(s, { kind: 'choice', dir: d, count: 'all', seed: 1 }).total || 0; return n('ab') > n('ba') ? 'ab' : 'ba'; };
+const wsSeed = () => 1 + Math.floor(Math.random() * 2147483646);
+const WS_ICONS = { match: '⇄', cross: '▦', gap: '＿', search: '🔍', anagram: '🔀', choice: 'a b c' };
+function wsLook(s) {
+  const subj = THEME.subjectFor(s);
+  return { subj, look: PRINT_LOOK[subj] || PRINT_LOOK.none, brand: [cfg.school, cfg.name, subj && THEME.label(subj)].filter(Boolean).join(' · ') };
+}
+function renderWorksheet() {
+  const s = getSet(view.setId);
+  if (!s) { view = { name: 'library', folder: 'mine' }; return renderLibrary(); }
+  const o = ui.ws, T = WS.TEMPLATES[o.kind];
+  const res = ui.wsRes = WS.build(s, { ...o, count: o.count || T.count });
+  const counts = [...new Set([5, 10, T.count, 15, 20, 30])].sort((a, b) => a - b).filter(n => n < res.ok).concat(['all']);
+  const cur = o.count || (res.ok <= T.count ? 'all' : T.count);
+  const why = T.words ? 'their answers are pictures, contain numbers or maths, or are too long for a grid' : T.text ? 'their answers are pictures' : 'they have no wrong answers to choose from';
+  const single = WS.build(s, { ...o, kind: 'choice', count: 'all' }), multi = (s.questions || []).filter(LB.validQ).length - (single.total || 0);
+  const notes = [];
+  if (res.empty) {
+    notes.push('Nothing in this set suits this sheet this way round. Worksheets use only single words for pupils to write.');
+    if (multi > 0) notes.push(`${multi} ${multi === 1 ? 'question has' : 'questions have'} more than one word to write.`);
+    if (res.total) notes.push(`${res.total} ${res.total === 1 ? 'is' : 'are'} left out because ${why}.`);
+    notes.push('Try the other way round, or another kind of sheet.');
+  } else {
+    if (res.used < res.ok && !res.missed) notes.push(`Uses ${res.used} of the ${res.ok} questions that suit this sheet, picked at random. New layout picks again.`);
+    if (multi > 0) notes.push(`${multi} ${multi === 1 ? 'question is' : 'questions are'} left out because the word to write is more than one word.`);
+    if (res.left) notes.push(`${res.left} ${res.left === 1 ? 'question is' : 'questions are'} left out because ${why}.`);
+    if (res.missed) notes.push(`${res.missed} ${res.missed === 1 ? 'answer' : 'answers'} wouldn’t fit the grid. Press New layout to try another arrangement.`);
+  }
+  return `
+  <div class="toolbar"><button class="btn ghost small" data-act="ws-back">← Back to the set</button></div>
+  <div class="main-head"><div><span class="qlabel">Worksheets</span><h1>${esc(s.title || 'Untitled set')}</h1></div>
+    <div class="head-acts"><button class="btn" data-act="ws-seed" ${res.empty ? 'disabled' : ''}>↻ New layout</button><button class="btn primary" data-act="ws-print" ${res.empty ? 'disabled' : ''}>🖨 Print</button></div></div>
+  <div class="ws-wrap">
+    <aside class="ws-side">
+      <div class="ws-kinds" role="radiogroup" aria-label="Kind of worksheet">${Object.entries(WS.TEMPLATES).map(([k, t]) => `<button class="ws-kind ${k === o.kind ? 'on' : ''}" role="radio" aria-checked="${k === o.kind}" data-act="ws-kind" data-kind="${k}"><span class="ws-ic" aria-hidden="true">${WS_ICONS[k]}</span><b>${esc(t.name)}</b><span>${esc(t.about)}</span></button>`).join('')}</div>
+      <div class="field"><label for="ws-count">Questions</label><select id="ws-count" data-ws="count">${counts.map(n => `<option value="${n}" ${String(n) === String(cur) ? 'selected' : ''}>${n === 'all' ? `All that suit (${res.ok})` : n}</option>`).join('')}</select></div>
+      <div class="field"><label for="ws-dir">Which way round</label><select id="ws-dir" data-ws="dir">${['ba', 'ab'].map(d => { const ex = WS.example(s, d); return `<option value="${d}" ${o.dir === d ? 'selected' : ''}>${ex ? `Clue “${esc(ex[0])}”, pupils write “${esc(ex[1])}”` : d === 'ba' ? 'Answers as clues, questions to write' : 'Questions as clues, answers to write'}</option>`; }).join('')}</select></div>
+      ${o.kind === 'gap' ? `<label class="tog-row"><input type="checkbox" data-ws="bank" ${o.bank ? 'checked' : ''}> Word bank at the top</label>` : ''}
+      ${o.kind === 'search' ? `<label class="tog-row"><input type="checkbox" data-ws="backwards" ${o.backwards ? 'checked' : ''}> Words can run backwards (harder)</label>` : ''}
+      <label class="tog-row"><input type="checkbox" data-ws="key" ${o.key ? 'checked' : ''}> Answers on a separate page</label>
+      ${notes.length ? `<div class="ws-notes">${notes.map(n => `<p>${esc(n)}</p>`).join('')}</div>` : ''}
+    </aside>
+    <div class="ws-preview">${res.empty ? '<p class="hint" style="padding:24px">Choose another kind of sheet.</p>' : '<iframe id="ws-frame" title="Worksheet preview"></iframe>'}</div>
+  </div>`;
+}
+async function wsDoc() {
+  const s = getSet(view.setId), res = ui.wsRes, { look, brand } = wsLook(s);
+  const [body, key, defs] = await WS.typeset(res.body, ui.ws.key ? res.key : '');
+  const base = location.href.replace(/[^/]*([?#].*)?$/, '');
+  return WS.page({ kind: ui.ws.kind, title: s.title || 'Untitled set', brand, look, base, body, key, defs });
+}
+let wsTurn = 0;
+async function wsPreview() {
+  const turn = ++wsTurn, f = document.getElementById('ws-frame');
+  if (!f || !ui.wsRes || ui.wsRes.empty) return;
+  const html = await wsDoc();
+  if (turn !== wsTurn || !document.body.contains(f)) return;
+  f.onload = () => { try { f.style.height = (f.contentDocument.documentElement.scrollHeight + 4) + 'px'; } catch (e) {} };
+  f.srcdoc = html;
+}
+function wsPrint() {
+  const f = document.getElementById('ws-frame');
+  if (!f || !f.contentWindow) return;
+  const s = getSet(view.setId), was = document.title;
+  document.title = `${s.title || 'Untitled set'} – ${WS.TEMPLATES[ui.ws.kind].name}`;
+  try { f.contentWindow.focus(); f.contentWindow.print(); } finally { setTimeout(() => { document.title = was; }, 1000); }
 }
 
 /* ---------- view a set (read-only, with answers) ---------- */
@@ -344,13 +788,16 @@ function renderView() {
       ${ok ? `<a class="btn primary" href="host.html?set=${encodeURIComponent(s.id)}">Host live game</a>` : ''}
       <button class="btn" data-act="play" data-id="${s.id}" ${ok ? '' : 'disabled'}>▶ Play solo</button>
       ${own ? `<button class="btn" data-act="edit" data-id="${s.id}">Edit</button>` : `<button class="btn" data-act="dup" data-id="${s.id}">Copy to my sets</button>`}
+      ${ok ? `<button class="btn" data-act="worksheet" data-id="${s.id}">🖨 Worksheets</button>` : ''}
+      ${ok ? `<button class="btn" data-act="tools" data-tool="class" data-id="${s.id}">📺 Class quiz</button>` : ''}
+      ${ok ? `<button class="btn" data-act="tools" data-id="${s.id}">🎡 Wheel and boxes</button>` : ''}
       <button class="btn ghost" data-act="export" data-id="${s.id}">Export to Excel</button>
     </div></div>
   <div class="toolbar"><label class="tog-row"><input type="checkbox" id="show-answers" ${show ? 'checked' : ''}> Show answers</label></div>
   <ol class="view-list">${s.questions.map((q, i) => `<li class="view-q ${validQ(q) ? '' : 'warn'}">
       <span class="q-num">Q${i + 1}</span>
-      <div class="view-body"><div class="pv-q">${esc(q.q) || '<span class="hint">No question text</span>'}</div>
-        <div class="view-ans">${q.answers.map((a, j) => String(a).trim() ? `<div class="va ${show && j === q.correct ? 'c' : ''}"><span class="tag t${j}">${j + 1}</span><span>${esc(a)}</span>${show && j === q.correct ? '<b class="tick">✓</b>' : ''}</div>` : '').join('')}</div></div>
+      <div class="view-body"><div class="pv-q">${q.image ? `<img class="q-thumb big" src="${esc(LB.safeSrc(q.image))}" alt="">` : ''}${esc(q.q) || (q.image ? '' : '<span class="hint">No question text</span>')}</div>
+        <div class="view-ans">${q.answers.map((a, j) => String(a).trim() ? `<div class="va ${show && j === q.correct ? 'c' : ''}"><span class="tag t${j}">${j + 1}</span><span>${LB.ansHTML(a)}</span>${show && j === q.correct ? '<b class="tick">✓</b>' : ''}</div>` : '').join('')}</div></div>
     </li>`).join('')}</ol>`;
 }
 
@@ -361,7 +808,7 @@ async function exportSet(s) {
   s.questions.filter(validQ).forEach(q => {
     const kept = q.answers.map((a, j) => [String(a), j]).filter(([a]) => a.trim());
     const ans = kept.map(k => k[0]); while (ans.length < 4) ans.push('');
-    rows.push([q.q, ...ans, kept.findIndex(k => k[1] === q.correct) + 1]);
+    rows.push([q.q || q.image || '', ...ans, kept.findIndex(k => k[1] === q.correct) + 1]);
   });
   const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = [{ wch: 50 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 10 }];
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Questions');
@@ -379,6 +826,10 @@ function renderEditor() {
   <div class="ed-top">
     <div class="field"><label for="set-title">Set name</label><input id="set-title" class="title-in" data-field="title" value="${esc(s.title)}" placeholder="Untitled set" maxlength="80"></div>
     <div class="ed-row">
+      <div class="field"><label for="set-subject">Subject</label><select id="set-subject" data-field="subject">
+        <option value="">${(() => { const d = THEME.detect(s); return d ? `${esc(THEME.label(d))} (worked out)` : 'Work it out'; })()}</option>
+        ${THEME.list().map(k => `<option value="${k}" ${s.subject === k ? 'selected' : ''}>${esc(THEME.label(k))}</option>`).join('')}
+        <option value="none" ${s.subject === 'none' ? 'selected' : ''}>None</option></select></div>
       <div class="field"><label for="set-folder">Folder</label><select id="set-folder" data-field="folder">${opts}</select></div>
       ${hasTags ? `<div class="field"><label for="set-tags">Tags</label><input id="set-tags" class="in" data-field="tags" value="${esc((s.tags || []).join(', '))}" placeholder="e.g. Year 7, fractions"></div>` : ''}
       <button class="btn" data-act="play" data-id="${s.id}" ${ok ? '' : 'disabled'}>▶ Play solo</button>
@@ -387,6 +838,12 @@ function renderEditor() {
   </div>
   <div class="toolbar">
     <button class="btn" data-act="toggle-import">${ui.importOpen ? 'Close import' : '⇩ Import questions'}</button>
+    ${ok >= 2 ? (ui.confirmSwap
+      ? `<span class="confirm">Turn every question round, so each right answer becomes the question? <button class="btn small primary" data-act="swap">Swap</button><button class="btn small ghost" data-act="no-swap">Cancel</button></span>`
+      : `<button class="btn" data-act="ask-swap" title="Each right answer becomes the question, and each question becomes its answer">⇄ Swap questions and answers</button>`) : ''}
+    ${ok ? `<button class="btn" data-act="worksheet" data-id="${s.id}" title="Print a match up, crossword, gap fill, word search, anagrams or multiple choice sheet">🖨 Worksheets</button>` : ''}
+    ${ok ? `<button class="btn" data-act="tools" data-tool="class" data-id="${s.id}" title="A gameshow on the projector for a class without devices: boys answer on whiteboards and you click the class's answer">📺 Class quiz</button>` : ''}
+    ${ok ? `<button class="btn" data-act="tools" data-id="${s.id}" title="Spin the wheel or open the boxes to pick questions for the class, on the projector">🎡 Wheel and boxes</button>` : ''}
     <span class="sp"></span>
     <span class="hint">Maths: wrap it in dollar signs, e.g. <code>$\\frac{3}{4}$</code>, <code>$x^2$</code>, <code>$\\sqrt{50}$</code></span>
   </div>
@@ -396,21 +853,24 @@ function renderEditor() {
   </div>`;
 }
 function renderQ(q, i, total) {
-  const bad = !validQ(q);
+  const bad = !validQ(q), dup = hasDupes(q);
   const rows = q.answers.map((a, j) => `
     <div class="ans-row ${q.correct === j ? 'correct' : ''}">
       <label class="pick" for="c-${q.id}-${j}" title="Mark as correct answer"><input type="radio" id="c-${q.id}-${j}" name="cor-${q.id}" data-field="correct" data-i="${j}" ${q.correct === j ? 'checked' : ''}><span class="tag t${j}">${j + 1}</span></label>
-      <label class="sr" for="a-${q.id}-${j}">Answer ${j + 1}</label><input type="text" id="a-${q.id}-${j}" data-field="ans" data-i="${j}" value="${esc(a)}" placeholder="Answer ${j + 1}">
+      ${LB.isImg(a)
+        ? `<div class="ans-pic">${LB.ansHTML(a)}<button class="btn ghost small" data-act="ans-pic-clear" data-i="${j}">Use words instead</button></div>`
+        : `<div class="ans-in"><label class="sr" for="a-${q.id}-${j}">Answer ${j + 1}</label><input type="text" id="a-${q.id}-${j}" data-field="ans" data-i="${j}" value="${esc(a)}" placeholder="Answer ${j + 1}"><button class="btn ghost small pic-btn" data-act="ans-pic" data-i="${j}" title="Use a picture for answer ${j + 1}" aria-label="Use a picture for answer ${j + 1}">🖼</button></div>`}
       ${q.answers.length > 2 ? `<button class="btn ghost small" data-act="rm-ans" data-i="${j}" aria-label="Remove answer ${j + 1}">✕</button>` : '<span></span>'}
     </div>`).join('');
   return `<article class="q ${bad ? 'warn' : ''}" data-qid="${q.id}">
     <div class="q-edit">
-      <div class="q-head"><span class="q-num">Q${i + 1}</span>${bad ? '<span class="q-warn">Needs a question and at least 2 answers</span>' : ''}<span class="sp"></span>
+      <div class="q-head"><span class="q-num">Q${i + 1}</span>${bad ? '<span class="q-warn">Needs a question (or a picture) and at least 2 answers</span>' : dup ? '<span class="q-warn">Two answers are the same: pupils will only see one</span>' : ''}<span class="sp"></span>
         <button class="btn ghost small" data-act="up" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
         <button class="btn ghost small" data-act="down" ${i === total - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
         <button class="btn ghost small danger" data-act="rm-q" aria-label="Delete question">Delete</button></div>
       <label class="sr" for="qt-${q.id}">Question text</label>
-      <textarea id="qt-${q.id}" data-field="q" rows="2" placeholder="Type the question">${esc(q.q)}</textarea>
+      <textarea id="qt-${q.id}" data-field="q" rows="2" placeholder="${q.image ? 'Words to go with the picture (optional)' : 'Type the question'}">${esc(q.q)}</textarea>
+      <div class="q-pic">${q.image ? `<img class="q-thumb big" src="${esc(LB.safeSrc(q.image))}" alt="Question picture"><button class="btn ghost small" data-act="q-pic-clear">Remove picture</button>` : `<button class="btn ghost small" data-act="q-pic">🖼 Add a picture</button>`}</div>
       ${rows}
       ${q.answers.length < 4 ? `<button class="btn ghost small" data-act="add-ans" style="align-self:flex-start">+ Add answer</button>` : ''}
     </div>
@@ -418,8 +878,8 @@ function renderQ(q, i, total) {
   </article>`;
 }
 function previewHTML(q) {
-  return `<span class="lab">Pupil sees</span><div class="pv-q">${esc(q.q) || '<span style="color:var(--muted)">Question text</span>'}</div>
-    <div class="pv-ans">${q.answers.map((a, j) => `<div class="t${j} ${q.correct === j ? 'c' : ''}"><span>${esc(a) || '…'}</span></div>`).join('')}</div>`;
+  return `<span class="lab">Pupil sees</span><div class="pv-q">${q.image ? `<img class="q-thumb big" src="${esc(LB.safeSrc(q.image))}" alt="">` : ''}${esc(q.q) || (q.image ? '' : '<span style="color:var(--muted)">Question text</span>')}</div>
+    <div class="pv-ans">${q.answers.map((a, j) => `<div class="t${j} ${q.correct === j ? 'c' : ''}"><span>${LB.isImg(a) ? LB.ansHTML(a) : esc(a) || '…'}</span></div>`).join('')}</div>`;
 }
 function refreshQ(q) {
   const card = app.querySelector(`[data-qid="${q.id}"]`); if (!card) return;
@@ -427,8 +887,9 @@ function refreshQ(q) {
   clearTimeout(pv._t); pv._t = setTimeout(() => typeset(pv), 200);
   card.classList.toggle('warn', !validQ(q));
   const w = card.querySelector('.q-warn');
-  if (!validQ(q) && !w) card.querySelector('.q-num').insertAdjacentHTML('afterend', '<span class="q-warn">Needs a question and at least 2 answers</span>');
-  if (validQ(q) && w) w.remove();
+  const msg = !validQ(q) ? 'Needs a question and at least 2 answers' : hasDupes(q) ? 'Two answers are the same: pupils will only see one' : '';
+  if (w && (!msg || w.textContent !== msg)) w.remove();
+  if (msg && !card.querySelector('.q-warn')) card.querySelector('.q-num').insertAdjacentHTML('afterend', `<span class="q-warn">${msg}</span>`);
   card.querySelectorAll('.ans-row').forEach((r, j) => r.classList.toggle('correct', q.correct === j));
 }
 
@@ -442,8 +903,21 @@ function renderImport() {
   const tab = ui.importTab || 'paste';
   const r = ui.importResult;
   return `<section class="import" aria-label="Import questions">
-    <div class="tabs"><button class="${tab === 'paste' ? 'on' : ''}" data-act="imp-tab" data-tab="paste">Paste from Excel</button><button class="${tab === 'file' ? 'on' : ''}" data-act="imp-tab" data-tab="file">Upload a file</button></div>
-    ${tab === 'paste' ? `
+    <div class="tabs"><button class="${tab === 'paste' ? 'on' : ''}" data-act="imp-tab" data-tab="paste">Paste from Excel</button><button class="${tab === 'quizlet' ? 'on' : ''}" data-act="imp-tab" data-tab="quizlet">Paste from Quizlet</button><button class="${tab === 'file' ? 'on' : ''}" data-act="imp-tab" data-tab="file">Upload a file</button></div>
+    ${tab === 'quizlet' ? `
+      <p class="hint" style="margin:0">In Quizlet, open the set, choose <b>⋯ → Export</b>, leave the settings as they are (Tab between term and definition, New line between rows), click <b>Copy text</b> and paste it here. Each card becomes a question; the wrong answers come from other cards in the set.</p>
+      <div class="ed-row">
+        <div class="field"><label for="ql-dir">Questions show</label><select id="ql-dir">
+          ${[['term', 'Term → pick the definition'], ['def', 'Swapped: definition → pick the term'], ['both', 'Both ways (two questions per card)']].map(([v, l]) => `<option value="${v}" ${(ui.qlDir || 'term') === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select></div>
+        <div class="field"><label for="ql-n">Answers per question</label><select id="ql-n">
+          ${[4, 3, 2].map(n => `<option value="${n}" ${(ui.qlN || 4) === n ? 'selected' : ''}>${n}</option>`).join('')}
+        </select></div>
+      </div>
+      <label class="sr" for="import-quizlet">Pasted Quizlet set</label>
+      <textarea id="import-quizlet" placeholder="puella&#9;girl&#10;rex&#9;king">${esc(ui.qlText || '')}</textarea>
+      <div class="ed-row"><button class="btn primary" data-act="imp-quizlet">Check cards</button></div>`
+    : tab === 'paste' ? `
       <p class="hint" style="margin:0">Copy rows from Excel and paste them here. One question per row: the question, then 2–4 answers, then the number of the correct answer.</p>
       <div class="fmt"><table><tr><th>Question</th><th>Answer 1</th><th>Answer 2</th><th>Answer 3</th><th>Answer 4</th><th>Correct #</th></tr>
         ${EXAMPLE_ROWS.map(row => `<tr>${row.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table></div>
@@ -456,8 +930,9 @@ function renderImport() {
       <label class="sr" for="import-file">Spreadsheet file</label>
       <input type="file" id="import-file" accept=".xlsx,.xls,.csv">`}
     ${r ? `<div class="result">
-      <strong>${r.questions.length ? `Found ${r.questions.length} ${r.questions.length === 1 ? 'question' : 'questions'}${r.mode === 'blooket' ? ' (Blooket template)' : ''}.` : 'No questions found.'}</strong>
+      <strong>${r.questions.length ? `Found ${r.questions.length} ${r.questions.length === 1 ? 'question' : 'questions'}${r.mode === 'blooket' ? ' (Blooket template)' : r.mode === 'quizlet' ? ` from ${r.cards} Quizlet cards` : ''}.` : 'No questions found.'}</strong>
       ${r.warnings.length ? `<ul>${r.warnings.slice(0, 12).map(w => `<li>${esc(w)}</li>`).join('')}${r.warnings.length > 12 ? `<li>…and ${r.warnings.length - 12} more</li>` : ''}</ul>` : ''}
+      ${r.mode === 'quizlet' && r.questions.length ? `<div class="hint">First question: <b>${esc(LB.qText(r.questions[0]))}</b> with answers ${r.questions[0].answers.map((a, j) => j === r.questions[0].correct ? `<b>${LB.ansHTML(a)}</b> ✓` : LB.ansHTML(a)).join(', ')}</div>` : ''}
       ${r.questions.length ? `<div class="ed-row"><button class="btn primary small" data-act="imp-add">Add to the end of this set</button><button class="btn small" data-act="imp-replace">Replace all questions</button></div>` : ''}
     </div>` : ''}
   </section>`;
@@ -477,7 +952,7 @@ function rowsToQuestions(rows) {
       const ci = pairs.findIndex(p => p[0] === nums[0]);
       if (ci < 0) { warnings.push(`Row ${rowNo}: skipped, the correct answer number is missing or points to a blank answer.`); return; }
       if (nums.length > 1) warnings.push(`Row ${rowNo}: listed several correct answers; kept answer ${nums[0]} only.`);
-      questions.push(mkQ(text, pairs.map(p => p[1]), ci));
+      questions.push(qIn(text, mkQ(text, pairs.map(p => ansIn(p[1])), ci)));
     });
     return { questions, warnings, mode: 'blooket' };
   }
@@ -493,9 +968,126 @@ function rowsToQuestions(rows) {
     if (pairs.length > 4) { warnings.push(`Row ${rowNo}: skipped, more than 4 answers.`); return; }
     const ci = pairs.findIndex(p => p[0] === Number(corr));
     if (ci < 0) { warnings.push(`Row ${rowNo}: skipped, correct answer ${corr} is blank.`); return; }
-    questions.push(mkQ(text, pairs.map(p => p[1]), ci));
+    const d = dedupeAnswers(pairs.map(p => ansIn(p[1])), ci);
+    if (d.dropped) warnings.push(`Row ${rowNo}: the same answer appeared twice; the copy was removed.`);
+    if (d.answers.length < 2) { warnings.push(`Row ${rowNo}: skipped, needs at least 2 different answers.`); return; }
+    questions.push(qIn(text, mkQ(text, d.answers, d.correct)));
   });
   return { questions, warnings, mode: 'simple' };
+}
+/* Quizlet export: one card per line, term and definition separated by a tab (Quizlet's default).
+   Also copes with the other separators Quizlet offers: comma, " - ", and ";" between cards. */
+function parseQuizlet(text, dir, n) {
+  const warnings = [];
+  let lines = text.replace(/\r/g, '').split('\n');
+  if (lines.filter(l => l.trim()).length === 1 && /;/.test(lines[0]) && !/\t/.test(lines[0])) lines = lines[0].split(';');
+  const cards = [];
+  lines.forEach((line, k) => {
+    if (!line.trim()) return;
+    let i = line.indexOf('\t'), w = 1;
+    if (i < 0) { i = line.indexOf(' - '); w = 3; }
+    if (i < 0) { i = line.indexOf(','); w = 1; }
+    if (i < 0) { warnings.push(`Line ${k + 1}: skipped, no tab between the term and the definition.`); return; }
+    const term = line.slice(0, i).trim(), def = line.slice(i + w).trim();
+    if (!term || !def) { warnings.push(`Line ${k + 1}: skipped, the term or definition is blank.`); return; }
+    cards.push({ term: ansIn(term), def: ansIn(def) });
+  });
+  if (cards.length < 2) return { questions: [], warnings: warnings.concat(['A Quizlet set needs at least 2 cards to make wrong answers from.']), mode: 'quizlet', cards: cards.length };
+  // A form can belong to several cards (domini: genitive singular, nominative plural, vocative plural).
+  // Cards that share a term (or a definition) become ONE question whose right answer lists every meaning,
+  // and nothing that is also right can appear as a wrong answer.
+  const key = x => x.trim().toLowerCase();
+  const group = (from, to) => {
+    const m = new Map();
+    cards.forEach(c => { const k = key(c[from]); const g = m.get(k) || { show: c[from], all: [] }; if (!g.all.some(x => key(x) === key(c[to]))) g.all.push(c[to]); m.set(k, g); });
+    return [...m.values()];
+  };
+  const make = (g, pool) => {
+    const right = g.all.join(' / '), bad = new Set(g.all.map(key));
+    const wrong = shuffle(pool.filter(x => !bad.has(key(x)) && key(x) !== key(right)).filter((x, i, a) => a.findIndex(y => key(y) === key(x)) === i)).slice(0, n - 1);
+    const answers = shuffle([right, ...wrong]);
+    return LB.isImg(g.show) ? Object.assign(mkQ('', answers, answers.indexOf(right)), { image: LB.imgOf(g.show) }) : mkQ(g.show, answers, answers.indexOf(right));
+  };
+  const questions = [], byTerm = group('term', 'def'), byDef = group('def', 'term');
+  // Wrong answers for "show the term" are other definitions; a group's combined answer is offered whole
+  const defPool = byDef.map(g => g.show), termPool = byTerm.map(g => g.show);
+  if (dir !== 'def') byTerm.forEach(g => questions.push(make(g, defPool)));
+  if (dir !== 'term') byDef.forEach(g => questions.push(make(g, termPool)));
+  const merged = (dir !== 'def' ? byTerm : []).concat(dir !== 'term' ? byDef : []).filter(g => g.all.length > 1);
+  if (merged.length) warnings.push(`${merged.length} ${merged.length === 1 ? 'card has' : 'cards have'} more than one right answer, so ${merged.length === 1 ? 'its answers are' : 'their answers are'} combined (e.g. ${merged[0].show}: ${merged[0].all.join(' / ')}). No wrong answer is ever another right one.`);
+  const distinct = Math.min(defPool.length, termPool.length);
+  if (distinct < n) warnings.push(`Only ${distinct} different answers, so some questions have fewer than ${n} answers.`);
+  return { questions, warnings, mode: 'quizlet', cards: cards.length };
+}
+/* Swap questions and answers for a whole set. Each right answer becomes the question; the old question becomes
+   its right answer; wrong answers come from the other questions. Questions that share a right answer are
+   combined, as on Quizlet import, so no wrong answer is ever another right one. A picture question becomes a picture answer. */
+function swapSet(set) {
+  const cards = set.questions.filter(validQ).map(q => ({ term: q.image ? 'img:' + q.image : q.q.trim(), def: String(q.answers[q.correct]).trim(), n: q.answers.filter(a => String(a).trim()).length }));
+  if (cards.length < 2) return { questions: [] };
+  const n = Math.max(2, Math.min(4, Math.max(...cards.map(c => c.n))));
+  const key = x => x.trim().toLowerCase();
+  const m = new Map();
+  cards.forEach(c => { const k = key(c.def); const g = m.get(k) || { show: c.def, all: [] }; if (!g.all.some(x => key(x) === key(c.term))) g.all.push(c.term); m.set(k, g); });
+  const groups = [...m.values()], pool = groups.map(g => g.all.length === 1 ? g.all[0] : g.all.join(' / '));
+  const questions = groups.map((g, gi) => {
+    const right = pool[gi], bad = new Set(g.all.map(key));
+    const wrong = shuffle(pool.filter((x, i) => i !== gi && !bad.has(key(x)))).slice(0, n - 1);
+    const answers = shuffle([right, ...wrong]);
+    const q = mkQ(LB.isImg(g.show) ? '' : g.show, answers, answers.indexOf(right));
+    if (LB.isImg(g.show)) q.image = LB.imgOf(g.show);
+    return q;
+  });
+  return { questions, merged: cards.length - groups.length };
+}
+
+/* Pictures: shrink on this laptop (longest side 640px), then store in Supabase Storage (bucket set-images) */
+const IMG_BUCKET = 'set-images';
+function pickPicture(set, q, where) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0]; if (!f) return;
+    if (!/^image\//.test(f.type)) return toast('That file is not a picture.', true);
+    toast('Adding the picture…');
+    try {
+      const url = await uploadPicture(f);
+      if (where === 'q') q.image = url; else q.answers[where] = 'img:' + url;
+      queueSave(set); render();
+    } catch (err) {
+      console.error(err);
+      toast(/bucket|not found|policy|row-level/i.test(String(err && err.message)) ? 'Pictures aren’t switched on yet: run supabase/pictures.sql in Supabase (see the README).' : 'Couldn’t add the picture. Check your connection and try again.', true);
+    }
+  };
+  inp.click();
+}
+async function shrink(file, max = 640) {
+  const url = URL.createObjectURL(file);
+  try {
+    const im = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    if (/svg/.test(file.type) && file.size < 300000) return { blob: file, ext: 'svg', type: 'image/svg+xml' };
+    const k = Math.min(1, max / Math.max(im.naturalWidth || max, im.naturalHeight || max));
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round((im.naturalWidth || max) * k)); c.height = Math.max(1, Math.round((im.naturalHeight || max) * k));
+    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+    const blob = await new Promise(ok => c.toBlob(ok, 'image/webp', 0.86));
+    if (blob && blob.type === 'image/webp') return { blob, ext: 'webp', type: 'image/webp' };
+    const png = await new Promise(ok => c.toBlob(ok, 'image/png'));
+    return { blob: png, ext: 'png', type: 'image/png' };
+  } finally { URL.revokeObjectURL(url); }
+}
+async function uploadPicture(file) {
+  const { blob, ext, type } = await shrink(file);
+  if (blob.size > 2_000_000) throw new Error('too big');
+  const path = `${me.id}/${uid()}${uid()}.${ext}`;
+  const { error } = await sb.storage.from(IMG_BUCKET).upload(path, blob, { contentType: type, cacheControl: '31536000', upsert: false });
+  if (error) throw error;
+  return sb.storage.from(IMG_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+/* Remove an answer that repeats another (ignoring case and spaces), keeping the right one */
+function dedupeAnswers(answers, correct) {
+  const k = x => String(x).trim().toLowerCase(), right = k(answers[correct]), seen = new Set([right]);
+  const out = answers.filter((a, i) => i === correct || (k(a) && !seen.has(k(a)) && seen.add(k(a))));
+  return { answers: out, correct: out.indexOf(answers[correct]), dropped: out.length < answers.filter(a => k(a)).length };
 }
 function parsePaste(text) {
   const unq = c => { const m = c.match(/^"([\s\S]*)"$/); return m ? m[1].replace(/""/g, '"') : c; };
@@ -505,11 +1097,12 @@ function parsePaste(text) {
 /* ---------- play (solo preview of the pupil screen) ---------- */
 function startGame(setId) {
   const s = getSet(setId);
-  const qs = s.questions.filter(validQ).map(q => ({ ...q, answers: [...q.answers] }));
-  game = { set: s, qs, order: [], cur: null, phase: 'setup', minutes: ui.lastMinutes ?? 10, score: 0, streak: 0, best: 0, answered: 0, correct: 0, stats: {}, endAt: null, last: null, lastGain: 0 };
+  const qs = s.questions.filter(validQ).map(q => { const d = dedupeAnswers(q.answers.filter((a, i) => i === q.correct || String(a).trim()), q.answers.filter((a, i) => i === q.correct || String(a).trim()).indexOf(q.answers[q.correct])); return { ...q, answers: d.answers, correct: d.correct }; });
+  game = { set: s, qs, order: [], cur: null, phase: 'setup', runner: RUNNER.pick(THEME.subjectFor(s)), minutes: ui.lastMinutes ?? 10, score: 0, streak: 0, best: 0, answered: 0, correct: 0, stats: {}, endAt: null, last: null, lastGain: 0 };
   qs.forEach(q => (game.stats[q.id] = { seen: 0, right: 0, wrong: {} }));
   view = { ...view, name: 'play', setId };
   render();
+  THEME.takeover(THEME.subjectFor(s), () => { if (view.name === 'play') render(); });
 }
 function nextQ() {
   if (!game.order.length) {
@@ -540,6 +1133,7 @@ function answer(j) {
   }
   game.phase = 'feedback';
   renderPlayBody();
+  if (j === q.correct) RUNNER.boost(); else RUNNER.trip();
 }
 function endGame() { if (!game) return; stopTimer(); game.phase = 'over'; renderPlayBody(); }
 function stopTimer() { if (game && game.timer) { clearInterval(game.timer); game.timer = null; } }
@@ -567,13 +1161,14 @@ function renderPlay() {
 function renderPlayBody() {
   const b = document.getElementById('play-body'); if (!b) return;
   b.innerHTML = playBodyHTML(); typeset(b);
+  if (game && ['ready', 'question', 'feedback'].includes(game.phase)) RUNNER.show(THEME.current, game.runner); else RUNNER.hide();
   const f = b.querySelector('[data-autofocus]'); if (f) f.focus();
 }
 function answersHTML(q, done) {
-  return `<div class="answers">${q.answers.map((a, j) => {
+  return `<div class="answers ${LB.hasImgAnswers(q) ? 'pics' : ''}">${q.answers.map((a, j) => {
     let cls = `ans a${j}`;
     if (done) cls += j === q.correct ? ' right' : j === game.pick ? ' wrong' : ' dim';
-    return `<button class="${cls}" data-act="answer" data-i="${j}" ${done ? 'disabled' : ''}><span class="key">${j + 1}</span><span>${esc(a)}</span></button>`;
+    return `<button class="${cls}" data-act="answer" data-i="${j}" ${done ? 'disabled' : ''}><span class="key">${THEME.keyLabel(j)}</span><span>${LB.ansHTML(a)}</span></button>`;
   }).join('')}</div>`;
 }
 function playBodyHTML() {
@@ -593,7 +1188,7 @@ function playBodyHTML() {
     return hud() + `<div class="stage center pop"><span class="qlabel">Question ${g.answered + 1}</span><button class="btn primary big-go" data-act="show-q" data-autofocus>Show question</button><span class="hint">or press Enter</span></div>`;
   }
   if (g.phase === 'question') {
-    return hud() + `<div class="stage pop"><span class="qlabel">Question ${g.answered + 1}</span><div class="qtext">${esc(g.cur.q)}</div>${answersHTML(g.cur, false)}<span class="hint">Click an answer, or press 1–${g.cur.answers.length}</span></div>`;
+    return hud() + `<div class="stage pop"><span class="qlabel">Question ${g.answered + 1}</span>${LB.qHTML(g.cur)}${answersHTML(g.cur, false)}<span class="hint">Click an answer, or press 1–${g.cur.answers.length}</span></div>`;
   }
   if (g.phase === 'feedback') {
     const right = g.pick === g.cur.correct;
@@ -601,7 +1196,7 @@ function playBodyHTML() {
     const verdict = right
       ? `<div class="verdict good pop"><div><h3>Correct! +${g.lastGain}</h3><p>Streak ${g.streak} · ${fmtMult(multFor(g.streak))}</p></div>`
       : `<div class="verdict bad pop"><div><h3>Not quite</h3><p>The answer is highlighted.${g.lostStreak > 1 ? ` Streak of ${g.lostStreak} lost.` : ''}</p></div>`;
-    return hud() + `<div class="stage"><span class="qlabel">Question ${g.answered}</span><div class="qtext">${esc(g.cur.q)}</div>${answersHTML(g.cur, true)}
+    return hud() + `<div class="stage"><span class="qlabel">Question ${g.answered}</span>${LB.qHTML(g.cur)}${answersHTML(g.cur, true)}
       ${verdict}<button class="btn primary go ${locked ? 'locking' : ''}" id="go" data-act="next" ${locked ? 'disabled' : 'data-autofocus'}><span class="lbl">${locked ? 'Wait a moment…' : 'Next question'}</span><span class="bar"></span></button></div></div>`;
   }
   if (g.phase === 'over') {
@@ -609,7 +1204,7 @@ function playBodyHTML() {
     const rows = g.qs.map(q => {
       const st = g.stats[q.id], pct = st.seen ? Math.round(100 * st.right / st.seen) : null;
       const topWrong = Object.entries(st.wrong).sort((a, b) => b[1] - a[1])[0];
-      return `<tr><td>${esc(q.q)}</td><td class="num">${st.seen}</td><td class="num">${pct == null ? '–' : pct + '%'}</td><td>${pct == null ? '' : `<div class="meter"><i style="width:${pct}%"></i></div>`}</td><td>${topWrong ? esc(q.answers[topWrong[0]]) : '<span style="color:var(--muted)">–</span>'}</td></tr>`;
+      return `<tr><td>${q.image ? `<img class="q-thumb" src="${esc(LB.safeSrc(q.image))}" alt="">` : ''}${esc(q.q)}</td><td class="num">${st.seen}</td><td class="num">${pct == null ? '–' : pct + '%'}</td><td>${pct == null ? '' : `<div class="meter"><i style="width:${pct}%"></i></div>`}</td><td>${topWrong ? LB.ansHTML(q.answers[topWrong[0]]) : '<span style="color:var(--muted)">–</span>'}</td></tr>`;
     }).join('');
     return `<div class="stage pop">
       <div style="display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap"><div><span class="qlabel">Game over · ${esc(g.set.title || 'Untitled set')}</span><div class="hero-n">${g.score.toLocaleString('en-GB')}</div><span class="hint">points</span></div>
@@ -669,6 +1264,7 @@ app.addEventListener('click', async e => {
   const card = t.closest('[data-qid]');
   const q = card && set ? set.questions.find(x => x.id === card.dataset.qid) : null;
   switch (act) {
+    case 'help': if (TOURS[view.name]) LB.tour.start(TOURS[view.name]()); break;
     case 'host-link': e.preventDefault(); await flushAll(); location.href = t.href; break;
     case 'sign-out': await flushAll(); await sb.auth.signOut(); break;
     case 'forgot': renderForgot(); break;
@@ -701,7 +1297,8 @@ app.addEventListener('click', async e => {
     case 'new-set': {
       t.disabled = true;
       const fid = !['mine', 'unfiled', 'school'].includes(view.folder) ? view.folder : null;
-      const s = await insertSet({ title: '', folder_id: fid, questions: [mkQ()] });
+      let subject = null; try { subject = localStorage.getItem(cfg.storagePrefix + '.lastSubject') || null; } catch (err) {}
+      const s = await insertSet({ title: '', folder_id: fid, questions: [mkQ()], subject: THEME.def(subject) || subject === 'none' ? subject : null });
       t.disabled = false;
       if (!s) return;
       view = { name: 'edit', setId: s.id, folder: view.folder }; ui = {}; render();
@@ -711,6 +1308,28 @@ app.addEventListener('click', async e => {
     case 'edit': view = { name: 'edit', setId: id, folder: view.folder }; ui = {}; render(); break;
     case 'view': view = { name: 'view', setId: id, folder: view.folder }; ui = { search: ui.search }; render(); window.scrollTo(0, 0); break;
     case 'export': exportSet(getSet(id)); break;
+    case 'unlock': unlockBox(); break;
+    case 'ludgrovify': try { localStorage.removeItem(cfg.plainKey); } catch (err) {} location.reload(); break;
+    case 'worksheet': await flushAll(); view = { name: 'worksheet', setId: id, from: view.name, folder: view.folder }; ui = { ws: { kind: 'match', count: '', dir: wsDir(getSet(id)), key: true, bank: true, backwards: false, seed: wsSeed() } }; render(); break;
+    case 'tools': await flushAll(); { const set = getSet(id); THEME.takeover(THEME.subjectFor(set), () => {}); view = { name: 'tools', setId: id, from: view.name, folder: view.folder }; ui = { tool: t.dataset.tool || 'wheel', left: (set.questions || []).filter(LB.validQ).map(q => q.id), opened: [], pick: null, shown: false, angle: 0 }; ui.cq = cqSetup(); render(); } break;
+    case 'tool': cqStop(); ui.tool = t.dataset.tool; ui.pick = null; ui.shown = false; if (ui.tool === 'class') ui.cq = cqSetup(ui.cq); render(); break;
+    case 'cq-start': ui.cq.count = +document.getElementById('cq-count').value; ui.cq.secs = +document.getElementById('cq-secs').value; ui.cq.lives = document.getElementById('cq-lives').checked; cqStart(); break;
+    case 'cq-pick': if (ui.cq.phase === 'think') { ui.cq.pick = +t.dataset.j; render(); } break;
+    case 'cq-lock': cqLock(); break;
+    case 'cq-life': cqLife(t.dataset.k); break;
+    case 'cq-next': cqNext(); break;
+    case 'cq-again': ui.cq = cqSetup(ui.cq); render(); break;
+    case 'cq-again-wrong': { const ids = ui.cq.log.filter(e => !e.right).map(e => e.qid); cqStart(shuffle(ids)); } break;
+    case 'spin': spinWheel(); break;
+    case 'open-box': ui.pick = t.dataset.q; ui.shown = false; if (!ui.opened.includes(ui.pick)) ui.opened.push(ui.pick); render(); break;
+    case 'tool-show': ui.shown = true; render(); break;
+    case 'tool-close': ui.pick = null; ui.shown = false; render(); break;
+    case 'tool-refill': ui.left = (getSet(view.setId).questions || []).filter(LB.validQ).map(q => q.id); ui.opened = []; ui.pick = null; render(); break;
+    case 'tool-full': { const el = document.documentElement; if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else if (el.requestFullscreen) el.requestFullscreen().catch(() => {}); } break;
+    case 'ws-back': cqStop(); view = { name: view.from || 'library', setId: view.setId, folder: view.folder || 'mine' }; ui = {}; render(); break;
+    case 'ws-kind': ui.ws.kind = t.dataset.kind; ui.ws.count = ''; render(); break;
+    case 'ws-seed': ui.ws.seed = wsSeed(); render(); break;
+    case 'ws-print': wsPrint(); break;
     case 'tag': {
       const vs = view.name === 'view' ? getSet(view.setId) : null;
       const folder = vs ? (mine(vs) ? 'mine' : 'school') : (view.folder === 'school' ? 'school' : 'mine');
@@ -723,7 +1342,8 @@ app.addEventListener('click', async e => {
       const copy = await insertSet({
         title: mine(s) ? (s.title || 'Untitled set') + ' (copy)' : (s.title || 'Untitled set'),
         folder_id: mine(s) ? s.folder_id : null,
-        questions: s.questions.map(x => ({ ...x, id: uid(), answers: [...x.answers] }))
+        questions: s.questions.map(x => ({ ...x, id: uid(), answers: [...x.answers] })),
+        tags: [...(s.tags || [])], subject: s.subject || null
       });
       if (copy) { toast(mine(s) ? 'Duplicated' : 'Copied to My sets'); render(); }
       else t.disabled = false;
@@ -738,6 +1358,28 @@ app.addEventListener('click', async e => {
       break;
     }
     case 'back': view = { name: 'library', folder: view.folder || 'mine' }; ui = { search: ui.search }; render(); break;
+    case 'assignments': await flushAll(); view = { name: 'assignments', folder: view.folder }; ui = {}; render(); break;
+    case 'assignment': view = { name: 'assignment', id, folder: view.folder }; ui = {}; loadResults(); break;
+    case 'assign-new': await flushAll(); view = { name: 'assign-new', setId: t.dataset.id || null, folderId: t.dataset.folder || null, folder: view.folder }; ui = {}; render(); break;
+    case 'refresh-results': loadResults(); break;
+    case 'pupil-row': ui.openPupil = ui.openPupil === t.dataset.name ? null : t.dataset.name; render(); break;
+    case 'asg-csv': assignmentCSV(assignments.find(x => x.id === view.id)); break;
+    case 'print-card': printCard(assignments.find(x => x.id === id), false); break;
+    case 'print-slips': printCard(assignments.find(x => x.id === id), true); break;
+    case 'toggle-open': {
+      const a = assignments.find(x => x.id === id); t.disabled = true;
+      const { error } = await sb.from('assignments').update({ open: !a.open }).eq('id', id);
+      if (error) fail('Couldn’t change the code', error); else { a.open = !a.open; toast(a.open ? 'Reopened' : 'Closed. Pupils can’t open it now.'); }
+      render(); break;
+    }
+    case 'ask-del-asg': ui.confirmAsg = true; render(); break;
+    case 'cancel-asg': ui.confirmAsg = false; render(); break;
+    case 'del-asg': {
+      t.disabled = true;
+      const { error } = await sb.from('assignments').delete().eq('id', id);
+      if (error) { fail('Couldn’t delete it', error); break; }
+      assignments = assignments.filter(x => x.id !== id); view = { name: 'assignments' }; ui = {}; render(); toast('Deleted'); break;
+    }
     case 'add-q':
       set.questions.push(mkQ()); queueSave(set); render();
       { const qs = app.querySelectorAll('.q textarea'), last = qs[qs.length - 1]; if (last) { last.focus(); last.scrollIntoView({ block: 'center' }); } }
@@ -752,6 +1394,19 @@ app.addEventListener('click', async e => {
       q.answers.push(''); queueSave(set); render();
       { const el = document.getElementById(`a-${q.id}-${q.answers.length - 1}`); if (el) el.focus(); }
       break;
+    case 'ask-swap': ui.confirmSwap = true; render(); break;
+    case 'no-swap': ui.confirmSwap = false; render(); break;
+    case 'swap': {
+      ui.confirmSwap = false;
+      const r = swapSet(set);
+      if (!r.questions.length) { toast('Nothing to swap: the set needs at least 2 finished questions.', true); render(); break; }
+      set.questions = r.questions; queueSave(set); render();
+      toast(`Swapped: ${r.questions.length} ${r.questions.length === 1 ? 'question' : 'questions'}${r.merged ? `. ${r.merged} shared a right answer, so their questions are now one answer` : ''}`);
+      break;
+    }
+    case 'q-pic': case 'ans-pic': pickPicture(set, q, act === 'q-pic' ? 'q' : +t.dataset.i); break;
+    case 'q-pic-clear': delete q.image; queueSave(set); render(); break;
+    case 'ans-pic-clear': q.answers[+t.dataset.i] = ''; queueSave(set); render(); { const el = document.getElementById(`a-${q.id}-${t.dataset.i}`); if (el) el.focus(); } break;
     case 'rm-ans': {
       const j = +t.dataset.i; q.answers.splice(j, 1);
       if (q.correct === j) q.correct = 0; else if (q.correct > j) q.correct--;
@@ -765,12 +1420,17 @@ app.addEventListener('click', async e => {
       try { navigator.clipboard.writeText(txt).then(() => { if (msg) msg.textContent = 'Copied. Paste into Excel to start your own.'; }, fallback); } catch (err) { fallback(); }
       break;
     }
+    case 'imp-quizlet':
+      ui.qlText = document.getElementById('import-quizlet').value;
+      ui.qlDir = document.getElementById('ql-dir').value; ui.qlN = +document.getElementById('ql-n').value;
+      ui.importResult = parseQuizlet(ui.qlText, ui.qlDir, ui.qlN); render(); break;
     case 'imp-check': ui.importText = document.getElementById('import-paste').value; ui.importResult = parsePaste(ui.importText); render(); break;
     case 'imp-add': case 'imp-replace': {
       const blankOnly = set.questions.length === 1 && !set.questions[0].q.trim() && !set.questions[0].answers.some(a => a.trim());
       set.questions = act === 'imp-replace' || blankOnly ? ui.importResult.questions : set.questions.concat(ui.importResult.questions);
       const n = ui.importResult.questions.length;
-      ui = {}; queueSave(set); render(); toast(`Added ${n} ${n === 1 ? 'question' : 'questions'}`);
+      ui = {}; queueSave(set); render();
+      { const d = !set.subject && THEME.detect(set); toast(`Added ${n} ${n === 1 ? 'question' : 'questions'}${d ? `. Subject worked out: ${THEME.label(d)}` : ''}`); }
       break;
     }
     case 'begin': {
@@ -783,7 +1443,7 @@ app.addEventListener('click', async e => {
     case 'next': if (Date.now() >= (game.lockUntil || 0)) nextQ(); break;
     case 'end-game': endGame(); break;
     case 'again': { const back = view.returnTo; startGame(game.set.id); view.returnTo = back; break; }
-    case 'leave-play': stopTimer(); game = null; view = view.returnTo || { name: 'library', folder: 'mine' }; delete view.returnTo; ui = { search: ui.search }; render(); break;
+    case 'leave-play': stopTimer(); game = null; RUNNER.hide(); view = view.returnTo || { name: 'library', folder: 'mine' }; delete view.returnTo; ui = { search: ui.search }; render(); THEME.takeover(null, render); break;
   }
 });
 
@@ -793,6 +1453,7 @@ app.addEventListener('submit', e => {
   if (e.target.id === 'forgot') return onForgot(e);
   if (e.target.id === 'pw-form') return onPassword(e);
   if (e.target.id === 'add-teacher') return onAddTeacher(e);
+  if (e.target.id === 'assign-form') return createAssignment();
   const form = e.target.dataset.form;
   if (form === 'new-folder') {
     const name = document.getElementById('new-folder-name').value.trim();
@@ -825,12 +1486,16 @@ app.addEventListener('input', e => {
   const card = t.closest('[data-qid]'); if (!card) return;
   const q = set.questions.find(x => x.id === card.dataset.qid);
   if (field === 'q') q.q = t.value;
-  if (field === 'ans') q.answers[+t.dataset.i] = t.value;
+  if (field === 'ans') {
+    q.answers[+t.dataset.i] = t.value;
+    if (LB.isImg(ansIn(t.value))) { q.answers[+t.dataset.i] = ansIn(t.value); queueSave(set); render(); return; }   // pasted an image address
+  }
   queueSave(set); refreshQ(q);
 });
 
 app.addEventListener('change', e => {
   const t = e.target;
+  if (t.dataset.ws && ui.ws) { ui.ws[t.dataset.ws] = t.type === 'checkbox' ? t.checked : t.value; render(); return; }
   if (t.id === 'import-file' && t.files[0]) {
     const file = t.files[0];
     window.APP.loadXLSX().then(() => readSheet(file), () => toast('Couldn’t load the spreadsheet tool. Check your connection and try again.', true));
@@ -854,6 +1519,7 @@ app.addEventListener('change', e => {
   if (view.name !== 'edit') return;
   const set = getSet(view.setId), field = t.dataset.field;
   if (field === 'folder') { set.folder_id = t.value || null; queueSave(set); }
+  if (field === 'subject') { set.subject = t.value || null; try { localStorage.setItem(cfg.storagePrefix + '.lastSubject', set.subject || ''); } catch (err) {} queueSave(set); }
   if (field === 'correct') {
     const q = set.questions.find(x => x.id === t.closest('[data-qid]').dataset.qid);
     q.correct = +t.dataset.i; queueSave(set); refreshQ(q);
@@ -861,6 +1527,13 @@ app.addEventListener('change', e => {
 });
 
 document.addEventListener('keydown', e => {
+  if (e.key === '?' && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '') && !LB.tour.open() && TOURS[view.name]) { e.preventDefault(); LB.tour.start(TOURS[view.name]()); return; }
+  if (view.name === 'tools' && ui.tool === 'class' && ui.cq && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) {
+    const c = ui.cq;
+    if (c.phase === 'think' && /^[1-4]$/.test(e.key) && +e.key <= c.perm.length && !c.gone.includes(+e.key - 1)) { e.preventDefault(); c.pick = +e.key - 1; render(); }
+    else if (e.key === 'Enter' && (document.activeElement || {}).tagName !== 'BUTTON') { e.preventDefault(); if (c.phase === 'think') cqLock(); else if (c.phase === 'reveal') cqNext(); }
+    return;
+  }
   if (view.name !== 'play' || !game) return;
   const tag = document.activeElement && document.activeElement.tagName;
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
@@ -875,9 +1548,10 @@ document.addEventListener('keydown', e => {
 async function onAddTeacher(e) {
   const email = document.getElementById('new-email').value.trim(), pw = document.getElementById('new-pw').value;
   const btn = document.getElementById('add-btn'); btn.disabled = true; btn.textContent = 'Adding…';
-  const r = await adminCall({ action: 'create', email, password: pw });
-  if (r.error) { ui.adminErr = r.error; ui.adminNote = ''; render(); return; }
-  ui.adminErr = ''; ui.adminNote = `Added <b>${esc(email)}</b> with starting password <code class="mono">${esc(pw)}</code>. Send them both, plus the link ${esc(location.origin)}.`;
+  ui.newEmail = email; ui.newPw = pw;
+  const r = await Promise.race([adminCall({ action: 'create', email, password: pw }), new Promise(ok => setTimeout(() => ok({ error: 'Supabase didn’t answer within 20 seconds. Check your connection and try again.' }), 20000))]);
+  if (r.error) { console.warn('Add teacher:', r.error); ui.adminErr = r.error; ui.adminNote = ''; render(); return; }
+  ui.newEmail = ''; ui.adminErr = ''; ui.adminNote = `Added <b>${esc(email)}</b> with starting password <code class="mono">${esc(pw)}</code>. Send them both, plus the link ${esc(location.origin)}.`;
   ui.newPw = tempPassword(); loadTeachers();
 }
 

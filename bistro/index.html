@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>window.BISTRO={target:"ludus",audio:"audio/",music:{menu:"../assets/music/french-lobby.mp3",game:"../assets/music/french.mp3"}}</script>
+<script src="../assets/vendor/supabase-js-2.117.3.js"></script>
+<script src="../assets/config.js"></script>
+<script src="../assets/vendor/qrcode-generator-1.4.4.js"></script>
+<script src="../assets/common.js"></script>
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<title>Le Petit Bistro · Ludus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Nunito:wght@400;700;900&family=Caveat:wght@600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: playful, busy, Parisian; Year 5-7 French under kitchen pressure
+   IDEA: a corner bistro: striped awning, zinc counter, chalkboard menu, black-and-white tiled floor
+   PICTURE: the game itself: the dining room (Classique) and a top-down kitchen (Arcade)
+   COLOUR and TYPE: awning red, zinc grey, brass; Abril Fatface sign, Nunito body, Caveat chalk
+   LAYOUT: awning band, game area, chalkboard menu beside (stacks on phones) */
+:root{color-scheme:light dark;
+--bg:light-dark(#ffffff,#141110);--ink:light-dark(#1d1b1a,#f3eee8);--mute:light-dark(#6b6460,#a99f97);
+--red:#c8102e;--red2:light-dark(#a00c24,#e0435a);--zinc:light-dark(#e4e8ec,#2b3036);--zinc2:light-dark(#b9c1c9,#3c434b);
+--card:light-dark(#ffffff,#1f1b19);--line:light-dark(#e4dfda,#352f2b);--brass:#c9a227;--ok:#2e8b57;--bad:#c8102e;
+--board:#22302b;--chalk:#f2f0e6}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Nunito,system-ui,sans-serif;overflow-x:clip}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;min-height:44px;border-radius:12px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--brass);outline-offset:2px}
+input[type=text],select{min-height:44px;font-size:16px;border-radius:12px;padding:0 12px;background:var(--zinc);border:0}
+.awning{height:30px;background:repeating-linear-gradient(90deg,var(--red) 0 36px,#fff 36px 72px);position:relative}
+.awning::after{content:"";position:absolute;left:0;right:0;bottom:-14px;height:14px;background:radial-gradient(circle at 18px 0,var(--red) 17px,transparent 18px) 0 0/72px 14px,radial-gradient(circle at 18px 0,#fff 17px,transparent 18px) 36px 0/72px 14px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;padding:24px max(3vw,14px) 8px}
+h1{font:400 clamp(28px,4.4vw,44px)/1.05 "Abril Fatface",serif;margin:0;color:var(--red2);cursor:pointer}
+.hud{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+.pill{background:var(--zinc);border-radius:999px;padding:6px 14px;font-weight:900;white-space:nowrap}
+.pill small{font-weight:700;color:var(--mute);margin-right:6px}
+main{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:18px;padding:8px max(3vw,14px) 40px;max-width:1400px;margin:auto}
+main.wide{grid-template-columns:minmax(0,1fr)}
+@media(max-width:960px){main{grid-template-columns:minmax(0,1fr)}}
+h2{font:900 13px/1 Nunito;letter-spacing:.02em;color:var(--mute);margin:0 0 8px}
+.screen{display:none}.screen.on{display:block}
+.btn{background:var(--red);color:#fff;font-weight:900;padding:0 18px}
+.btn.ghost{background:var(--zinc);color:var(--ink)}
+.zone .btn.ghost,.settings .btn.ghost{background:var(--card);border:2px solid var(--line)}
+.btn.small{min-height:36px;padding:0 10px;font-size:14px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.note{font-size:13px;color:var(--mute)}
+/* menu */
+.modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media(max-width:700px){.modes{grid-template-columns:minmax(0,1fr)}}
+.mode{background:var(--card);border:2px solid var(--line);border-radius:20px;padding:0;overflow:hidden;text-align:left;display:flex;flex-direction:column;box-shadow:0 6px 0 var(--zinc2)}
+.mode .txt{flex:1}
+.mode .pic{height:170px;display:flex;align-items:center;justify-content:center;font-size:64px;gap:6px;background:conic-gradient(#f4f1ea 25%,#2a2522 0 50%,#f4f1ea 0 75%,#2a2522 0) 0 0/44px 44px;position:relative}
+.mode .pic span{filter:drop-shadow(0 6px 4px #0006)}
+.mode .txt{padding:16px 18px 18px}
+.mode h3{font:400 28px/1.1 "Abril Fatface",serif;margin:0 0 6px;color:var(--red2)}
+.mode p{margin:0;color:var(--mute)}
+.settings{margin-top:20px;background:var(--zinc);border-radius:18px;padding:16px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px 24px}
+.seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.seg button{background:var(--card);font-weight:900}.seg button[aria-pressed=true]{background:var(--red);color:#fff}
+label.opt{display:flex;align-items:center;gap:10px;padding:4px 0}
+label.opt input{width:22px;height:22px;accent-color:var(--red);flex:none}
+.mode-acts{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 18px}
+.mode-acts .btn{flex:1}
+.coach{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:7;width:min(600px,calc(100vw - 24px));background:#fffdf5;color:#1d1b1a;border-radius:16px;padding:12px 16px 14px;box-shadow:0 10px 30px #0006;border-left:8px solid var(--brass)}
+.coach.top{top:12px;bottom:auto}
+.coach-step{font:900 12px/1.4 Nunito,sans-serif;color:#8a6d10}
+.coach-txt{font-size:16px;margin:2px 0 8px}
+.coach-warn{font-size:14px;font-weight:700;color:var(--bad);margin:-4px 0 8px}
+.coach .btn.ghost{background:#efe9dc;color:#1d1b1a;border:0}
+body.tuto main{padding-bottom:210px}
+body.tuto .toast{bottom:auto;top:96px}
+@media(min-width:1100px){.coach{left:auto;right:16px;transform:none;width:310px}body.tuto main{padding-bottom:40px}}
+.pulse{outline:4px solid var(--brass)!important;outline-offset:3px;animation:pulse .8s infinite alternate;position:relative;z-index:2}
+@keyframes pulse{to{outline-color:#ffe27a}}
+@media(prefers-reduced-motion:reduce){.pulse{animation:none}}
+/* classic */
+.room{display:grid;grid-template-columns:repeat(var(--n,3),minmax(0,1fr));gap:12px;padding:14px;border-radius:18px;background:conic-gradient(var(--zinc) 25%,var(--card) 0 50%,var(--zinc) 0 75%,var(--card) 0) 0 0/40px 40px}
+@media(max-width:600px){.room{grid-template-columns:minmax(0,1fr)}}
+.table{background:var(--card);border:2px solid var(--line);border-radius:16px;padding:12px;min-height:196px;display:flex;flex-direction:column;gap:8px;box-shadow:0 6px 0 var(--zinc2)}
+.table.empty{align-items:center;justify-content:center;color:var(--mute);font-style:italic}
+.who{display:flex;align-items:center;gap:10px}.face{font-size:38px;line-height:1}.who b{display:block}.who span{font-size:13px;color:var(--mute)}
+.bubble{background:var(--zinc);border-radius:14px;padding:9px 11px;font-weight:700}
+.hidden .txt{filter:blur(6px);user-select:none}
+.bar{height:8px;background:var(--zinc);border-radius:9px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ok);transition:width .25s linear}
+.kitchen{margin-top:18px;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:14px}
+@media(max-width:700px){.kitchen{grid-template-columns:minmax(0,1fr)}}
+.zone{background:var(--zinc);border-radius:18px;padding:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:8px}
+.item{background:var(--card);border:2px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 4px;gap:2px;min-height:84px;text-align:center;line-height:1.15}
+.item:hover{border-color:var(--brass)}.item .e{font-size:30px}.item b{font-size:14px}.item small{font-size:12px;color:var(--mute)}
+.plate{background:var(--card);border-radius:50%;aspect-ratio:1;max-width:170px;margin:4px auto 10px;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;gap:4px;font-size:30px;border:8px double var(--zinc2)}
+.plate.cooking{animation:sizzle .3s infinite alternate}@keyframes sizzle{to{transform:rotate(2deg) scale(1.02)}}
+.cookbar{height:8px;border-radius:9px;background:var(--card);overflow:hidden;margin-bottom:10px}.cookbar i{display:block;height:100%;width:0;background:var(--brass)}
+.tray{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.slot{background:var(--card);border:2px dashed var(--zinc2);border-radius:12px;min-height:84px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-size:12px;color:var(--mute);padding:4px}
+.slot.full{border-style:solid;border-color:var(--brass);color:var(--ink)}.slot .e{font-size:28px}
+/* board */
+.board{background:var(--board);color:var(--chalk);border-radius:16px;padding:16px;border:10px solid #6b4a2b;align-self:start;position:sticky;top:12px}
+@media(max-width:960px){.board{position:static}}
+.board h3{font:600 32px/1 Caveat,cursive;margin:0 0 6px;text-align:center}
+.board h4{font:600 21px/1 Caveat,cursive;margin:10px 0 4px;color:var(--brass)}
+.dish{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 8px;font:600 19px/1.2 Caveat,cursive;padding:3px 0;border-bottom:1px dashed #ffffff22}
+.dish .r{grid-column:1/-1;font:13px Nunito;opacity:.85}.dish .p{white-space:nowrap}
+/* arcade */
+.tickets{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;min-height:118px}
+.ticket{flex:0 0 210px;background:#fffdf5;color:#1d1b1a;border-radius:6px 6px 14px 14px;padding:8px 10px 10px;box-shadow:0 3px 0 #0002;position:relative;border-top:6px solid var(--red)}
+.ticket .t{font-weight:700;font-size:14px;line-height:1.3}
+.ticket .slots{display:flex;gap:6px;margin-top:6px;font-size:20px}
+.ticket .slots span{background:#efe9dc;border-radius:8px;padding:0 6px;min-width:34px;text-align:center}
+.ticket .slots span.got{background:#cdebd8}
+.ticket .tb{height:6px;background:#efe9dc;border-radius:6px;overflow:hidden;margin-top:6px}.ticket .tb i{display:block;height:100%}
+.ticket button{position:absolute;top:4px;right:4px;min-height:30px;padding:0 6px;background:#efe9dc;font-size:14px}
+.ticket.empty{background:transparent;border:2px dashed var(--zinc2);color:var(--mute);display:flex;align-items:center;justify-content:center;box-shadow:none}
+.stage{position:relative;background:#2a2522;border-radius:18px;padding:8px;touch-action:none}
+#cv{display:block;width:100%;border-radius:12px}
+.touch{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 6px;user-select:none;-webkit-user-select:none}
+.joy{position:relative;width:132px;height:132px;border-radius:50%;background:#ffffff22;border:2px solid #ffffff55;touch-action:none;flex:none}
+.joy i{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:#fffc}
+.act{width:112px;height:112px;border-radius:50%;background:var(--red);color:#fff;font-weight:900;font-size:15px;box-shadow:0 6px 0 #7a0a1c;flex:none;touch-action:none}
+.act:active{transform:translateY(3px);box-shadow:0 3px 0 #7a0a1c}
+.touch.off{display:none}
+.lobby{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.card{background:var(--card);border:2px solid var(--line);border-radius:18px;padding:16px}
+.card h3{font:400 22px/1.1 "Abril Fatface",serif;margin:0 0 8px;color:var(--red2)}
+.code{font:400 48px/1 "Abril Fatface",serif;letter-spacing:.08em;color:var(--red2)}
+.plist{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.plist span{background:var(--zinc);border-radius:999px;padding:4px 12px;font-weight:700}
+.plist i{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.keys{font-size:13px;color:var(--mute);margin-top:8px}
+kbd{background:var(--zinc);border-radius:5px;padding:1px 6px;font:700 12px Nunito}
+/* class games (Ludus) */
+.board-join{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between;background:var(--board);color:var(--chalk);border-radius:18px;padding:22px 26px;margin-bottom:14px}
+.board-join .addr{font:900 clamp(22px,3vw,34px)/1.1 Nunito,sans-serif}
+.board-join .note{color:#d8d4c4}
+.code.big{font-size:clamp(56px,9vw,104px);color:#ffd23f;letter-spacing:.06em}
+.board-join .qr{width:170px;background:#fff;border-radius:12px;padding:10px}.board-join .qr svg{display:block;width:100%;height:auto}
+.board-join .qr:empty{display:none}
+.board-top{display:flex;align-items:center;gap:16px;margin-bottom:12px}.board-top .code{font-size:30px}.board-top .clock{font:900 clamp(40px,6vw,64px)/1 Nunito,sans-serif;margin-left:auto}
+.teams{display:grid;gap:10px;margin-bottom:14px}
+.team{background:var(--card);border:2px solid var(--line);border-radius:14px;padding:10px 14px}
+.team .tn{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}.team .rank{font:900 22px Nunito;color:var(--mute);min-width:1.4em}.team .tc{color:var(--mute);font-size:14px;flex:1}.team .ts{font-size:22px;white-space:nowrap}
+.tbar{height:14px;background:var(--zinc);border-radius:9px;overflow:hidden;margin-top:6px}.tbar i{display:block;height:100%;transition:width .6s}
+.chefs{margin:6px 0 14px;padding-left:1.4em}.chefs li{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}.chefs li b{white-space:nowrap}.chefs .tc{color:var(--mute);font-size:13px}
+.win{font:400 clamp(28px,4vw,40px)/1.1 "Abril Fatface",serif;color:var(--red2);margin:0 0 12px}
+fieldset.opts{border:0;padding:0;margin:0 0 12px}fieldset.opts legend{font:900 13px Nunito;color:var(--mute);margin-bottom:4px}
+label.opt select{min-height:40px;margin-left:6px}
+.plist .x{min-height:24px;padding:0 6px;margin-left:4px;background:transparent;font-weight:900;color:var(--mute);border-radius:6px}
+.team-badge{display:inline-block;border-left:6px solid var(--team);background:var(--zinc);border-radius:8px;padding:6px 12px;margin-top:10px}
+.card.pupil{max-width:560px;margin:30px auto;text-align:center}.card.pupil h2{font:400 30px/1.1 "Abril Fatface",serif;color:var(--red2);margin:0 0 10px}
+#classBar{font-weight:900;margin-bottom:8px;color:var(--red2)}
+/* overlays */
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:12px;font-weight:700;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center;z-index:9}
+.toast.on{opacity:1}
+.modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;padding:16px;z-index:8}
+.modal.on{display:flex}
+.sheet{background:var(--card);border-radius:20px;padding:24px;max-width:540px;width:100%;max-height:92vh;overflow:auto;border-top:14px solid var(--red)}
+.sheet h2{font:400 30px/1.1 "Abril Fatface",serif;color:var(--red2);margin:0 0 12px}
+.bill{font:600 22px/1.3 Caveat,cursive;background:var(--zinc);border-radius:12px;padding:12px 16px;margin:10px 0}
+.bill div{display:flex;justify-content:space-between;gap:10px}.bill .tot{border-top:2px solid var(--ink);margin-top:6px;padding-top:4px;font-size:26px}
+.choices{display:grid;gap:8px;margin-top:10px}
+.choices button{background:var(--zinc);font-weight:900;font-size:18px}
+.choices button.right{background:var(--ok);color:#fff}.choices button.wrong{background:var(--bad);color:#fff}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}
+.stats div{background:var(--zinc);border-radius:12px;padding:10px}.stats b{display:block;font-size:26px}
+.stars{font-size:38px;text-align:center;letter-spacing:6px}
+.vocab{font-size:14px;columns:2;column-gap:16px}@media(max-width:480px){.vocab{columns:1}}
+@media(prefers-reduced-motion:reduce){.plate.cooking{animation:none}.bar i{transition:none}}
+</style>
+</head>
+<body>
+<div class="awning"></div>
+<header>
+  <h1 id="home" title="Menu">Le Petit Bistro</h1>
+  <div class="hud" id="hud" hidden>
+    <span class="pill"><small>Temps</small><span id="time">3:00</span></span>
+    <span class="pill"><small>Caisse</small><span id="cash">0 €</span></span>
+    <span class="pill"><small>Servis</small><span id="served">0</span></span>
+    <button class="btn ghost small" id="soundBtn" aria-pressed="true">🔊 Son</button>
+    <button class="btn ghost small" id="musicBtn" aria-pressed="true">♪ Musique</button>
+    <button class="btn ghost small" id="pauseBtn">Pause</button>
+    <button class="btn ghost small" id="quitBtn">Menu</button>
+  </div>
+</header>
+
+<main id="main">
+<section>
+  <!-- MENU -->
+  <div class="screen on" id="scrMenu">
+    <div class="modes">
+      <div class="mode">
+        <div class="pic"><span>🧑‍🍳</span><span>🥞</span><span>💶</span></div>
+        <div class="txt"><h3>Service classique</h3><p>One chef, up to three tables. Read or listen to each order, cook from the recipe, then work out the bill in French.</p></div>
+        <div class="mode-acts"><button class="btn ghost" id="tutoClassic">🎓 Tutoriel</button><button class="btn" id="goClassic">Jouer</button></div>
+      </div>
+      <div class="mode">
+        <div class="pic"><span>🏃</span><span>🍳</span><span>🏃‍♀️</span></div>
+        <div class="txt"><h3>Mode arcade</h3><p>A top-down kitchen for 1 to 4 chefs. Grab, cook, plate and serve against the clock, on one screen or across devices.</p></div>
+        <div class="mode-acts"><button class="btn ghost" id="tutoArcade">🎓 Tutoriel</button><button class="btn" id="goArcade">Jouer</button></div>
+      </div>
+    </div>
+    <div class="settings">
+      <div>
+        <h2>Niveau</h2>
+        <div class="seg" id="levels">
+          <button data-l="facile" aria-pressed="true">Facile</button>
+          <button data-l="moyen" aria-pressed="false">Moyen</button>
+          <button data-l="difficile" aria-pressed="false">Difficile</button>
+        </div>
+        <p class="note" id="levelNote"></p>
+      </div>
+      <div>
+        <h2>Voix</h2>
+        <select id="voiceSel" aria-label="Voix" style="width:100%"></select>
+        <div class="row" style="margin-top:6px"><button class="btn ghost small" id="testVoice">Tester la voix</button><span class="note" id="voiceNote"></span></div>
+      </div>
+      <div>
+        <h2>Options</h2>
+        <label class="opt"><input type="checkbox" id="optSound" checked> Customers speak their orders</label>
+        <label class="opt"><input type="checkbox" id="optListen"> Mode écoute: orders blurred, listen only</label>
+        <label class="opt"><input type="checkbox" id="optMusic" checked> Background music</label>
+        <label class="opt" style="gap:12px"><span class="note" style="flex:none">Volume</span><input type="range" id="musicVol" min="0" max="100" value="35" aria-label="Volume de la musique" style="flex:1;accent-color:var(--red)"></label>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLASSIC -->
+  <div class="screen" id="scrClassic">
+    <h2>La salle</h2>
+    <div class="room" id="room"></div>
+    <div class="kitchen">
+      <div class="zone">
+        <h2>Les ingrédients: cliquez pour les mettre dans l'assiette</h2>
+        <div class="grid" id="ings"></div>
+        <h2 style="margin-top:14px">Le bar et le frigo</h2>
+        <div class="grid" id="extras"></div>
+      </div>
+      <div class="zone">
+        <h2>L'assiette</h2>
+        <div class="plate" id="plate"></div>
+        <div class="cookbar"><i id="cookfill"></i></div>
+        <div class="row" style="justify-content:center">
+          <button class="btn" id="prepBtn">Préparer</button>
+          <button class="btn ghost" id="binBtn">Poubelle</button>
+        </div>
+        <h2 style="margin-top:16px">Le plateau: cliquez pour enlever</h2>
+        <div class="tray" id="tray"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARCADE LOBBY -->
+  <div class="screen" id="scrLobby">
+    <div class="lobby">
+      <div class="card">
+        <h3>Sur cet appareil</h3>
+        <p class="note">One or two chefs sharing this screen and keyboard.</p>
+        <label class="opt"><input type="text" id="nameIn" value="Chef" maxlength="12" aria-label="Ton nom" style="flex:1"></label>
+        <label class="opt"><input type="checkbox" id="opt2p"> Two players on this keyboard</label>
+        <button class="btn" id="playLocal">Ouvrir la cuisine</button>
+        <p class="keys">Chef 1: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, <kbd>Space</kbd> or <kbd>E</kbd> to grab and drop.<br>Chef 2: arrow keys, <kbd>Enter</kbd>. Touch screens get a joystick.</p>
+      </div>
+      <div class="card" id="classCard" hidden>
+        <h3>Partie de classe</h3>
+        <p class="note">The whole class plays at once. Pupils join at the Ludus join page with a code, as for a quiz.</p>
+        <button class="btn" id="classBtn">Ouvrir une partie de classe</button>
+      </div>
+      <div class="card" id="roomCard">
+        <h3>En ligne</h3>
+        <p class="note" id="onlineNote">Connecting…</p>
+        <div class="row"><button class="btn" id="hostBtn" disabled>Créer une partie</button></div>
+        <div class="row" style="margin-top:10px">
+          <input type="text" id="codeIn" placeholder="Code" maxlength="4" aria-label="Code de la partie" style="width:110px;text-transform:uppercase">
+          <button class="btn ghost" id="joinBtn" disabled>Rejoindre</button>
+        </div>
+        <div id="netBox" hidden style="margin-top:12px">
+          <div class="note" id="netRole"></div>
+          <div class="code" id="netCode"></div>
+          <div class="plist" id="netPlayers"></div>
+          <div class="row"><button class="btn" id="netStart" hidden>Lancer le service</button><button class="btn ghost small" id="netLeave">Quitter</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLASS GAME (board) and PUPIL DEVICE -->
+  <div class="screen" id="scrClass"></div>
+  <div class="screen" id="scrPupil"></div>
+
+  <!-- ARCADE GAME -->
+  <div class="screen" id="scrArcade">
+    <div id="classBar" hidden></div>
+    <div class="tickets" id="tickets"></div>
+    <div class="stage" id="stage">
+      <canvas id="cv" width="960" height="576" aria-label="La cuisine"></canvas>
+      <div class="touch off" id="touch">
+        <div class="joy" id="joy"><i id="knob"></i></div>
+        <button class="act" id="actBtn">Prendre /<br>Poser</button>
+      </div>
+    </div>
+    <p class="note" style="margin-top:8px">Grab a plate (🍽️), add ingredients from the crates, cook on the stove (🔥) if the recipe says so, then take dishes, drinks and desserts to the hatch (PASSE). The bin (🗑️) clears your hands.</p>
+  </div>
+</section>
+
+<aside class="board" id="board" aria-label="Le menu">
+  <h3>La Carte</h3>
+  <div id="carte"></div>
+</aside>
+</main>
+
+<div class="coach" id="coach" hidden role="status" aria-live="polite"><div class="coach-step" id="coachStep"></div><div class="coach-txt" id="coachTxt"></div><div class="coach-warn" id="coachWarn" hidden></div><div class="row" id="coachActs"></div></div>
+<div class="toast" id="toast"></div>
+
+<div class="modal" id="billModal">
+  <div class="sheet">
+    <h2 id="billTitle">L'addition !</h2>
+    <p id="billSay"></p>
+    <div class="bill" id="billLines"></div>
+    <p><b>Ça fait combien ?</b> Choose the total in French.</p>
+    <div class="choices" id="billChoices"></div>
+    <p id="billFeedback" style="font-weight:900;min-height:24px"></p>
+    <div class="row"><button class="btn" id="billNext" hidden>Continuer</button></div>
+  </div>
+</div>
+
+<div class="modal" id="endModal">
+  <div class="sheet">
+    <h2 id="endTitle">Le bistro est fermé !</h2>
+    <div class="stars" id="endStars"></div>
+    <p id="endExtra" hidden style="font-size:18px"></p>
+    <div class="stats" id="endStats"></div>
+    <h2 style="font-size:20px">Vocabulaire du jour</h2>
+    <div class="vocab" id="endVocab"></div>
+    <div class="row" style="margin-top:14px"><button class="btn" id="againBtn">Rejouer</button><button class="btn ghost" id="endMenu">Menu</button></div>
+  </div>
+</div>
+
+<script>
+{
+/* ---------------- data ---------------- */
+const $=id=>document.getElementById(id);
+const CFG=Object.assign({target:"claude",audio:"audio/",music:{menu:"music/menu.mp3",game:"music/game.mp3"}},window.BISTRO||{});
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ING={pain:["le pain","bread","🥖"],jambon:["le jambon","ham","🍖"],fromage:["le fromage","cheese","🧀"],oeufs:["les œufs","eggs","🥚"],
+tomate:["la tomate","tomato","🍅"],salade:["la salade","lettuce","🥬"],pate:["la pâte à crêpe","pancake batter","🥣"],chocolat:["le chocolat","chocolate","🍫"],sucre:["le sucre","sugar","🍬"]};
+const PLATS=[
+ {id:"croque",fr:"un croque-monsieur",en:"toasted ham and cheese sandwich",e:"🥪",ing:["pain","jambon","fromage"],cook:true,p:7},
+ {id:"sandwich",fr:"un sandwich au jambon",en:"ham sandwich",e:"🌯",ing:["pain","jambon"],cook:false,p:5},
+ {id:"omelette",fr:"une omelette au fromage",en:"cheese omelette",e:"🍳",ing:["oeufs","fromage"],cook:true,p:8},
+ {id:"crepechoc",fr:"une crêpe au chocolat",en:"chocolate pancake",e:"🥞",ing:["pate","chocolat"],cook:true,p:6},
+ {id:"crepesucre",fr:"une crêpe au sucre",en:"sugar pancake",e:"🫓",ing:["pate","sucre"],cook:true,p:4},
+ {id:"salade",fr:"une salade de tomates",en:"tomato salad",e:"🥗",ing:["salade","tomate"],cook:false,p:6}];
+const BOISSONS=[{id:"limonade",fr:"une limonade",en:"lemonade",e:"🍋",p:3},{id:"jus",fr:"un jus d'orange",en:"orange juice",e:"🧃",p:3},
+ {id:"chocolat",fr:"un chocolat chaud",en:"hot chocolate",e:"☕",p:4},{id:"eau",fr:"une eau minérale",en:"mineral water",e:"💧",p:2}];
+const DESSERTS=[{id:"glace",fr:"une glace à la vanille",en:"vanilla ice cream",e:"🍨",p:4},{id:"tarte",fr:"une tarte aux pommes",en:"apple tart",e:"🥧",p:5}];
+const byId=(l,id)=>l.find(x=>x.id===id);
+const NUM=["zéro","un","deux","trois","quatre","cinq","six","sept","huit","neuf","dix","onze","douze","treize","quatorze","quinze","seize","dix-sept","dix-huit","dix-neuf","vingt","vingt et un","vingt-deux","vingt-trois","vingt-quatre","vingt-cinq"];
+const CONF={1:11,11:1,2:12,12:2,3:13,13:3,4:14,14:4,5:15,15:5,6:16,16:6,7:17,17:7,8:18,18:8,9:19,19:9,10:20,20:10};
+const ORDERS=[{"id": "o_omelette_chocolat_x", "v": "f", "plat": "omelette", "boisson": "chocolat", "dessert": null, "text": "Bonjour, madame ! J'aimerais une omelette au fromage et un chocolat chaud s'il vous plaît !"}, {"id": "o_sandwich_x_tarte", "v": "m", "plat": "sandwich", "boisson": null, "dessert": "tarte", "text": "Salut ! Pour moi, un sandwich au jambon et une tarte aux pommes, merci !"}, {"id": "o_omelette_x_tarte", "v": "f", "plat": "omelette", "boisson": null, "dessert": "tarte", "text": "Bonjour, monsieur ! Je voudrais une omelette au fromage et une tarte aux pommes, s'il vous plaît."}, {"id": "o_croque_x_x", "v": "m", "plat": "croque", "boisson": null, "dessert": null, "text": "Salut ! Pour moi, un croque-monsieur, merci !"}, {"id": "o_salade_eau_tarte", "v": "f", "plat": "salade", "boisson": "eau", "dessert": "tarte", "text": "Bonjour ! Je voudrais une salade de tomates, une eau minérale et une tarte aux pommes, merci !"}, {"id": "o_crepechoc_x_x", "v": "m", "plat": "crepechoc", "boisson": null, "dessert": null, "text": "Salut ! Pour moi, une crêpe au chocolat s'il vous plaît !"}, {"id": "o_omelette_limonade_x", "v": "f", "plat": "omelette", "boisson": "limonade", "dessert": null, "text": "Bonjour, monsieur ! J'aimerais une omelette au fromage et une limonade, s'il vous plaît."}, {"id": "o_sandwich_chocolat_x", "v": "m", "plat": "sandwich", "boisson": "chocolat", "dessert": null, "text": "Bonjour, monsieur ! J'aimerais un sandwich au jambon et un chocolat chaud, s'il vous plaît."}, {"id": "o_sandwich_jus_x", "v": "f", "plat": "sandwich", "boisson": "jus", "dessert": null, "text": "Bonjour, madame ! Je voudrais un sandwich au jambon et un jus d'orange s'il vous plaît !"}, {"id": "o_crepechoc_limonade_x", "v": "m", "plat": "crepechoc", "boisson": "limonade", "dessert": null, "text": "Bonjour ! Je vais prendre une crêpe au chocolat et une limonade s'il vous plaît !"}, {"id": "o_crepechoc_eau_x", "v": "f", "plat": "crepechoc", "boisson": "eau", "dessert": null, "text": "Bonsoir ! Je vais prendre une crêpe au chocolat et une eau minérale s'il vous plaît !"}, {"id": "o_omelette_eau_x", "v": "m", "plat": "omelette", "boisson": "eau", "dessert": null, "text": "Bonjour, monsieur ! Pour moi, une omelette au fromage et une eau minérale, s'il vous plaît."}, {"id": "o_croque_x_glace", "v": "f", "plat": "croque", "boisson": null, "dessert": "glace", "text": "Bonsoir ! Pour moi, un croque-monsieur et une glace à la vanille s'il vous plaît !"}, {"id": "o_salade_limonade_x", "v": "m", "plat": "salade", "boisson": "limonade", "dessert": null, "text": "Bonjour, madame ! J'aimerais une salade de tomates et une limonade, s'il vous plaît."}, {"id": "o_omelette_jus_tarte", "v": "f", "plat": "omelette", "boisson": "jus", "dessert": "tarte", "text": "Bonjour, monsieur ! J'aimerais une omelette au fromage, un jus d'orange et une tarte aux pommes, merci !"}, {"id": "o_crepesucre_jus_x", "v": "m", "plat": "crepesucre", "boisson": "jus", "dessert": null, "text": "Bonjour, monsieur ! J'aimerais une crêpe au sucre et un jus d'orange, merci !"}, {"id": "o_croque_chocolat_glace", "v": "f", "plat": "croque", "boisson": "chocolat", "dessert": "glace", "text": "Bonjour, monsieur ! Je vais prendre un croque-monsieur, un chocolat chaud et une glace à la vanille, s'il vous plaît."}, {"id": "o_crepesucre_jus_glace", "v": "m", "plat": "crepesucre", "boisson": "jus", "dessert": "glace", "text": "Bonjour ! Je vais prendre une crêpe au sucre, un jus d'orange et une glace à la vanille, s'il vous plaît."}, {"id": "o_sandwich_x_glace", "v": "f", "plat": "sandwich", "boisson": null, "dessert": "glace", "text": "Bonsoir ! Je vais prendre un sandwich au jambon et une glace à la vanille, s'il vous plaît."}, {"id": "o_salade_limonade_tarte", "v": "m", "plat": "salade", "boisson": "limonade", "dessert": "tarte", "text": "Bonjour, monsieur ! Je vais prendre une salade de tomates, une limonade et une tarte aux pommes s'il vous plaît !"}, {"id": "o_crepesucre_chocolat_tarte", "v": "f", "plat": "crepesucre", "boisson": "chocolat", "dessert": "tarte", "text": "Salut ! Je voudrais une crêpe au sucre, un chocolat chaud et une tarte aux pommes, s'il vous plaît."}, {"id": "o_crepesucre_x_x", "v": "m", "plat": "crepesucre", "boisson": null, "dessert": null, "text": "Bonjour, monsieur ! J'aimerais une crêpe au sucre, merci !"}, {"id": "o_sandwich_chocolat_glace", "v": "f", "plat": "sandwich", "boisson": "chocolat", "dessert": "glace", "text": "Bonjour, madame ! J'aimerais un sandwich au jambon, un chocolat chaud et une glace à la vanille, s'il vous plaît."}, {"id": "o_sandwich_jus_glace", "v": "m", "plat": "sandwich", "boisson": "jus", "dessert": "glace", "text": "Bonjour, madame ! Je voudrais un sandwich au jambon, un jus d'orange et une glace à la vanille s'il vous plaît !"}, {"id": "o_croque_limonade_tarte", "v": "f", "plat": "croque", "boisson": "limonade", "dessert": "tarte", "text": "Bonjour, madame ! Pour moi, un croque-monsieur, une limonade et une tarte aux pommes s'il vous plaît !"}, {"id": "o_crepechoc_jus_glace", "v": "m", "plat": "crepechoc", "boisson": "jus", "dessert": "glace", "text": "Bonjour, monsieur ! Pour moi, une crêpe au chocolat, un jus d'orange et une glace à la vanille, s'il vous plaît."}, {"id": "o_crepechoc_eau_glace", "v": "f", "plat": "crepechoc", "boisson": "eau", "dessert": "glace", "text": "Bonjour, monsieur ! Pour moi, une crêpe au chocolat, une eau minérale et une glace à la vanille, s'il vous plaît."}, {"id": "o_crepechoc_x_tarte", "v": "m", "plat": "crepechoc", "boisson": null, "dessert": "tarte", "text": "Bonsoir ! Je voudrais une crêpe au chocolat et une tarte aux pommes, s'il vous plaît."}, {"id": "o_crepesucre_x_glace", "v": "f", "plat": "crepesucre", "boisson": null, "dessert": "glace", "text": "Bonjour, monsieur ! Je vais prendre une crêpe au sucre et une glace à la vanille, s'il vous plaît."}, {"id": "o_crepesucre_eau_glace", "v": "m", "plat": "crepesucre", "boisson": "eau", "dessert": "glace", "text": "Salut ! Je voudrais une crêpe au sucre, une eau minérale et une glace à la vanille, s'il vous plaît."}, {"id": "o_crepechoc_chocolat_tarte", "v": "f", "plat": "crepechoc", "boisson": "chocolat", "dessert": "tarte", "text": "Bonjour ! Je vais prendre une crêpe au chocolat, un chocolat chaud et une tarte aux pommes, merci !"}, {"id": "o_sandwich_eau_tarte", "v": "m", "plat": "sandwich", "boisson": "eau", "dessert": "tarte", "text": "Bonjour ! J'aimerais un sandwich au jambon, une eau minérale et une tarte aux pommes, merci !"}, {"id": "o_sandwich_limonade_tarte", "v": "f", "plat": "sandwich", "boisson": "limonade", "dessert": "tarte", "text": "Bonjour ! Je voudrais un sandwich au jambon, une limonade et une tarte aux pommes, s'il vous plaît."}, {"id": "o_salade_x_tarte", "v": "m", "plat": "salade", "boisson": null, "dessert": "tarte", "text": "Bonjour, madame ! Pour moi, une salade de tomates et une tarte aux pommes, s'il vous plaît."}, {"id": "o_omelette_x_glace", "v": "f", "plat": "omelette", "boisson": null, "dessert": "glace", "text": "Salut ! J'aimerais une omelette au fromage et une glace à la vanille, merci !"}, {"id": "o_croque_eau_glace", "v": "m", "plat": "croque", "boisson": "eau", "dessert": "glace", "text": "Salut ! Pour moi, un croque-monsieur, une eau minérale et une glace à la vanille, s'il vous plaît."}, {"id": "o_croque_limonade_x", "v": "f", "plat": "croque", "boisson": "limonade", "dessert": null, "text": "Bonjour ! Pour moi, un croque-monsieur et une limonade s'il vous plaît !"}, {"id": "o_omelette_eau_tarte", "v": "m", "plat": "omelette", "boisson": "eau", "dessert": "tarte", "text": "Bonjour, monsieur ! Pour moi, une omelette au fromage, une eau minérale et une tarte aux pommes s'il vous plaît !"}, {"id": "o_salade_x_glace", "v": "f", "plat": "salade", "boisson": null, "dessert": "glace", "text": "Bonjour ! Je vais prendre une salade de tomates et une glace à la vanille, s'il vous plaît."}, {"id": "o_crepechoc_limonade_glace", "v": "m", "plat": "crepechoc", "boisson": "limonade", "dessert": "glace", "text": "Salut ! J'aimerais une crêpe au chocolat, une limonade et une glace à la vanille s'il vous plaît !"}, {"id": "o_salade_jus_x", "v": "f", "plat": "salade", "boisson": "jus", "dessert": null, "text": "Bonsoir ! Je voudrais une salade de tomates et un jus d'orange, s'il vous plaît."}, {"id": "o_sandwich_jus_tarte", "v": "m", "plat": "sandwich", "boisson": "jus", "dessert": "tarte", "text": "Bonjour, madame ! J'aimerais un sandwich au jambon, un jus d'orange et une tarte aux pommes, s'il vous plaît."}, {"id": "o_salade_jus_glace", "v": "f", "plat": "salade", "boisson": "jus", "dessert": "glace", "text": "Bonjour, madame ! Je voudrais une salade de tomates, un jus d'orange et une glace à la vanille, merci !"}, {"id": "o_omelette_chocolat_glace", "v": "m", "plat": "omelette", "boisson": "chocolat", "dessert": "glace", "text": "Salut ! Je voudrais une omelette au fromage, un chocolat chaud et une glace à la vanille, merci !"}, {"id": "o_crepechoc_jus_x", "v": "f", "plat": "crepechoc", "boisson": "jus", "dessert": null, "text": "Salut ! J'aimerais une crêpe au chocolat et un jus d'orange, s'il vous plaît."}, {"id": "o_omelette_jus_glace", "v": "m", "plat": "omelette", "boisson": "jus", "dessert": "glace", "text": "Salut ! Je vais prendre une omelette au fromage, un jus d'orange et une glace à la vanille, merci !"}, {"id": "o_crepesucre_limonade_x", "v": "f", "plat": "crepesucre", "boisson": "limonade", "dessert": null, "text": "Bonjour, madame ! J'aimerais une crêpe au sucre et une limonade, merci !"}, {"id": "o_crepesucre_chocolat_glace", "v": "m", "plat": "crepesucre", "boisson": "chocolat", "dessert": "glace", "text": "Bonsoir ! Je vais prendre une crêpe au sucre, un chocolat chaud et une glace à la vanille, s'il vous plaît."}, {"id": "o_omelette_eau_glace", "v": "f", "plat": "omelette", "boisson": "eau", "dessert": "glace", "text": "Bonjour, monsieur ! Je vais prendre une omelette au fromage, une eau minérale et une glace à la vanille, s'il vous plaît."}, {"id": "o_crepechoc_eau_tarte", "v": "m", "plat": "crepechoc", "boisson": "eau", "dessert": "tarte", "text": "Bonjour, madame ! Pour moi, une crêpe au chocolat, une eau minérale et une tarte aux pommes s'il vous plaît !"}, {"id": "o_salade_eau_glace", "v": "f", "plat": "salade", "boisson": "eau", "dessert": "glace", "text": "Bonjour ! Je voudrais une salade de tomates, une eau minérale et une glace à la vanille s'il vous plaît !"}, {"id": "o_omelette_jus_x", "v": "m", "plat": "omelette", "boisson": "jus", "dessert": null, "text": "Bonjour, monsieur ! J'aimerais une omelette au fromage et un jus d'orange, s'il vous plaît."}, {"id": "o_crepesucre_limonade_tarte", "v": "f", "plat": "crepesucre", "boisson": "limonade", "dessert": "tarte", "text": "Bonjour, madame ! J'aimerais une crêpe au sucre, une limonade et une tarte aux pommes s'il vous plaît !"}, {"id": "o_omelette_limonade_glace", "v": "m", "plat": "omelette", "boisson": "limonade", "dessert": "glace", "text": "Salut ! J'aimerais une omelette au fromage, une limonade et une glace à la vanille, s'il vous plaît."}, {"id": "o_salade_chocolat_x", "v": "f", "plat": "salade", "boisson": "chocolat", "dessert": null, "text": "Bonsoir ! Je voudrais une salade de tomates et un chocolat chaud, s'il vous plaît."}, {"id": "o_sandwich_chocolat_tarte", "v": "m", "plat": "sandwich", "boisson": "chocolat", "dessert": "tarte", "text": "Bonjour, monsieur ! Je vais prendre un sandwich au jambon, un chocolat chaud et une tarte aux pommes s'il vous plaît !"}, {"id": "o_sandwich_limonade_x", "v": "f", "plat": "sandwich", "boisson": "limonade", "dessert": null, "text": "Bonsoir ! Pour moi, un sandwich au jambon et une limonade, merci !"}, {"id": "o_crepesucre_eau_x", "v": "m", "plat": "crepesucre", "boisson": "eau", "dessert": null, "text": "Bonjour, madame ! Je voudrais une crêpe au sucre et une eau minérale s'il vous plaît !"}, {"id": "o_crepesucre_chocolat_x", "v": "f", "plat": "crepesucre", "boisson": "chocolat", "dessert": null, "text": "Salut ! Je voudrais une crêpe au sucre et un chocolat chaud, merci !"}, {"id": "o_omelette_limonade_tarte", "v": "m", "plat": "omelette", "boisson": "limonade", "dessert": "tarte", "text": "Bonjour ! Pour moi, une omelette au fromage, une limonade et une tarte aux pommes, merci !"}, {"id": "o_croque_x_tarte", "v": "f", "plat": "croque", "boisson": null, "dessert": "tarte", "text": "Bonsoir ! Pour moi, un croque-monsieur et une tarte aux pommes, s'il vous plaît."}, {"id": "o_croque_eau_tarte", "v": "m", "plat": "croque", "boisson": "eau", "dessert": "tarte", "text": "Bonjour, monsieur ! J'aimerais un croque-monsieur, une eau minérale et une tarte aux pommes, s'il vous plaît."}, {"id": "o_crepesucre_x_tarte", "v": "f", "plat": "crepesucre", "boisson": null, "dessert": "tarte", "text": "Bonjour, monsieur ! Pour moi, une crêpe au sucre et une tarte aux pommes s'il vous plaît !"}, {"id": "o_salade_chocolat_glace", "v": "m", "plat": "salade", "boisson": "chocolat", "dessert": "glace", "text": "Bonjour ! Je vais prendre une salade de tomates, un chocolat chaud et une glace à la vanille, s'il vous plaît."}, {"id": "o_salade_eau_x", "v": "f", "plat": "salade", "boisson": "eau", "dessert": null, "text": "Bonsoir ! Je voudrais une salade de tomates et une eau minérale, s'il vous plaît."}, {"id": "o_salade_chocolat_tarte", "v": "m", "plat": "salade", "boisson": "chocolat", "dessert": "tarte", "text": "Bonjour, madame ! Pour moi, une salade de tomates, un chocolat chaud et une tarte aux pommes, merci !"}, {"id": "o_sandwich_eau_glace", "v": "f", "plat": "sandwich", "boisson": "eau", "dessert": "glace", "text": "Bonsoir ! Pour moi, un sandwich au jambon, une eau minérale et une glace à la vanille, merci !"}, {"id": "o_sandwich_x_x", "v": "m", "plat": "sandwich", "boisson": null, "dessert": null, "text": "Salut ! Je vais prendre un sandwich au jambon, merci !"}, {"id": "o_salade_limonade_glace", "v": "f", "plat": "salade", "boisson": "limonade", "dessert": "glace", "text": "Bonjour, madame ! Je vais prendre une salade de tomates, une limonade et une glace à la vanille, s'il vous plaît."}, {"id": "o_crepechoc_chocolat_x", "v": "m", "plat": "crepechoc", "boisson": "chocolat", "dessert": null, "text": "Bonjour ! Je voudrais une crêpe au chocolat et un chocolat chaud, merci !"}, {"id": "o_salade_x_x", "v": "f", "plat": "salade", "boisson": null, "dessert": null, "text": "Bonsoir ! Pour moi, une salade de tomates, s'il vous plaît."}, {"id": "o_omelette_x_x", "v": "m", "plat": "omelette", "boisson": null, "dessert": null, "text": "Bonsoir ! Je voudrais une omelette au fromage s'il vous plaît !"}, {"id": "o_croque_jus_tarte", "v": "f", "plat": "croque", "boisson": "jus", "dessert": "tarte", "text": "Bonsoir ! J'aimerais un croque-monsieur, un jus d'orange et une tarte aux pommes, merci !"}, {"id": "o_crepechoc_jus_tarte", "v": "m", "plat": "crepechoc", "boisson": "jus", "dessert": "tarte", "text": "Bonsoir ! J'aimerais une crêpe au chocolat, un jus d'orange et une tarte aux pommes s'il vous plaît !"}, {"id": "o_crepechoc_chocolat_glace", "v": "f", "plat": "crepechoc", "boisson": "chocolat", "dessert": "glace", "text": "Bonjour, madame ! Pour moi, une crêpe au chocolat, un chocolat chaud et une glace à la vanille, s'il vous plaît."}, {"id": "o_croque_chocolat_tarte", "v": "m", "plat": "croque", "boisson": "chocolat", "dessert": "tarte", "text": "Bonjour ! J'aimerais un croque-monsieur, un chocolat chaud et une tarte aux pommes s'il vous plaît !"}, {"id": "o_croque_limonade_glace", "v": "f", "plat": "croque", "boisson": "limonade", "dessert": "glace", "text": "Bonjour, madame ! Pour moi, un croque-monsieur, une limonade et une glace à la vanille, merci !"}, {"id": "o_sandwich_eau_x", "v": "m", "plat": "sandwich", "boisson": "eau", "dessert": null, "text": "Bonsoir ! Je vais prendre un sandwich au jambon et une eau minérale, merci !"}, {"id": "o_crepesucre_limonade_glace", "v": "f", "plat": "crepesucre", "boisson": "limonade", "dessert": "glace", "text": "Bonjour, madame ! Je voudrais une crêpe au sucre, une limonade et une glace à la vanille s'il vous plaît !"}, {"id": "o_croque_jus_glace", "v": "m", "plat": "croque", "boisson": "jus", "dessert": "glace", "text": "Bonsoir ! Je voudrais un croque-monsieur, un jus d'orange et une glace à la vanille, s'il vous plaît."}, {"id": "o_crepesucre_eau_tarte", "v": "f", "plat": "crepesucre", "boisson": "eau", "dessert": "tarte", "text": "Bonsoir ! Je vais prendre une crêpe au sucre, une eau minérale et une tarte aux pommes s'il vous plaît !"}, {"id": "o_crepechoc_x_glace", "v": "m", "plat": "crepechoc", "boisson": null, "dessert": "glace", "text": "Bonjour, madame ! Je voudrais une crêpe au chocolat et une glace à la vanille, merci !"}, {"id": "o_croque_eau_x", "v": "f", "plat": "croque", "boisson": "eau", "dessert": null, "text": "Bonjour ! J'aimerais un croque-monsieur et une eau minérale, merci !"}, {"id": "o_crepesucre_jus_tarte", "v": "m", "plat": "crepesucre", "boisson": "jus", "dessert": "tarte", "text": "Bonjour, madame ! Pour moi, une crêpe au sucre, un jus d'orange et une tarte aux pommes, s'il vous plaît."}, {"id": "o_croque_chocolat_x", "v": "f", "plat": "croque", "boisson": "chocolat", "dessert": null, "text": "Bonjour, madame ! Je voudrais un croque-monsieur et un chocolat chaud, s'il vous plaît."}, {"id": "o_croque_jus_x", "v": "m", "plat": "croque", "boisson": "jus", "dessert": null, "text": "Bonsoir ! J'aimerais un croque-monsieur et un jus d'orange, s'il vous plaît."}, {"id": "o_salade_jus_tarte", "v": "f", "plat": "salade", "boisson": "jus", "dessert": "tarte", "text": "Bonjour ! Pour moi, une salade de tomates, un jus d'orange et une tarte aux pommes, merci !"}, {"id": "o_crepechoc_limonade_tarte", "v": "m", "plat": "crepechoc", "boisson": "limonade", "dessert": "tarte", "text": "Bonjour ! Je voudrais une crêpe au chocolat, une limonade et une tarte aux pommes s'il vous plaît !"}, {"id": "o_sandwich_limonade_glace", "v": "f", "plat": "sandwich", "boisson": "limonade", "dessert": "glace", "text": "Salut ! Je vais prendre un sandwich au jambon, une limonade et une glace à la vanille, merci !"}, {"id": "o_omelette_chocolat_tarte", "v": "m", "plat": "omelette", "boisson": "chocolat", "dessert": "tarte", "text": "Salut ! Pour moi, une omelette au fromage, un chocolat chaud et une tarte aux pommes, merci !"}];
+const PEOPLE=[["👵","Madame Martin","f"],["👨‍🦱","Monsieur Dupont","m"],["👩‍🦰","Madame Bernard","f"],["🧔","Monsieur Petit","m"],["👧","Chloé","f"],["👦","Lucas","m"],["👴","Monsieur Moreau","m"],["👩","Madame Laurent","f"],["👱‍♀️","Mademoiselle Roux","f"],["👨","Monsieur Girard","m"]];
+const LEVELS={
+ facile:{tables:2,spawn:15,pat:80,hints:true,aSpawn:22,aTime:100,aMax:3,note:"Plats and drinks only, patient customers, English hints on La Carte."},
+ moyen:{tables:3,spawn:12,pat:62,hints:false,aSpawn:17,aTime:80,aMax:4,note:"Desserts join the menu. French only."},
+ difficile:{tables:3,spawn:9,pat:48,hints:false,aSpawn:13,aTime:65,aMax:4,note:"Impatient customers and bigger orders."}};
+let lvl="facile";
+const pool=()=>ORDERS.filter(o=>lvl==="facile"?!o.dessert:lvl==="difficile"?(o.boisson||o.dessert):true);
+const itemsOf=o=>[byId(PLATS,o.plat)].concat(o.boisson?[byId(BOISSONS,o.boisson)]:[],o.dessert?[byId(DESSERTS,o.dessert)]:[]);
+const totalOf=o=>itemsOf(o).reduce((s,x)=>s+x.p,0);
+const personFor=v=>pick(PEOPLE.filter(p=>p[2]===v));
+
+/* ---------------- settings, audio ---------------- */
+const SET={sound:true,listen:false,voice:"clips"};
+let ttsVoices=[];
+const clipCache={};
+function clipUrl(id){
+  if(!clipCache[id]){clipCache[id]=fetch(CFG.audio+id+".mp3").then(r=>{if(!r.ok)throw new Error("missing");return r.blob()}).then(b=>URL.createObjectURL(b));
+    clipCache[id].catch(()=>{delete clipCache[id]})}
+  return clipCache[id];
+}
+let playTok=0,curAudio=null;
+function stopAudio(){playTok++;if(curAudio){try{curAudio.pause()}catch(e){}curAudio=null}try{speechSynthesis.cancel()}catch(e){}}
+/* background music: menu track on menus, game track during service; ducks under the voices */
+const MUS={on:true,vol:.35,want:null,unlocked:false,duck:0,tracks:{},fade:null};
+try{const m=JSON.parse(localStorage.getItem("bistro-music")||"null");if(m){MUS.on=!!m.on;MUS.vol=Math.max(0,Math.min(1,+m.vol||0))}}catch(e){}
+function musicSave(){try{localStorage.setItem("bistro-music",JSON.stringify({on:MUS.on,vol:MUS.vol}))}catch(e){}}
+function track(name){
+  if(!MUS.tracks[name]){const a=new Audio();a.loop=true;a.volume=0;MUS.tracks[name]=a;
+    fetch(CFG.music[name]).then(r=>{if(!r.ok)throw new Error("missing");return r.blob()}).then(b=>{a.src=URL.createObjectURL(b);musicApply()}).catch(()=>{})}
+  return MUS.tracks[name];
+}
+function musicApply(){
+  const target=MUS.vol*(MUS.duck>0?.25:1);
+  if(MUS.want)track(MUS.want);
+  clearInterval(MUS.fade);
+  MUS.fade=setInterval(()=>{let busy=false;
+    for(const [n,a] of Object.entries(MUS.tracks)){
+      const want=MUS.on&&MUS.unlocked&&n===MUS.want&&a.src,goal=want?target:0;
+      if(want&&a.paused){const p=a.play();if(p&&p.catch)p.catch(()=>{})}
+      const v=a.volume+(goal-a.volume)*.25;a.volume=Math.abs(goal-v)<.01?goal:Math.max(0,Math.min(1,v));
+      if(a.volume!==goal)busy=true;else if(!want&&!a.paused&&goal===0)a.pause();
+    }
+    if(!busy)clearInterval(MUS.fade)},50);
+}
+function setMusic(name){if(MUS.want!==name){MUS.want=name;musicApply()}}
+function duck(on){MUS.duck=Math.max(0,MUS.duck+(on?1:-1));musicApply()}
+["pointerdown","keydown"].forEach(ev=>window.addEventListener(ev,()=>{if(!MUS.unlocked){MUS.unlocked=true;musicApply()}},{once:true,capture:true}));
+function syncMusicUI(){$("optMusic").checked=MUS.on;$("musicVol").value=Math.round(MUS.vol*100);$("musicBtn").setAttribute("aria-pressed",MUS.on);$("musicBtn").textContent=MUS.on?"♪ Musique":"♪ Coupée"}
+$("optMusic").onchange=e=>{MUS.on=e.target.checked;musicSave();syncMusicUI();musicApply()};
+$("musicVol").oninput=e=>{MUS.vol=+e.target.value/100;musicSave();musicApply()};
+$("musicBtn").onclick=()=>{MUS.on=!MUS.on;musicSave();syncMusicUI();musicApply()};
+async function speak(ids,text,force){
+  if(!SET.sound&&!force)return;
+  stopAudio();const tok=playTok;
+  duck(true);
+  try{
+    if(SET.voice==="clips"){
+      try{for(const id of ids){const url=await clipUrl(id);if(tok!==playTok)return;
+          await new Promise(res=>{const a=new Audio(url);curAudio=a;a.onended=res;a.onerror=res;const p=a.play();if(p&&p.catch)p.catch(res)})}
+        return}catch(e){if(tok!==playTok)return}
+    }
+    await tts(text);
+  }finally{setTimeout(()=>duck(false),250)}
+}
+function tts(text){return new Promise(res=>{if(!("speechSynthesis" in window))return res();try{const u=new SpeechSynthesisUtterance(text);u.lang="fr-FR";u.rate=.9;
+  const v=ttsVoices[+String(SET.voice).replace("tts","")];if(v)u.voice=v;u.onend=res;u.onerror=res;speechSynthesis.cancel();speechSynthesis.speak(u);setTimeout(res,9000)}catch(e){res()}})}
+function loadVoices(){
+  try{ttsVoices=speechSynthesis.getVoices().filter(v=>v.lang&&v.lang.toLowerCase().startsWith("fr"))}catch(e){ttsVoices=[]}
+  const rank=v=>(/natural|neural|premium|enhanced|améliorée|google/i.test(v.name)?0:2)+(v.lang.replace("_","-")==="fr-FR"?0:1);
+  ttsVoices.sort((a,b)=>rank(a)-rank(b));
+  const sel=$("voiceSel"),prev=sel.value||"clips";sel.innerHTML="";
+  const add=(val,txt)=>{const o=document.createElement("option");o.value=val;o.textContent=txt;sel.appendChild(o)};
+  add("clips","Chloé et Antoine (recommandé)");
+  ttsVoices.forEach((v,i)=>add("tts"+i,`Navigateur: ${v.name} (${v.lang})`));
+  sel.value=[...sel.options].some(o=>o.value===prev)?prev:"clips";SET.voice=sel.value;
+}
+if("speechSynthesis" in window){loadVoices();try{speechSynthesis.addEventListener("voiceschanged",loadVoices)}catch(e){}}else loadVoices();
+$("voiceSel").onchange=e=>{SET.voice=e.target.value};
+$("testVoice").onclick=()=>{const o=ORDERS.find(x=>x.v==="f")||ORDERS[0];speak([o.id],o.text,true)};
+$("optSound").onchange=e=>{SET.sound=e.target.checked;syncSoundBtn()};
+$("optListen").onchange=e=>{SET.listen=e.target.checked;if(S)renderRoom()};
+function syncSoundBtn(){$("soundBtn").setAttribute("aria-pressed",SET.sound);$("soundBtn").textContent=SET.sound?"🔊 Son":"🔇 Son";$("optSound").checked=SET.sound}
+$("soundBtn").onclick=()=>{SET.sound=!SET.sound;if(!SET.sound)stopAudio();syncSoundBtn()};
+// warm the cache for the short lines
+["f","m"].forEach(v=>["wrong","bye","leave","noncest"].forEach(k=>clipUrl(k+"_"+v).catch(()=>{})));
+
+let tt;function toast(m){const t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(tt);tt=setTimeout(()=>t.classList.remove("on"),2200)}
+const fmt=s=>Math.floor(Math.max(0,s)/60)+":"+String(Math.floor(Math.max(0,s)%60)).padStart(2,"0");
+
+/* ---------------- screens ---------------- */
+let mode="menu";
+function show(id){["scrMenu","scrClassic","scrLobby","scrArcade","scrClass","scrPupil"].forEach(s=>$(s).classList.toggle("on",s===id));
+  const cls=id==="scrClass";$("hud").hidden=!(id==="scrClassic"||id==="scrArcade"||cls);$("pauseBtn").hidden=id!=="scrClassic";
+  document.querySelectorAll("#hud .pill").forEach(e=>e.hidden=cls);$("soundBtn").hidden=cls;
+  $("board").hidden=id==="scrMenu"||id==="scrPupil";$("main").classList.toggle("wide",id==="scrMenu");
+  setMusic(id==="scrClassic"||id==="scrArcade"?"game":"menu")}
+function renderCarte(){
+  const h=LEVELS[lvl].hints;
+  const d=x=>`<div class="dish"><span>${x.e} ${x.fr}</span><span class="p">${x.p} €</span>${x.ing?`<span class="r">${x.ing.map(i=>ING[i][2]+" "+ING[i][0]).join(" + ")}${x.cook?" + 🔥 cuire":""}${h?" · "+x.en:""}</span>`:h?`<span class="r">${x.en}</span>`:""}</div>`;
+  $("carte").innerHTML="<h4>Les plats</h4>"+PLATS.map(d).join("")+"<h4>Les boissons</h4>"+BOISSONS.map(d).join("")+(lvl!=="facile"?"<h4>Les desserts</h4>"+DESSERTS.map(d).join(""):"");
+}
+$("levels").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;lvl=b.dataset.l;
+  document.querySelectorAll("#levels button").forEach(x=>x.setAttribute("aria-pressed",x===b));$("levelNote").textContent=LEVELS[lvl].note;renderCarte()});
+$("levelNote").textContent=LEVELS.facile.note;
+function toMenu(){
+  if(CL.role==="pupil"){tutoEnd();stopClassic();stopArcade();$("endModal").classList.remove("on");$("billModal").classList.remove("on");mode="pupil";show("scrPupil");return}
+  if(H)hostClose();
+  tutoEnd();stopClassic();stopArcade();netLeave();$("endModal").classList.remove("on");$("billModal").classList.remove("on");mode="menu";show("scrMenu")}
+$("home").onclick=toMenu;$("quitBtn").onclick=toMenu;$("endMenu").onclick=toMenu;
+$("goClassic").onclick=()=>{mode="classic";startClassic()};
+$("goArcade").onclick=()=>{mode="lobby";renderCarte();show("scrLobby")};
+$("againBtn").onclick=()=>{$("endModal").classList.remove("on");if(mode==="classic")startClassic();else if(NET.role==="host"){A.phase="lobby";show("scrLobby");renderLobby()}else if(NET.role==="client"){show("scrLobby")}else startLocal()};
+
+/* ================= CLASSIC ================= */
+let S=null,timer=null,cookIv=null;
+function renderKitchen(){
+  const h=LEVELS[lvl].hints;
+  $("ings").innerHTML=Object.entries(ING).map(([k,v])=>`<button class="item" data-ing="${k}"><span class="e">${v[2]}</span><b>${v[0]}</b>${h?`<small>${v[1]}</small>`:""}</button>`).join("");
+  const ex=BOISSONS.map(b=>["boisson",b]).concat(lvl!=="facile"?DESSERTS.map(d=>["dessert",d]):[]);
+  $("extras").innerHTML=ex.map(([t,x])=>`<button class="item" data-${t}="${x.id}"><span class="e">${x.e}</span><b>${x.fr}</b>${h?`<small>${x.en}</small>`:""}</button>`).join("");
+}
+function renderPlate(){$("plate").innerHTML=S.plate.map(i=>`<span title="${ING[i][0]}">${ING[i][2]}</span>`).join("")}
+function renderTray(){
+  const slot=(k,label,list)=>{const x=S.tray[k]&&byId(list,S.tray[k]);return `<button class="slot ${x?"full":""}" data-slot="${k}">${x?`<span class="e">${x.e}</span>${x.fr}`:label}</button>`};
+  $("tray").innerHTML=slot("plat","le plat",PLATS)+slot("boisson","la boisson",BOISSONS)+slot("dessert","le dessert",DESSERTS);
+}
+function renderRoom(){
+  const n=S.tables.length;$("room").style.setProperty("--n",n);
+  $("room").innerHTML=S.tables.map((c,i)=>!c?`<div class="table empty">Table ${i+1} · libre</div>`:
+  `<div class="table"><div class="who"><span class="face">${c.face}</span><div><b>${c.name}</b><span>Table ${i+1}</span></div></div>
+    <div class="bubble ${SET.listen&&!c.reveal?"hidden":""}"><span class="txt">${esc(c.msg||c.o.text)}</span></div>
+    <div class="bar"><i data-bar="${i}" style="width:${c.pat/c.max*100}%"></i></div>
+    <div class="row"><button class="btn small" data-serve="${i}">Servir</button><button class="btn ghost small" data-say="${i}">🔊 Écouter</button></div></div>`).join("");
+}
+function hud(){$("time").textContent=S.tuto?"Tutoriel":fmt(S.time);$("cash").textContent=S.cash+" €";$("served").textContent=S.served}
+function spawn(){
+  const free=S.tables.map((c,i)=>c?-1:i).filter(i=>i>=0);if(!free.length)return;
+  const busy=S.tables.filter(Boolean).map(c=>c.o.id);
+  const o=pick(pool().filter(x=>!busy.includes(x.id)));const [face,name]=personFor(o.v);
+  const i=pick(free);S.tables[i]={face,name,o,pat:LEVELS[lvl].pat,max:LEVELS[lvl].pat};
+  itemsOf(o).forEach(x=>S.seen.add(x.fr));renderRoom();speak([o.id],o.text);
+}
+function tick(){
+  if(!S||S.paused)return;
+  if(S.tuto){hud();return}
+  S.time-=.25;S.spawnT-=.25;if(S.spawnT<=0){spawn();S.spawnT=LEVELS[lvl].spawn}
+  S.tables.forEach((c,i)=>{if(!c)return;c.pat-=.25;const b=document.querySelector(`[data-bar="${i}"]`);
+    if(b){const r=c.pat/c.max;b.style.width=Math.max(0,r*100)+"%";b.style.background=r>.5?"var(--ok)":r>.25?"var(--brass)":"var(--bad)"}
+    if(c.pat<=0){S.tables[i]=null;S.left++;toast(`${c.name} : « Je m'en vais ! »`);speak(["leave_"+c.o.v],"Je m'en vais !");renderRoom()}});
+  hud();if(S.time<=0)endClassic();
+}
+function addIng(k){if(S.cooking)return;if(S.plate.length>=4){toast("L'assiette est pleine !");return}S.plate.push(k);renderPlate()}
+function prepare(){
+  if(S.cooking)return;if(!S.plate.length){toast("L'assiette est vide !");return}
+  const set=[...S.plate].sort().join(),r=PLATS.find(p=>[...p.ing].sort().join()===set);
+  if(!r){toast("Ce n'est pas une recette de la carte !");return}
+  if(S.tray.plat){toast("Il y a déjà un plat sur le plateau !");return}
+  const done=()=>{S.tray.plat=r.id;S.plate=[];renderPlate();renderTray();toast(`${r.e} Voilà ${r.fr} !`)};
+  if(!r.cook)return done();
+  S.cooking=true;$("plate").classList.add("cooking");$("prepBtn").disabled=true;
+  let t=0;const f=$("cookfill");clearInterval(cookIv);cookIv=setInterval(()=>{if(S.paused)return;t+=100;f.style.width=t/2200*100+"%";
+    if(t>=2200){clearInterval(cookIv);S.cooking=false;f.style.width="0";$("plate").classList.remove("cooking");$("prepBtn").disabled=false;done()}},100);
+}
+function serve(i){
+  const c=S.tables[i];if(!c)return;
+  if(!S.tray.plat&&!S.tray.boisson&&!S.tray.dessert){toast("Le plateau est vide !");return}
+  const ok=["plat","boisson","dessert"].every(k=>(S.tray[k]||null)===(c.o[k]||null));
+  if(!ok){S.wrong++;c.pat=Math.max(1,c.pat-10);c.reveal=true;c.msg=`Non ! Ce n'est pas ma commande. ${c.o.text}`;renderRoom();speak(["wrong_"+c.o.v,c.o.id],c.msg);return}
+  S.paused=true;openBill(i);
+}
+function openBill(i){
+  const c=S.tables[i],items=itemsOf(c.o),tot=totalOf(c.o);
+  $("billTitle").textContent=`${c.face} L'addition, s'il vous plaît !`;
+  $("billSay").textContent=`${c.name} a fini. Merci, c'était délicieux !`;
+  $("billLines").innerHTML=items.map(x=>`<div><span>${x.fr}</span><span>${x.p} €</span></div>`).join("")+`<div class="tot"><span>Total</span><span>${tot} €</span></div>`;
+  const opts=new Set([tot]);if(CONF[tot])opts.add(CONF[tot]);
+  while(opts.size<3){const n=tot+pick([-2,-1,1,2,10,-10]);if(n>0&&n<=25)opts.add(n)}
+  $("billChoices").innerHTML=[...opts].sort(()=>Math.random()-.5).map(n=>`<button data-n="${n}">${NUM[n]} euro${n>1?"s":""}</button>`).join("");
+  $("billFeedback").textContent="";$("billNext").hidden=true;
+  S.bill={i,tot,v:c.o.v,tip:Math.max(0,Math.ceil(c.pat/c.max*3))};$("billModal").classList.add("on");
+}
+function answerBill(btn){
+  if(!S.bill||S.bill.done)return;S.bill.done=true;
+  const n=+btn.dataset.n,{tot,tip,v}=S.bill;
+  document.querySelectorAll("#billChoices button").forEach(b=>{b.disabled=true;if(+b.dataset.n===tot)b.classList.add("right")});
+  if(n===tot){S.cash+=tot+tip;S.billsRight++;$("billFeedback").textContent=`Parfait ! ${tot} € + ${tip} € de pourboire.`;speak([`n${tot}_${v}`,`bye_${v}`],`${NUM[tot]} euros. Merci, au revoir !`,true)}
+  else{btn.classList.add("wrong");S.cash+=tot;$("billFeedback").textContent=`Non, c'est « ${NUM[tot]} euros ». Pas de pourboire !`;speak([`noncest_${v}`,`n${tot}_${v}`],`Non, c'est ${NUM[tot]} euros.`,true);S.missed.add(tot)}
+  $("billNext").hidden=false;$("billNext").focus();
+}
+function closeBill(){S.tables[S.bill.i]=null;S.bill=null;S.served++;S.tray={plat:null,boisson:null,dessert:null};$("billModal").classList.remove("on");S.paused=false;renderRoom();renderTray();hud()}
+function spawnOrder(o){
+  const [face,name]=personFor(o.v);S.tables[0]={face,name,o,pat:1,max:1};itemsOf(o).forEach(x=>S.seen.add(x.fr));renderRoom();speak([o.id],o.text);
+}
+function startClassic(opts){
+  tutoEnd();stopArcade();clearInterval(cookIv);$("cookfill").style.width="0";$("plate").classList.remove("cooking");$("prepBtn").disabled=false;
+  const tuto=!!(opts&&opts.tuto);
+  S={tuto,time:opts&&opts.seconds?opts.seconds:180,spawnT:tuto?1e9:1,tables:Array(tuto?1:LEVELS[lvl].tables).fill(null),plate:[],tray:{plat:null,boisson:null,dessert:null},cash:0,served:0,left:0,wrong:0,billsRight:0,seen:new Set(),missed:new Set(),paused:false,cooking:false};
+  renderCarte();renderKitchen();renderPlate();renderTray();renderRoom();hud();show("scrClassic");$("pauseBtn").textContent="Pause";
+  clearInterval(timer);timer=setInterval(tick,250);
+}
+function stopClassic(){clearInterval(timer);clearInterval(cookIv);if(S)S.paused=true;S=null}
+function endClassic(){
+  clearInterval(timer);S.paused=true;stopAudio();
+  const right=S.served?Math.round(S.billsRight/S.served*100):0;
+  showEnd({cash:S.cash,rows:[["Caisse",S.cash+" €"],["Clients servis",S.served],["Additions justes",S.served?right+" %":"–"],["Clients partis",S.left],["Mauvais plats",S.wrong]],
+    seen:S.seen,missed:S.missed,key:"classic-"+lvl,stars:S.cash>=60?3:S.cash>=35?2:S.cash>=12?1:0});
+}
+$("scrClassic").addEventListener("click",e=>{
+  const t=e.target.closest("button");if(!t||!S)return;
+  if(t.dataset.ing)addIng(t.dataset.ing);
+  else if(t.dataset.boisson){if(S.tray.boisson)toast("Il y a déjà une boisson !");else{S.tray.boisson=t.dataset.boisson;renderTray()}}
+  else if(t.dataset.dessert){if(S.tray.dessert)toast("Il y a déjà un dessert !");else{S.tray.dessert=t.dataset.dessert;renderTray()}}
+  else if(t.dataset.slot){S.tray[t.dataset.slot]=null;renderTray()}
+  else if(t.dataset.serve)serve(+t.dataset.serve);
+  else if(t.dataset.say){const c=S.tables[+t.dataset.say];if(c)speak([c.o.id],c.o.text,true)}
+});
+$("billChoices").addEventListener("click",e=>{const b=e.target.closest("button");if(b)answerBill(b)});
+$("prepBtn").onclick=()=>S&&prepare();
+$("binBtn").onclick=()=>{if(S&&!S.cooking){S.plate=[];renderPlate()}};
+$("billNext").onclick=closeBill;
+$("pauseBtn").onclick=()=>{if(!S||S.bill||S.time<=0)return;S.paused=!S.paused;$("pauseBtn").textContent=S.paused?"Reprendre":"Pause"};
+
+function showEnd(r){
+  setMusic("menu");
+  let best=0;try{best=+localStorage.getItem("bistro-best-"+r.key)||0;if(r.cash>best)localStorage.setItem("bistro-best-"+r.key,r.cash)}catch(e){}
+  $("endStars").textContent="★".repeat(r.stars)+"☆".repeat(3-r.stars);
+  $("endStats").innerHTML=r.rows.concat([["Record",Math.max(best,r.cash)+" €"]]).map(([a,b])=>`<div>${a}<b>${b}</b></div>`).join("");
+  const all=[...PLATS,...BOISSONS,...DESSERTS];
+  const v=[...r.seen].map(fr=>all.find(x=>x.fr===fr)).filter(Boolean).map(x=>`<div>${x.e} <b>${x.fr}</b>: ${x.en}</div>`);
+  if(r.missed&&r.missed.size)v.push(`<div>🔢 <b>À revoir :</b> ${[...r.missed].map(n=>n+" = "+NUM[n]).join(", ")}</div>`);
+  $("endVocab").innerHTML=v.join("")||"<div>Aucun client aujourd'hui.</div>";
+  $("againBtn").hidden=NET.role==="client"||CL.role==="pupil";$("endExtra").hidden=true;$("endTitle").textContent="Le bistro est fermé !";
+  if(CL.role==="pupil")pupilScore();
+  $("endModal").classList.add("on");
+}
+
+/* ================= ARCADE ================= */
+const MAP=["#PJFO##XX##LRM#","#.............#","S....#D##.....E","T....####.....G","C.............A","H.............#","U....#KK#.....#","#.............#","######Z########"];
+const MW=15,MH=9;
+const DISP={P:["i","pain"],J:["i","jambon"],F:["i","fromage"],O:["i","oeufs"],C:["i","pate"],H:["i","chocolat"],U:["i","sucre"],S:["i","salade"],T:["i","tomate"],
+  L:["b","limonade"],R:["b","jus"],M:["b","chocolat"],E:["b","eau"],G:["e","glace"],A:["e","tarte"]};
+const COLS=["#e63946","#2a9d8f","#f4a261","#7b61ff"];
+const MSG=["","Il faut une assiette !","C'est occupé !","Personne n'a commandé ça !","L'assiette est pleine !","Déjà dans l'assiette !","Poubelle !","Oh non, c'est brûlé !","Ça ne va pas ensemble !","Mains pleines !","Il faut le cuire d'abord ! 🔥"];
+const COOK_T=3.5,BURN_T=11;
+let A=null,raf=0;
+const enc=it=>!it?"":it.t==="p"?"p:"+it.ing.join("."):it.t==="x"?"x":it.t+":"+it.id;
+const dec=s=>!s?null:s==="x"?{t:"x"}:s[0]==="p"?{t:"p",ing:s.slice(2)?s.slice(2).split("."):[]}:{t:s[0],id:s.slice(2)};
+const solid=(c,r)=>r<0||r>=MH||c<0||c>=MW||MAP[r][c]!==".";
+function newArcade(players){
+  return {phase:"play",time:240,score:0,served:0,missed:0,players,tiles:{},cook:{},tickets:[],tid:0,spawnT:2,ev:[],evSeq:0,seen:new Set(),lvl};
+}
+function mkPlayer(id,name,i){const sp=[[2.5,1.5],[12.5,1.5],[2.5,7.5],[12.5,7.5]][i%4];return {id,name:String(name||"Chef").slice(0,12),col:COLS[i%4],x:sp[0],y:sp[1],fx:0,fy:1,hold:null,inp:{x:0,y:0,a:0},lastA:0}}
+function pushEv(k,a,b,c){A.ev.push([++A.evSeq,k,a,b,c]);if(A.ev.length>12)A.ev.shift();handleEv(A.ev[A.ev.length-1])}
+function collide(x,y){const r=.3;return solid(Math.floor(x-r),Math.floor(y-r))||solid(Math.floor(x+r),Math.floor(y-r))||solid(Math.floor(x-r),Math.floor(y+r))||solid(Math.floor(x+r),Math.floor(y+r))}
+function facing(p){const fx=Math.abs(p.fx)>=Math.abs(p.fy)?Math.sign(p.fx):0,fy=fx?0:Math.sign(p.fy)||1;return [Math.floor(p.x)+fx,Math.floor(p.y)+fy]}
+function matchRecipe(ing){const k=[...ing].sort().join();return PLATS.find(p=>[...p.ing].sort().join()===k)}
+function addToPlate(pl,id){
+  if(pl.ing.includes(id))return 5;if(pl.ing.length>=3)return 4;
+  pl.ing.push(id);return 0;
+}
+function pmsg(p,code){pushEv("m",p.id,code)}
+function interact(p){
+  const [c,r]=facing(p);if(r<0||r>=MH||c<0||c>=MW)return;
+  const ch=MAP[r][c],key=r+","+c,cur=A.tiles[key],h=p.hold;
+  if(DISP[ch]){const [t,id]=DISP[ch];
+    if(!h)p.hold={t,id};
+    else if(h.t==="p"&&t==="i"){const e=addToPlate(h,id);if(e)pmsg(p,e)}
+    else pmsg(p,9);return}
+  if(ch==="D"){if(!h)p.hold={t:"p",ing:[]};else if(h.t==="i"){const pl={t:"p",ing:[]};addToPlate(pl,h.id);p.hold=pl}else pmsg(p,9);return}
+  if(ch==="Z"){if(h){p.hold=null;pmsg(p,6)}return}
+  if(ch==="X"){deliver(p);return}
+  if(ch==="#"||ch==="K"){
+    if(!h){if(cur){p.hold=cur;delete A.tiles[key];delete A.cook[key]}return}
+    if(!cur){
+      if(ch==="K"&&!(h.t==="p"||h.t==="d")){pmsg(p,1);return}
+      A.tiles[key]=h;p.hold=null;if(ch==="K")A.cook[key]=h.t==="d"?COOK_T:0;return}
+    if(cur.t==="p"&&h.t==="i"){const e=addToPlate(cur,h.id);if(e)pmsg(p,e);else{p.hold=null;if(ch==="K")A.cook[key]=0}return}
+    if(h.t==="p"&&cur.t==="i"){const e=addToPlate(h,cur.id);if(e)pmsg(p,e);else{delete A.tiles[key];delete A.cook[key]}return}
+    if(h.t==="p"&&cur.t==="p"){const all=h.ing.concat(cur.ing);
+      if(new Set(all).size===all.length&&all.length<=3){cur.ing=all;p.hold=null;if(ch==="K")A.cook[key]=0}else pmsg(p,8);return}
+    pmsg(p,2);
+  }
+}
+function deliver(p){
+  const h=p.hold;if(!h)return;
+  let id=h.id;
+  if(h.t==="p"){const r=matchRecipe(h.ing);if(!r){pmsg(p,8);return}if(r.cook){pmsg(p,10);return}id=r.id}
+  const slot=h.t==="d"||h.t==="p"?"plat":h.t==="b"?"boisson":h.t==="e"?"dessert":null;
+  if(!slot){pmsg(p,3);return}
+  const tk=A.tickets.find(t=>ORDERS[t.o][slot]===id&&!t.got[slot]);
+  if(!tk){pmsg(p,3);return}
+  tk.got[slot]=true;p.hold=null;
+  const o=ORDERS[tk.o],need=["plat","boisson","dessert"].filter(k=>o[k]);
+  if(need.every(k=>tk.got[k])){const tot=totalOf(o),tip=Math.ceil(tk.t/tk.max*4);A.score+=tot+tip;A.served++;
+    A.tickets=A.tickets.filter(t=>t!==tk);pushEv("d",tk.id,tot,o.v)}
+}
+function spawnTicket(){
+  const L=LEVELS[A.lvl];if(A.tickets.length>=L.aMax)return;
+  const busy=A.tickets.map(t=>ORDERS[t.o].id),cand=pool().filter(o=>!busy.includes(o.id)),o=pick(cand);
+  const [face]=personFor(o.v),idx=ORDERS.indexOf(o);
+  const t={id:++A.tid,o:idx,face,t:L.aTime,max:L.aTime,got:{}};A.tickets.push(t);itemsOf(o).forEach(x=>A.seen.add(x.fr));pushEv("n",t.id,idx)
+}
+function step(dt){
+  if(!A.tuto)A.time-=dt;
+  const L=LEVELS[A.lvl],n=A.players.length;
+  if(!A.tuto)A.spawnT-=dt;if(A.spawnT<=0){spawnTicket();A.spawnT=(A.tickets.length<=1?5:L.aSpawn/(1+.2*(n-1)))}
+  for(const p of A.players){
+    const m=Math.hypot(p.inp.x,p.inp.y),sp=4.2;
+    if(m>.15){const vx=p.inp.x/Math.max(1,m)*sp,vy=p.inp.y/Math.max(1,m)*sp;
+      const nx=p.x+vx*dt;if(!collide(nx,p.y))p.x=nx;const ny=p.y+vy*dt;if(!collide(p.x,ny))p.y=ny;p.fx=p.inp.x;p.fy=p.inp.y}
+    if(p.inp.a!==p.lastA){p.lastA=p.inp.a;interact(p)}
+  }
+  for(const key in A.cook){const it=A.tiles[key];if(!it){delete A.cook[key];continue}
+    if(it.t==="p"){const r=matchRecipe(it.ing);if(r&&r.cook){A.cook[key]+=dt;if(A.cook[key]>=COOK_T){it.t="d";it.id=r.id;delete it.ing}}}
+    else if(it.t==="d"&&!A.tuto){A.cook[key]+=dt;if(A.cook[key]>=BURN_T){A.tiles[key]={t:"x"};delete A.cook[key];pushEv("b",key)}}}
+  for(const t of A.tickets){if(A.tuto)continue;t.t-=dt;if(t.t<=0){A.missed++;A.score=Math.max(0,A.score-3);pushEv("l",t.id,ORDERS[t.o].v)}}
+  A.tickets=A.tickets.filter(t=>t.t>0);
+  if(!A.tuto&&A.time<=0){A.phase="end";pushEv("e")}
+}
+/* events: run on every device (host directly, clients from the state stream) */
+let lastEv=0;
+function handleEv(e){
+  if(!e||e[0]<=lastEv)return;lastEv=e[0];
+  const [,k,a,b,c]=e;
+  if(k==="n"){const o=ORDERS[b];if(o)speak([o.id],o.text)}
+  else if(k==="d"){speak([`n${b}_${c}`,`bye_${c}`],`${NUM[b]} euros. Merci, au revoir !`);toast(`+ ${b} € · Merci, au revoir !`)}
+  else if(k==="l"){speak(["leave_"+b],"Je m'en vais !");toast("Un client est parti… « Je m'en vais ! »")}
+  else if(k==="m"){if(myIds().includes(a))toast(MSG[b]||"")}
+  else if(k==="b"){toast(MSG[7])}
+  else if(k==="e"){setTimeout(endArcade,50)}
+}
+const myIds=()=>NET.role==="client"?[NET.me]:(A?A.players.filter(p=>p.local!=null).map(p=>p.id):[]);
+
+/* ---- snapshot for the network ---- */
+function snap(){
+  return {ph:A.phase,tm:Math.round(A.time*10)/10,sc:A.score,sv:A.served,ms:A.missed,lv:A.lvl,
+    pl:A.players.map(p=>[p.id,p.name,p.col,Math.round(p.x*100)/100,Math.round(p.y*100)/100,Math.round(p.fx*10)/10,Math.round(p.fy*10)/10,enc(p.hold)]),
+    it:Object.entries(A.tiles).map(([k,v])=>[k,enc(v),A.cook[k]!=null?Math.round(A.cook[k]*10)/10:-1]),
+    tk:A.tickets.map(t=>[t.id,t.o,t.face,Math.round(t.t),t.max,(t.got.plat?1:0)|(t.got.boisson?2:0)|(t.got.dessert?4:0)]),
+    ev:A.ev.slice(-8)};
+}
+/* view model used by the renderer, from A (host/local) or from a snapshot (client) */
+let VIEW=null;
+function viewFromA(){return {tuto:!!A.tuto,time:A.time,score:A.score,served:A.served,lvl:A.lvl,
+  players:A.players.map(p=>({id:p.id,name:p.name,col:p.col,x:p.x,y:p.y,fx:p.fx,fy:p.fy,hold:p.hold})),
+  tiles:A.tiles,cook:A.cook,tickets:A.tickets}}
+function viewFromSnap(s,prev){
+  const players=s.pl.map(a=>{const old=prev&&prev.players.find(q=>q.id===a[0]);
+    return {id:a[0],name:a[1],col:a[2],tx:a[3],ty:a[4],x:old?old.x:a[3],y:old?old.y:a[4],fx:a[5],fy:a[6],hold:dec(a[7])}});
+  const tiles={},cook={};s.it.forEach(([k,c,ck])=>{tiles[k]=dec(c);if(ck>=0)cook[k]=ck});
+  return {time:s.tm,score:s.sc,served:s.sv,lvl:s.lv,players,tiles,cook,tickets:s.tk.map(a=>({id:a[0],o:a[1],face:a[2],t:a[3],max:a[4],got:{plat:!!(a[5]&1),boisson:!!(a[5]&2),dessert:!!(a[5]&4)}}))};
+}
+
+/* ---- input ---- */
+const keys=new Set();
+const INP=[{x:0,y:0,a:0},{x:0,y:0,a:0}];
+const touchInp={x:0,y:0};
+window.addEventListener("keydown",e=>{
+  if(mode!=="arcade"||e.target.tagName==="INPUT")return;
+  const k=e.key.toLowerCase();
+  if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(k))e.preventDefault();
+  if(e.repeat)return;keys.add(k);
+  const two=A&&A.players.filter(p=>p.local).length>1;
+  if(k===" "||k==="e")INP[0].a++;
+  if(k==="enter"||k==="shift")INP[two?1:0].a++;
+});
+window.addEventListener("keyup",e=>keys.delete(e.key.toLowerCase()));
+window.addEventListener("blur",()=>keys.clear());
+function readInputs(){
+  const two=A&&A.players.filter(p=>p.local).length>1;
+  const ax=(l,r)=>(keys.has(r)?1:0)-(keys.has(l)?1:0);
+  let x1=ax("a","d"),y1=ax("w","s"),x2=ax("arrowleft","arrowright"),y2=ax("arrowup","arrowdown");
+  if(!two){x1=x1||x2;y1=y1||y2}
+  INP[0].x=x1||touchInp.x;INP[0].y=y1||touchInp.y;
+  if(two){INP[1].x=x2;INP[1].y=y2}
+}
+// touch joystick
+{
+  const joy=$("joy"),knob=$("knob");let pid=null;
+  const setK=(dx,dy)=>{knob.style.transform=`translate(${dx}px,${dy}px)`};
+  const mv=e=>{const r=joy.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let dx=e.clientX-cx,dy=e.clientY-cy;const m=Math.hypot(dx,dy),R=r.width/2-10;
+    if(m>R){dx=dx/m*R;dy=dy/m*R}setK(dx,dy);touchInp.x=Math.abs(dx/R)>.2?dx/R:0;touchInp.y=Math.abs(dy/R)>.2?dy/R:0};
+  joy.addEventListener("pointerdown",e=>{pid=e.pointerId;joy.setPointerCapture(pid);mv(e)});
+  joy.addEventListener("pointermove",e=>{if(e.pointerId===pid)mv(e)});
+  const up=e=>{if(e.pointerId!==pid)return;pid=null;setK(0,0);touchInp.x=0;touchInp.y=0};
+  joy.addEventListener("pointerup",up);joy.addEventListener("pointercancel",up);
+  $("actBtn").addEventListener("pointerdown",e=>{e.preventDefault();INP[0].a++});
+  const coarse=matchMedia("(pointer:coarse)").matches;$("touch").classList.toggle("off",!coarse);
+  window.addEventListener("touchstart",()=>$("touch").classList.remove("off"),{once:true,passive:true});
+}
+
+/* ---- rendering ---- */
+const cv=$("cv");let ctx=cv.getContext("2d");
+let TS=64;
+function fitCanvas(){const w=cv.parentElement.clientWidth-16;const dpr=Math.min(2,window.devicePixelRatio||1);
+  const extra=$("touch").classList.contains("off")?260:420;const ts=Math.max(20,Math.floor(Math.min(w/MW,Math.max(220,window.innerHeight-extra)/MH)));TS=ts;
+  cv.style.width=ts*MW+"px";cv.style.height=ts*MH+"px";cv.width=ts*MW*dpr;cv.height=ts*MH*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}
+new ResizeObserver(()=>{if(mode==="arcade")fitCanvas()}).observe($("stage"));
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+function emoji(e,x,y,s){ctx.font=`${s}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(e,x,y)}
+function itemEmoji(it){if(it.t==="i")return ING[it.id][2];if(it.t==="d")return byId(PLATS,it.id).e;if(it.t==="b")return byId(BOISSONS,it.id).e;if(it.t==="e")return byId(DESSERTS,it.id).e;return "💨"}
+function drawItem(it,x,y,s){
+  if(!it)return;
+  if(it.t==="p"||it.t==="d"||it.t==="x"){
+    ctx.fillStyle="#0003";ctx.beginPath();ctx.ellipse(x,y+s*.08,s*.46,s*.36,0,0,7);ctx.fill();
+    ctx.fillStyle=it.t==="x"?"#3a3331":"#fbfbf8";ctx.beginPath();ctx.ellipse(x,y,s*.46,s*.36,0,0,7);ctx.fill();
+    ctx.strokeStyle="#c9c3b8";ctx.lineWidth=Math.max(1,s*.04);ctx.beginPath();ctx.ellipse(x,y,s*.33,s*.25,0,0,7);ctx.stroke();
+    if(it.t==="p"){const r=matchRecipe(it.ing);
+      if(r&&!r.cook){emoji(r.e,x,y-s*.02,s*.48);ctx.fillStyle="#2e8b57";ctx.beginPath();ctx.arc(x+s*.36,y-s*.26,s*.12,0,7);ctx.fill();ctx.fillStyle="#fff";ctx.font=`900 ${Math.floor(s*.16)}px Nunito,sans-serif`;ctx.fillText("✓",x+s*.36,y-s*.25)}
+      else{const n=it.ing.length;it.ing.forEach((id,i)=>emoji(ING[id][2],x+(i-(n-1)/2)*s*.27,y,s*.32))}}
+    else emoji(itemEmoji(it),x,y-s*.02,s*.5);
+  }else emoji(itemEmoji(it),x,y,s*.55);
+}
+const TILE_LABEL={P:"pain",J:"jambon",F:"fromage",O:"œufs",C:"pâte",H:"chocolat",U:"sucre",S:"salade",T:"tomate",L:"limonade",R:"jus d'orange",M:"choc. chaud",E:"eau",G:"glace",A:"tarte"};
+function drawMap(V,now){
+  const t=TS;
+  for(let r=0;r<MH;r++)for(let c=0;c<MW;c++){
+    const ch=MAP[r][c],x=c*t,y=r*t;
+    if(ch==="."){ctx.fillStyle=(r+c)%2?"#2b2624":"#f1ede4";ctx.fillRect(x,y,t,t);continue}
+    // counter base
+    ctx.fillStyle="#8d969e";ctx.fillRect(x,y,t,t);ctx.fillStyle="#c3cad1";ctx.fillRect(x+2,y+2,t-4,t-7);ctx.fillStyle="#dfe4e8";ctx.fillRect(x+2,y+2,t-4,4);
+    if(DISP[ch]){const [k,id]=DISP[ch];ctx.fillStyle=k==="i"?"#9c6b3e":k==="b"?"#2f6f8f":"#b04a6b";rr(x+4,y+4,t-8,t-10,6);ctx.fill();
+      ctx.fillStyle="#0002";ctx.fillRect(x+6,y+t*.62,t-12,2);
+      emoji(k==="i"?ING[id][2]:k==="b"?byId(BOISSONS,id).e:byId(DESSERTS,id).e,x+t/2,y+t*.4,t*.46);
+      if(t>=36){ctx.fillStyle="#fff";ctx.font=`700 ${Math.max(9,Math.floor(t*.17))}px Nunito,sans-serif`;ctx.textAlign="center";ctx.fillText(TILE_LABEL[ch],x+t/2,y+t*.8,t-6)}}
+    else if(ch==="D"){for(let i=0;i<3;i++){ctx.fillStyle="#fbfbf8";ctx.beginPath();ctx.ellipse(x+t/2,y+t*.62-i*t*.09,t*.36,t*.2,0,0,7);ctx.fill();ctx.strokeStyle="#c9c3b8";ctx.lineWidth=1;ctx.stroke()}}
+    else if(ch==="K"){ctx.fillStyle="#2b2b2e";rr(x+3,y+3,t-6,t-8,6);ctx.fill();ctx.strokeStyle="#555";ctx.lineWidth=t*.06;ctx.beginPath();ctx.arc(x+t/2,y+t/2-2,t*.28,0,7);ctx.stroke();
+      const key=r+","+c;if(V.cook[key]!=null&&V.tiles[key]){ctx.strokeStyle="#ff7a1a";ctx.lineWidth=t*.08;ctx.beginPath();ctx.arc(x+t/2,y+t/2-2,t*.36,0,7);ctx.stroke()}}
+    else if(ch==="X"){ctx.fillStyle="#c9a227";rr(x+3,y+3,t-6,t-8,6);ctx.fill();if(t>=44){ctx.fillStyle="#3b2f0b";ctx.font=`900 ${Math.floor(t*.2)}px Nunito,sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("PASSE",x+t/2,y+t/2,t-8)}else emoji("🛎️",x+t/2,y+t/2,t*.5)}
+    else if(ch==="Z"){ctx.fillStyle="#4a4f55";rr(x+8,y+6,t-16,t-12,6);ctx.fill();emoji("🗑️",x+t/2,y+t/2,t*.45)}
+  }
+  // items on counters
+  for(const key in V.tiles){const [r,c]=key.split(",").map(Number);drawItem(V.tiles[key],c*t+t/2,r*t+t/2-2,t*.9);
+    const ck=V.cook[key];if(ck!=null&&MAP[r][c]==="K"){const it=V.tiles[key];
+      if(it.t==="p"&&matchRecipe(it.ing)&&matchRecipe(it.ing).cook){bar(c*t+6,r*t+t-10,t-12,ck/COOK_T,"#ff9f1c");emoji("🔥",c*t+t-10,r*t+10,t*.3)}
+      else if(it.t==="d"&&ck>COOK_T+3){bar(c*t+6,r*t+t-10,t-12,(ck-COOK_T)/(BURN_T-COOK_T),"#e63946");if(Math.floor(now/250)%2)emoji("⚠️",c*t+t-10,r*t+10,t*.32)}}}
+}
+function drawTargets(now){
+  const st=TUTO&&TUTO.kind==="arcade"&&TUTO.steps[TUTO.i];if(!st||!st.tiles)return;
+  const t=TS,a=.55+.45*Math.sin(now/180);
+  st.tiles.forEach(([c,r])=>{ctx.save();ctx.globalAlpha=a;ctx.strokeStyle="#ffd23f";ctx.lineWidth=Math.max(3,t*.09);rr(c*t+2,r*t+2,t-4,t-4,8);ctx.stroke();ctx.restore();
+    if(r===0||r===MH-1||c===0||c===MW-1){}else{}});
+  // arrow over the first target
+  const [c,r]=st.tiles[0],bx=c*t+t/2,by=r*t+(r<MH/2?t*1.25:-t*.25)+Math.sin(now/200)*t*.08;
+  emoji(r<MH/2?"⬆️":"⬇️",bx,by,t*.5);
+}
+function bar(x,y,w,f,col){ctx.fillStyle="#0008";rr(x,y,w,7,3);ctx.fill();ctx.fillStyle=col;rr(x+1,y+1,Math.max(0,(w-2)*Math.min(1,f)),5,2);ctx.fill()}
+function drawPlayers(V,mine){
+  const t=TS;
+  [...V.players].sort((a,b)=>a.y-b.y).forEach(p=>{
+    const x=p.x*t,y=p.y*t;
+    if(mine.includes(p.id)){const fx=Math.abs(p.fx)>=Math.abs(p.fy)?Math.sign(p.fx):0,fy=fx?0:Math.sign(p.fy)||1;const tc=Math.floor(p.x)+fx,tr=Math.floor(p.y)+fy;
+      if(tr>=0&&tr<MH&&tc>=0&&tc<MW&&MAP[tr][tc]!=="."){ctx.strokeStyle=p.col;ctx.lineWidth=3;ctx.setLineDash([6,4]);rr(tc*t+3,tr*t+3,t-6,t-6,6);ctx.stroke();ctx.setLineDash([])}}
+    ctx.fillStyle="#0004";ctx.beginPath();ctx.ellipse(x,y+t*.28,t*.3,t*.12,0,0,7);ctx.fill();
+    ctx.fillStyle=p.col;ctx.beginPath();ctx.arc(x,y+t*.05,t*.3,0,7);ctx.fill();
+    ctx.fillStyle="#ffe0c2";ctx.beginPath();ctx.arc(x,y-t*.12,t*.2,0,7);ctx.fill();
+    ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(x-t*.1,y-t*.36,t*.11,0,7);ctx.arc(x+t*.1,y-t*.36,t*.11,0,7);ctx.arc(x,y-t*.42,t*.13,0,7);ctx.fill();ctx.fillRect(x-t*.16,y-t*.34,t*.32,t*.08);
+    const ex=Math.abs(p.fx)>=Math.abs(p.fy)?Math.sign(p.fx)*t*.06:0,ey=Math.abs(p.fy)>Math.abs(p.fx)?Math.sign(p.fy)*t*.04:0;
+    ctx.fillStyle="#222";ctx.beginPath();ctx.arc(x-t*.07+ex,y-t*.12+ey,t*.03,0,7);ctx.arc(x+t*.07+ex,y-t*.12+ey,t*.03,0,7);ctx.fill();
+    ctx.font=`900 ${Math.max(11,Math.floor(t*.22))}px Nunito,sans-serif`;ctx.textAlign="center";ctx.textBaseline="bottom";ctx.lineWidth=3;ctx.strokeStyle="#000a";ctx.strokeText(p.name,x,y-t*.52);ctx.fillStyle="#fff";ctx.fillText(p.name,x,y-t*.52);
+    if(p.hold){const fx=Math.abs(p.fx)>=Math.abs(p.fy)?Math.sign(p.fx):0,fy=fx?0:Math.sign(p.fy)||1;drawItem(p.hold,x+fx*t*.32,y+t*.12+fy*t*.18,t*.62)}
+  });
+}
+let lastTk="";
+function renderTickets(V){
+  const L=LEVELS[V.lvl],sig=V.tickets.map(t=>t.id+":"+Math.round(t.t)+":"+JSON.stringify(t.got)).join("|")+SET.listen;
+  if(sig===lastTk)return;lastTk=sig;
+  const cards=V.tickets.map(t=>{const o=ORDERS[t.o];if(!o)return "";const r=t.t/t.max;
+    const slots=["plat","boisson","dessert"].filter(k=>o[k]).map(k=>{const list=k==="plat"?PLATS:k==="boisson"?BOISSONS:DESSERTS,x=byId(list,o[k]);
+      return `<span class="${t.got[k]?"got":""}">${t.got[k]?"✔":L.hints?x.e:"?"}</span>`}).join("");
+    return `<div class="ticket ${SET.listen?"hidden":""}"><button data-tsay="${t.o}" aria-label="Écouter">🔊</button><div style="font-size:22px">${t.face}</div><div class="t txt">${esc(o.text)}</div><div class="slots">${slots}</div>
+      <div class="tb"><i style="width:${Math.max(0,r*100)}%;background:${r>.5?"#2e8b57":r>.25?"#c9a227":"#c8102e"}"></i></div></div>`}).join("");
+  $("tickets").innerHTML=cards+(V.tickets.length<L.aMax?`<div class="ticket empty">En attente…</div>`:"");
+}
+$("tickets").addEventListener("click",e=>{const b=e.target.closest("[data-tsay]");if(b){const o=ORDERS[+b.dataset.tsay];if(o)speak([o.id],o.text,true)}});
+function render(now,dt){
+  if(!VIEW)return;
+  if(NET.role==="client"){const k=Math.min(1,dt*14);VIEW.players.forEach(p=>{p.x+=(p.tx-p.x)*k;p.y+=(p.ty-p.y)*k})}
+  ctx.clearRect(0,0,cv.width,cv.height);drawMap(VIEW,now);drawTargets(now);drawPlayers(VIEW,myIds());
+  $("time").textContent=VIEW.tuto?"Tutoriel":fmt(VIEW.time);$("cash").textContent=VIEW.score+" €";$("served").textContent=VIEW.served;
+  renderTickets(VIEW);
+}
+
+/* ---- main loop ---- */
+let lastT=0,sendT=0;
+function loop(now){
+  raf=requestAnimationFrame(loop);
+  const dt=Math.min(.05,(now-(lastT||now))/1000);lastT=now;
+  readInputs();
+  if(NET.role!=="client"&&A&&A.phase==="play"){
+    A.players.forEach(p=>{if(p.local!=null){const s=INP[p.local];p.inp={x:s.x,y:s.y,a:s.a}}});
+    if(NET.role==="host")netReadInputs();
+    step(dt);VIEW=viewFromA();
+    if(NET.role==="host"&&now-sendT>(NET.kind==="sb"?160:90)){sendT=now;netSend()}
+  }
+  if(NET.role==="client")netSendInput(now);
+  render(now,dt);
+}
+function startArcadeView(){mode="arcade";show("scrArcade");renderCarte();lastTk="";lastEv=0;fitCanvas();cancelAnimationFrame(raf);lastT=0;raf=requestAnimationFrame(loop)}
+function startLocal(opts){
+  tutoEnd();NET.role=null;NET.kind=null;INP.forEach(i=>i.a=0);
+  const name=(opts&&opts.name)||$("nameIn").value.trim()||"Chef";
+  const ps=[mkPlayer("L0",name,0)];ps[0].local=0;
+  if(!opts&&$("opt2p").checked){const p2=mkPlayer("L1","Chef 2",1);p2.local=1;ps.push(p2)}
+  ps.forEach(p=>p.lastA=INP[p.local].a);
+  A=newArcade(ps);if(opts&&opts.seconds)A.time=opts.seconds;VIEW=viewFromA();startArcadeView();
+}
+$("playLocal").onclick=()=>startLocal();
+function stopArcade(){cancelAnimationFrame(raf);if(A)A.phase="end";A=null;VIEW=null}
+function endArcade(){
+  if(NET.role==="host"&&NET.kind==="sb"){hostEnd();return}
+  if(mode!=="arcade")return;
+  const V=VIEW||{};cancelAnimationFrame(raf);
+  const sc=V.score||0,seen=A?A.seen:new Set((V.tickets||[]).flatMap(t=>itemsOf(ORDERS[t.o]).map(x=>x.fr)));
+  if(NET.role==="host")netSend();
+  showEnd({cash:sc,rows:[["Caisse",sc+" €"],["Commandes servies",V.served||0],["Clients partis",A?A.missed:(NET.lastSnap?NET.lastSnap.ms:0)],["Chefs",(V.players||[]).length]],
+    seen,missed:null,key:"arcade-"+(V.lvl||lvl),stars:sc>=90?3:sc>=50?2:sc>=15?1:0});
+}
+
+/* ================= TUTORIALS ================= */
+let TUTO=null;
+function tutoStart(kind,steps){TUTO={kind,steps,i:-1};document.body.classList.add("tuto");$("coach").hidden=false;
+  $("coach").classList.toggle("top",kind==="arcade"&&!$("touch").classList.contains("off"));tutoNext()}
+function tutoNext(){if(!TUTO)return;TUTO.i++;const st=TUTO.steps[TUTO.i];if(!st)return;if(st.enter)st.enter();
+  $("coachStep").textContent=`Tutoriel · étape ${TUTO.i+1} sur ${TUTO.steps.length}`;$("coachTxt").innerHTML=st.text;$("coachWarn").hidden=true;
+  $("coachActs").innerHTML=(st.next?`<button class="btn small" data-coach="next">${st.next}</button>`:"")+(st.acts||"")+`<button class="btn ghost small" data-coach="quit">Quitter</button>`}
+function tutoEnd(){TUTO=null;document.body.classList.remove("tuto");$("coach").hidden=true;document.querySelectorAll(".pulse").forEach(e=>e.classList.remove("pulse"))}
+setInterval(()=>{
+  if(!TUTO)return;const st=TUTO.steps[TUTO.i];if(!st)return;
+  const want=new Set(st.hl?document.querySelectorAll(st.hl):[]);
+  document.querySelectorAll(".pulse").forEach(e=>{if(!want.has(e))e.classList.remove("pulse")});want.forEach(e=>e.classList.add("pulse"));
+  const w=st.warn?st.warn():"";$("coachWarn").hidden=!w;if(w)$("coachWarn").textContent=w;
+  if(st.check&&st.check())tutoNext();
+},200);
+$("coach").addEventListener("click",e=>{const b=e.target.closest("[data-coach]");if(!b)return;const a=b.dataset.coach;
+  if(a==="next")tutoNext();else if(a==="quit")toMenu();else if(a==="play-classic"){tutoEnd();startClassic()}else if(a==="play-arcade"){tutoEnd();startLocal()}});
+const findOrder=(plat,boisson,dessert)=>ORDERS.find(o=>o.plat===plat&&(o.boisson||null)===boisson&&(o.dessert||null)===dessert);
+const extraOn=(list,need)=>list.some(i=>!need.includes(i));
+
+function classicTutorial(){
+  startClassic({tuto:true});
+  const o1=findOrder("sandwich","limonade",null),o2=findOrder("croque","jus",null);
+  const plateWarn=need=>()=>S&&extraOn(S.plate,need)?"That isn't in this recipe. Click Poubelle to clear the plate and try again.":"";
+  tutoStart("classic",[
+    {enter:()=>spawnOrder(o1),text:"Welcome to the bistro! Your first customer is at <b>table 1</b>. Read the order, or press <b>🔊 Écouter</b> to hear it again.",hl:"#room .bubble,[data-say]",next:"J'ai compris"},
+    {text:"They want <b>un sandwich au jambon</b>. Find it on <b>La Carte</b>: it needs <b>le pain</b> + <b>le jambon</b>.",hl:"#board",next:"Suivant"},
+    {text:"Click <b>le pain</b> to put it on the plate (<b>l'assiette</b>).",hl:'[data-ing="pain"]',check:()=>S.plate.includes("pain"),warn:plateWarn(["pain","jambon"])},
+    {text:"Now click <b>le jambon</b>.",hl:'[data-ing="jambon"]',check:()=>S.plate.includes("jambon"),warn:plateWarn(["pain","jambon"])},
+    {text:"Click <b>Préparer</b>. The sandwich goes onto your tray (<b>le plateau</b>).",hl:"#prepBtn",check:()=>S.tray.plat==="sandwich",warn:plateWarn(["pain","jambon"])},
+    {text:"They also want <b>une limonade</b>. Click it to put it on the tray.",hl:'[data-boisson="limonade"]',check:()=>S.tray.boisson==="limonade",
+      warn:()=>S.tray.boisson&&S.tray.boisson!=="limonade"?"Wrong drink! Click it on the tray to take it off.":""},
+    {text:"Everything is on the tray. Click <b>Servir</b> at table 1.",hl:'[data-serve="0"]',check:()=>!!S.bill},
+    {text:"Now the bill: <b>5 € + 3 € = 8 €</b>. Which button says <b>huit euros</b>?",hl:"#billChoices button",check:()=>!!(S.bill&&S.bill.done)},
+    {text:"Click <b>Continuer</b>.",hl:"#billNext",check:()=>S.served>=1},
+    {enter:()=>spawnOrder(o2),text:"New customer! <b>Un croque-monsieur</b> needs cooking: <b>le pain + le jambon + le fromage</b>, then <b>Préparer</b> 🔥. Add <b>un jus d'orange</b> as well.",
+      hl:'[data-ing="pain"],[data-ing="jambon"],[data-ing="fromage"],[data-boisson="jus"]',check:()=>S.tray.plat==="croque"&&S.tray.boisson==="jus",warn:plateWarn(["pain","jambon","fromage"])},
+    {text:"Serve table 1, then choose the total in French: <b>7 € + 3 €</b>.",hl:'[data-serve="0"],#billChoices button,#billNext',check:()=>S.served>=2},
+    {text:"<b>Bravo, chef !</b> In a real service, up to three tables order at once and customers leave if they wait too long. A wrong plate goes in the <b>Poubelle</b>. Ready?",
+      acts:'<button class="btn small" data-coach="play-classic">Commencer le service</button>'}
+  ]);
+}
+function arcadeTutorial(){
+  NET.role=null;INP.forEach(i=>i.a=0);
+  const p=mkPlayer("L0",$("nameIn").value.trim()||"Chef",0);p.local=0;p.lastA=INP[0].a;
+  A=newArcade([p]);A.tuto=true;A.spawnT=1e9;A.time=0;VIEW=viewFromA();startArcadeView();
+  const o1=findOrder("sandwich","limonade",null),o2=findOrder("omelette",null,null);
+  const add=o=>{const idx=ORDERS.indexOf(o);A.tickets.push({id:++A.tid,o:idx,face:personFor(o.v)[0],t:999,max:999,got:{}});itemsOf(o).forEach(x=>A.seen.add(x.fr));pushEv("n",A.tid,idx)};
+  const me=()=>A&&A.players[0],holds=f=>{const h=me()&&me().hold;return !!(h&&f(h))};
+  const onStove=f=>["6,6","6,7"].some(k=>A.tiles[k]&&f(A.tiles[k]));
+  let start=null;
+  tutoStart("arcade",[
+    {enter:()=>{add(o1);start={x:p.x,y:p.y}},text:"You are the chef with your name above your hat. Move with <b>W A S D</b> or the <b>arrow keys</b> (on a tablet, use the joystick).",
+      check:()=>Math.hypot(me().x-start.x,me().y-start.y)>1.2},
+    {text:"An order is at the top: <b>un sandwich au jambon et une limonade</b>. Walk to the <b>plates</b> 🍽️ and press <b>Space</b> (or <b>Prendre / Poser</b>) to pick one up.",tiles:[[6,2]],check:()=>holds(h=>h.t==="p")},
+    {text:"Take the plate to the <b>pain</b> crate and press Space to add the bread.",tiles:[[1,0]],check:()=>holds(h=>h.t==="p"&&h.ing.includes("pain")),
+      warn:()=>holds(h=>h.t==="p"&&extraOn(h.ing,["pain","jambon"]))?"Wrong ingredient! Take the plate to the bin 🗑️ and start again.":""},
+    {text:"Now add <b>le jambon</b> from the crate next to it.",tiles:[[2,0]],check:()=>holds(h=>h.t==="p"&&h.ing.includes("jambon")&&h.ing.includes("pain")),
+      warn:()=>holds(h=>h.t==="p"&&extraOn(h.ing,["pain","jambon"]))?"Wrong ingredient! Take the plate to the bin 🗑️ and start again.":""},
+    {text:"A green ✓ means the dish is finished. Take it to the <b>PASSE</b> (the gold hatch) and press Space.",tiles:[[7,0],[8,0]],check:()=>A.tickets.some(t=>t.got.plat)||A.served>=1},
+    {text:"Now the drink: grab <b>une limonade</b> from the blue crate and take it to the PASSE.",tiles:[[11,0],[7,0]],check:()=>A.served>=1},
+    {enter:()=>add(o2),text:"<b>Une omelette au fromage</b> needs cooking. Take a plate and add <b>les œufs</b> and <b>le fromage</b>.",tiles:[[6,2],[4,0],[3,0]],
+      check:()=>holds(h=>h.t==="p"&&h.ing.includes("oeufs")&&h.ing.includes("fromage"))||onStove(it=>it.t==="d"||(it.t==="p"&&it.ing.includes("oeufs")&&it.ing.includes("fromage")))},
+    {text:"Put the plate on a <b>stove</b> 🔥 (press Space) and watch the orange bar fill up.",tiles:[[6,6],[7,6]],check:()=>onStove(it=>it.t==="d")||holds(h=>h.t==="d")},
+    {text:"It's cooked! Pick it up and take it to the PASSE. In a real service, food left on the stove burns.",tiles:[[6,6],[7,6],[7,0]],check:()=>A.served>=2},
+    {text:"<b>Bravo, chef !</b> Picked up the wrong thing? The <b>bin</b> 🗑️ clears your hands. In a real service, orders keep coming and the clock is ticking. Ready?",tiles:[[6,8]],
+      acts:'<button class="btn small" data-coach="play-arcade">Commencer le service</button>'}
+  ]);
+}
+$("tutoClassic").onclick=classicTutorial;
+$("tutoArcade").onclick=arcadeTutorial;
+
+/* ================= NETWORK (room capability) ================= */
+const NET={room:null,R:null,role:null,code:"",me:null,host:null,lastSnap:null,inpSent:"",inpT:0,unsub:[]};
+(async()=>{
+  try{NET.room=await window.claude?.use?.("room")}catch(e){NET.room=null}
+  if(!NET.room){$("onlineNote").textContent="Online play needs this page opened from Claude while signed in. Use this device mode instead.";return}
+  $("onlineNote").textContent="Host a game on the board, then pupils join on their devices with the 4-letter code.";
+  $("hostBtn").disabled=false;$("joinBtn").disabled=false;
+})();
+function myPeer(R){const me=R.peers().find(p=>p.isMe&&p.sameTab);return me?me.peer:null}
+async function netHost(){
+  if(!NET.room)return;await netLeave();
+  const code=Array.from({length:4},()=>"abcdefghjkmnpqrstuvwxyz"[Math.floor(Math.random()*23)]).join("");
+  try{NET.R=await NET.room.join("bistro-"+code)}catch(e){toast("Impossible de créer la partie.");return}
+  NET.role="host";NET.code=code;const name=$("nameIn").value.trim()||"Chef";
+  NET.R.presence({role:"host",name});
+  const hp=mkPlayer("H0",name,0);hp.local=0;hp.lastA=INP[0].a;
+  A=newArcade([hp]);A.phase="lobby";
+  NET.unsub.push(NET.R.onPeers(ch=>{syncPeers();renderLobby()}));
+  renderLobby();
+  NET.lobbyIv=setInterval(()=>{if(A&&A.phase==="lobby")netSend()},700);
+}
+function syncPeers(){
+  if(NET.role!=="host"||!A)return;
+  const peers=NET.R.peers().filter(p=>!(p.isMe&&p.sameTab)&&p.presence&&p.presence.role==="player");
+  const ids=peers.map(p=>p.peer);
+  A.players=A.players.filter(p=>p.local!=null||ids.includes(p.id));
+  peers.forEach(p=>{if(A.players.length>=4)return;if(!A.players.some(q=>q.id===p.peer)){const np=mkPlayer(p.peer,String(p.presence.name||"Chef"),A.players.length);
+    const ip=p.presence.inp;np.lastA=ip&&typeof ip.a==="number"?ip.a:0;A.players.push(np)}});
+  A.players.forEach((p,i)=>p.col=COLS[i%4]);
+}
+function netReadInputs(){
+  if(NET.kind==="sb"){if(!H)return;const ps=Object.values(H.pupils);A.players.forEach(pl=>{const p=ps.find(q=>q.kp===pl.id);if(p&&p.inp)pl.inp=p.inp});return}
+  const peers=NET.R.peers();
+  A.players.forEach(p=>{if(p.local!=null)return;const pr=peers.find(q=>q.peer===p.id);const ip=pr&&pr.presence&&pr.presence.inp;
+    if(ip&&typeof ip.x==="number"&&typeof ip.y==="number"&&typeof ip.a==="number")p.inp={x:Math.max(-1,Math.min(1,ip.x)),y:Math.max(-1,Math.min(1,ip.y)),a:ip.a}})
+}
+function netSend(){if(NET.kind==="sb"){if(H&&H.kch&&A)clSend(H.kch,"st",snap());return}if(NET.R&&A)NET.R.emit("st",snap()).catch(e=>{if(e&&e.code==="not_permitted"){toast("Only an editor of this page can host.");}})}
+async function netJoin(){
+  if(!NET.room)return;const code=$("codeIn").value.trim().toLowerCase();
+  if(!/^[a-z]{4}$/.test(code)){toast("Le code a quatre lettres.");return}
+  await netLeave();
+  try{NET.R=await NET.room.join("bistro-"+code)}catch(e){toast("Impossible de rejoindre.");return}
+  NET.role="client";NET.code=code;if(MUS.on){MUS.on=false;syncMusicUI();musicApply();toast("Music plays on the host's screen. Tap ♪ to hear it here too.")}NET.me=myPeer(NET.R);NET.host=null;
+  const name=$("nameIn").value.trim()||"Chef";
+  NET.R.presence({role:"player",name,inp:{x:0,y:0,a:INP[0].a}});
+  NET.unsub.push(NET.R.onPeers(()=>{NET.me=NET.me||myPeer(NET.R);const h=NET.host&&NET.R.peers().find(p=>p.peer===NET.host);if(NET.host&&!h)toast("L'hôte a quitté la partie.")}));
+  NET.unsub.push(NET.R.on("st",msg=>{
+    if(msg.sameTab)return;if(!NET.host)NET.host=msg.peer;if(msg.peer!==NET.host)return;
+    const s=msg.data;if(!s||!Array.isArray(s.pl))return;NET.lastSnap=s;NET.me=NET.me||myPeer(NET.R);
+    if(s.ph==="lobby"){renderLobby(s);if(mode==="arcade"){$("endModal").classList.remove("on");mode="lobby";show("scrLobby")}return}
+    if(typeof s.lv==="string"&&LEVELS[s.lv])lvl=s.lv;
+    VIEW=viewFromSnap(s,VIEW);
+    if(mode!=="arcade"&&s.ph==="play"){startArcadeView();}
+    (s.ev||[]).forEach(e=>{if(Array.isArray(e))handleEv(e)});
+  }));
+  renderLobby();
+}
+function netSendInput(now){
+  if(NET.kind==="sb"){if(!P||!P.ch)return;const i=INP[0],q=v=>Math.round(v*2)/2,x=q(i.x),y=q(i.y),sig=x+","+y+","+i.a;
+    if(sig===P.inpSent&&now-P.inpT<2000)return;if(now-P.inpT<110)return;P.inpSent=sig;P.inpT=now;clSend(P.ch,"inp",{x,y,a:i.a});return}
+  if(!NET.R)return;const i=INP[0],s=[Math.round(i.x*10)/10,Math.round(i.y*10)/10,i.a].join();
+  if(s===NET.inpSent&&now-NET.inpT<1000)return;if(now-NET.inpT<45)return;
+  NET.inpSent=s;NET.inpT=now;NET.R.presence({inp:{x:Math.round(i.x*10)/10,y:Math.round(i.y*10)/10,a:i.a}}).catch(()=>{});
+}
+async function netLeave(){
+  if(NET.kind==="sb"){NET.role=null;NET.kind=null}
+  clearInterval(NET.lobbyIv);NET.unsub.forEach(u=>{try{u()}catch(e){}});NET.unsub=[];
+  if(NET.R){try{await NET.R.leave()}catch(e){}}NET.R=null;NET.role=null;NET.host=null;NET.lastSnap=null;$("netBox").hidden=true;
+}
+function renderLobby(s){
+  $("netBox").hidden=!NET.role;if(!NET.role)return;
+  $("netCode").textContent=NET.code.toUpperCase();
+  let list;
+  if(NET.role==="host"){$("netRole").textContent="Code de la partie: share it with the other chefs.";list=A?A.players.map(p=>[p.name,p.col]):[];$("netStart").hidden=false}
+  else{$("netRole").textContent=s||NET.lastSnap?"Connected. Waiting for the host to start…":"Looking for the host…";list=(s||NET.lastSnap||{pl:[]}).pl.map(a=>[a[1],a[2]]);$("netStart").hidden=true}
+  $("netPlayers").innerHTML=list.map(([n,c])=>`<span><i style="background:${esc(c)}"></i>${esc(n)}</span>`).join("")||"<span>…</span>";
+}
+$("hostBtn").onclick=netHost;$("joinBtn").onclick=netJoin;
+$("netLeave").onclick=()=>{netLeave();renderLobby()};
+$("netStart").onclick=()=>{
+  if(NET.role!=="host"||!A)return;
+  const players=A.players.map((p,i)=>{const q=mkPlayer(p.id,p.name,i);q.local=p.local;q.lastA=p.local!=null?INP[p.local].a:p.lastA;return q});
+  A=newArcade(players);VIEW=viewFromA();startArcadeView();netSend();
+};
+
+/* ================= LUDUS CLASS GAMES (Supabase) =================
+   Only on playludus (CFG.target "ludus"). Uses the Ludus join system: pupils type the code on the
+   Ludus join page, swap keys with the board over the lobby channel, and get a private channel.
+   Brigades: every pupil runs their own kitchen on their own device and reports a score every 2 s.
+   Cuisine partagée: the board runs one kitchen for up to 4 chefs and sends it out 6 times a second. */
+const CL={on:CFG.target==="ludus"&&!!(window.supabase&&window.APP&&window.APP.configured&&window.LB&&LB.kx),sb:null,role:null};
+const BRIGADES=[["Les Croissants","#e9a23b"],["Les Baguettes","#c8102e"],["Les Escargots","#2a9d8f"],["Les Macarons","#d96aa7"],["Les Camemberts","#7b61ff"],["Les Crêpes","#1f6fb5"],["Les Éclairs","#8a5a2b"],["Les Madeleines","#16936b"]];
+const KITCHEN_CH=code=>`lmb-${code}-bistro`;
+let H=null;           // the board's class game
+let P=null;           // this pupil's link to the board
+function clClient(){if(!CL.sb)CL.sb=window.supabase.createClient(APP.supabaseUrl,APP.supabaseKey,{realtime:{params:{eventsPerSecond:40}}});return CL.sb}
+function clSub(name,handlers){
+  return new Promise(res=>{const c=clClient().channel(name,{config:{broadcast:{self:false}}});
+    Object.entries(handlers).forEach(([ev,fn])=>c.on("broadcast",{event:ev},({payload})=>fn(payload||{})));
+    let done=false;c.subscribe(st=>{if(st==="SUBSCRIBED"&&!done){done=true;res(c)}if((st==="CHANNEL_ERROR"||st==="TIMED_OUT")&&!done){done=true;res(null)}})});
+}
+const clSend=(ch,event,payload)=>ch&&ch.send({type:"broadcast",event,payload}).catch(()=>{});
+const clDrop=ch=>{try{if(ch)clClient().removeChannel(ch)}catch(e){}};
+
+/* ---------- the board ---------- */
+async function hostSetup(){
+  const {data:{session}}=await clClient().auth.getSession().catch(()=>({data:{session:null}}));
+  if(!session){$("classCard").innerHTML=`<h3>Partie de classe</h3><p>Hosting a class game needs a Ludus teacher account.</p><a class="btn" href="../teacher.html">Teacher sign-in</a><p class="note">After signing in, come back to this page.</p>`;return}
+  H={phase:"setup",kind:"brigade",game:"arcade",team:3,mins:4,pupils:{},blocked:[],code:null,kx:null,lobby:null,kch:null,endAt:0,final:null};
+  mode="class";show("scrClass");renderCarte();hostRender();
+}
+async function hostOpen(){
+  const f=$("scrClass");H.kind=f.querySelector("[name=kind]:checked").value;H.game=f.querySelector("[name=game]:checked").value;
+  H.team=+f.querySelector("#clTeam").value;H.mins=+f.querySelector("#clMins").value;
+  H.code=String(Math.floor(100000+Math.random()*900000));
+  try{H.kx=await LB.kx.newPair()}catch(e){toast("This browser can't host. Open the page with https://.");return}
+  H.lobby=await clSub(LB.lobbyChannel(H.code),{join:hostOnJoin});
+  if(!H.lobby){toast("Couldn't connect. Check the internet connection.");return}
+  H.phase="lobby";hostRender();
+}
+async function hostOnJoin(m){
+  if(!H||!LB.kx.validPub(m.pub)||!H.kx)return;
+  const reply=body=>clSend(H.lobby,"joined",{to:m.pub,hpub:H.kx.pub,game:"bistro",...body});
+  if(H.phase==="ended")return reply({ok:false,msg:"This game has finished."});
+  const chk=LB.checkName(m.name);if(!chk.ok)return reply({ok:false,msg:chk.msg});
+  if(H.blocked.includes(m.pub))return reply({ok:false,msg:"Your teacher has removed you from this game."});
+  let p=Object.values(H.pupils).find(x=>x.pub===m.pub);
+  if(!p){
+    if(Object.values(H.pupils).some(x=>x.name.toLowerCase()===chk.name.toLowerCase()))return reply({ok:false,msg:`Someone called ${chk.name} has already joined. Add your surname initial.`});
+    if(H.kind==="coop"&&Object.keys(H.pupils).length>=4)return reply({ok:false,msg:"This kitchen is full: 4 chefs already."});
+    let chan;try{chan=await LB.kx.secret(H.kx.priv,m.pub,H.code)}catch(e){return}
+    if(Object.values(H.pupils).find(x=>x.pub===m.pub))return;
+    let pid;do{pid=Math.random().toString(36).slice(2,10)}while(H.pupils[pid]);
+    p={pid,pub:m.pub,chan,name:chk.name,score:0,served:0,inp:null,team:null,kp:null,joinedAt:Date.now()};H.pupils[pid]=p;
+    if(H.phase==="play")hostLateJoin(p);
+  }
+  if(!p.ch){p.ch=await clSub(LB.pupilChannel(H.code,p.chan),{
+    hello:()=>{if(H&&H.pupils[p.pid])clSend(p.ch,"state",hostStateFor(p))},
+    inp:v=>{if(typeof v.x==="number"&&typeof v.y==="number"&&typeof v.a==="number")p.inp={x:Math.max(-1,Math.min(1,v.x)),y:Math.max(-1,Math.min(1,v.y)),a:v.a|0}},
+    score:v=>{if(H.phase!=="play"&&H.phase!=="ended")return;const c=Math.max(0,Math.min(5000,v.cash|0)),s=Math.max(0,Math.min(500,v.served|0));p.score=Math.max(p.score,c);p.served=Math.max(p.served,s)}
+  })}
+  if(!p.ch)return reply({ok:false,msg:"The game couldn't connect you. Try again."});
+  reply({ok:true,name:p.name});hostRender();
+}
+function hostStateFor(p){
+  const st={phase:H.phase==="setup"?"lobby":H.phase,kind:H.kind,game:H.game,lvl,mins:H.mins,name:p.name};
+  if(p.team!=null){const b=BRIGADES[p.team%BRIGADES.length];st.team={name:b[0],col:b[1],mates:Object.values(H.pupils).filter(q=>q.team===p.team&&q!==p).map(q=>q.name)}}
+  if(H.phase==="play"){st.left=Math.max(0,H.endAt-Date.now());st.base=p.score;st.me=p.kp}
+  if(H.phase==="ended")st.final=H.final&&H.final.byPupil[p.pid];
+  return st;
+}
+const hostTell=p=>clSend(p.ch,"state",hostStateFor(p));
+function hostAssign(){
+  const ps=LB.shuffle(Object.values(H.pupils)),size=Math.max(1,H.team),n=Math.max(1,Math.ceil(ps.length/size));
+  ps.forEach((p,i)=>p.team=i%n);
+}
+function hostLateJoin(p){
+  if(H.kind==="brigade"){const counts={};Object.values(H.pupils).forEach(q=>{if(q.team!=null)counts[q.team]=(counts[q.team]||0)+1});
+    const teams=Object.keys(counts).map(Number);let best=teams.length?teams.reduce((a,b)=>counts[a]<=counts[b]?a:b):0;
+    if(H.team===1)best=teams.length?Math.max(...teams)+1:0;p.team=best;}
+  else if(A&&A.players.length<4){const pl=mkPlayer("c"+A.players.length,p.name,A.players.length);p.kp=pl.id;A.players.push(pl)}
+}
+async function hostStart(){
+  if(!Object.keys(H.pupils).length){toast("Wait for at least one pupil to join.");return}
+  H.phase="play";H.endAt=Date.now()+H.mins*60000;
+  if(H.kind==="brigade"){hostAssign();Object.values(H.pupils).forEach(hostTell);clearInterval(H.iv);H.iv=setInterval(hostTick,1000);setMusic("game");hostRender();return}
+  // shared kitchen: the board runs it
+  H.kch=await clSub(KITCHEN_CH(H.code),{});
+  const players=Object.values(H.pupils).slice(0,4).map((p,i)=>{const pl=mkPlayer("c"+i,p.name,i);p.kp=pl.id;return pl});
+  A=newArcade(players);A.time=H.mins*60;VIEW=viewFromA();NET.role="host";NET.kind="sb";
+  Object.values(H.pupils).forEach(hostTell);startArcadeView();$("classBar").hidden=false;$("classBar").textContent=`Cuisine partagée · code ${H.code}`;
+}
+function hostTick(){if(!H||H.phase!=="play")return;if(Date.now()>=H.endAt)hostEnd();else if(mode==="class")hostRender()}
+function hostTeams(){
+  const teams={};Object.values(H.pupils).forEach(p=>{if(p.team==null)return;const t=teams[p.team]||(teams[p.team]={i:p.team,name:BRIGADES[p.team%BRIGADES.length][0],col:BRIGADES[p.team%BRIGADES.length][1],score:0,served:0,chefs:[]});
+    t.score+=p.score;t.served+=p.served;t.chefs.push(p)});
+  return Object.values(teams).sort((a,b)=>b.score-a.score);
+}
+function hostEnd(){
+  if(!H||H.phase!=="play")return;
+  clearInterval(H.iv);H.phase="ended";
+  const byPupil={};
+  if(H.kind==="brigade"){
+    const teams=hostTeams(),chefs=Object.values(H.pupils).slice().sort((a,b)=>b.score-a.score);
+    teams.forEach((t,ri)=>t.chefs.forEach(p=>{byPupil[p.pid]={teamRank:ri+1,teams:teams.length,teamScore:t.score,score:p.score,chefRank:chefs.indexOf(p)+1,chefs:chefs.length}}));
+    H.final={teams,chefs,byPupil};
+  }else{
+    const sc=A?A.score:0,sv=A?A.served:0;Object.values(H.pupils).forEach(p=>byPupil[p.pid]={score:sc,served:sv});
+    H.final={score:sc,served:sv,missed:A?A.missed:0,byPupil};
+    cancelAnimationFrame(raf);if(A){NET.kind="sb";netSend()}
+  }
+  Object.values(H.pupils).forEach(hostTell);
+  setMusic("menu");mode="class";show("scrClass");hostRender();
+}
+function hostClose(){
+  if(!H)return;clearInterval(H.iv);
+  Object.values(H.pupils).forEach(p=>{if(p.ch){clSend(p.ch,"kicked",{cancelled:true});const c=p.ch;setTimeout(()=>clDrop(c),400)}});
+  clDrop(H.lobby);clDrop(H.kch);H=null;$("classBar").hidden=true;
+}
+function hostKick(pid){const p=H.pupils[pid];if(!p)return;H.blocked.push(p.pub);if(p.ch){clSend(p.ch,"kicked",{});const c=p.ch;setTimeout(()=>clDrop(c),400)}delete H.pupils[pid];hostRender()}
+function joinLink(){try{return new URL((APP.joinUrl||APP.playUrl||"../"),location.href).href.replace(/\?.*$/,"")+"?code="+H.code+(APP.plainParam?APP.plainParam():"")}catch(e){return "../?code="+H.code}}
+function qrSvg(){if(!window.qrcode)return "";try{const q=window.qrcode(0,"M");q.addData(joinLink());q.make();return q.createSvgTag({cellSize:4,margin:0,scalable:true})}catch(e){return ""}}
+function hostRender(){
+  if(!H)return;const el=$("scrClass");const ps=Object.values(H.pupils).sort((a,b)=>a.joinedAt-b.joinedAt);
+  const chips=ps.map(p=>`<span>${esc(p.name)}${H.phase==="lobby"?` <button class="x" data-kick="${p.pid}" aria-label="Remove ${esc(p.name)}">×</button>`:""}</span>`).join("")||"<span>Nobody yet…</span>";
+  if(H.phase==="setup"){
+    el.innerHTML=`<div class="card"><h3>Partie de classe</h3>
+      <fieldset class="opts"><legend>Type de partie</legend>
+        <label class="opt"><input type="radio" name="kind" value="brigade" ${H.kind==="brigade"?"checked":""}> <span><b>Brigades</b>: the whole class. Each pupil runs a kitchen on their own device; teams add up their takings.</span></label>
+        <label class="opt"><input type="radio" name="kind" value="coop" ${H.kind==="coop"?"checked":""}> <span><b>Cuisine partagée</b>: up to 4 chefs share one kitchen across their devices, shown on the board.</span></label></fieldset>
+      <fieldset class="opts" id="clGameSet"><legend>Brigades play</legend>
+        <label class="opt"><input type="radio" name="game" value="arcade" ${H.game==="arcade"?"checked":""}> Mode arcade</label>
+        <label class="opt"><input type="radio" name="game" value="classic" ${H.game==="classic"?"checked":""}> Service classique</label></fieldset>
+      <div class="row"><label class="opt">Brigades of <select id="clTeam">${[1,2,3,4].map(n=>`<option value="${n}" ${H.team===n?"selected":""}>${n===1?"1 (everyone for themselves)":n}</option>`).join("")}</select></label>
+        <label class="opt">Length <select id="clMins">${[3,4,5,6].map(n=>`<option value="${n}" ${H.mins===n?"selected":""}>${n} min</option>`).join("")}</select></label></div>
+      <p class="note">Level: <b>${lvl}</b> (change it on the menu). Pupils join at <b>${esc(APP.joinAddress||"the Ludus join page")}</b> with the code, as for a quiz.</p>
+      <div class="row"><button class="btn" data-cl="open">Ouvrir la partie</button><button class="btn ghost" data-cl="cancel">Retour</button></div></div>`;
+    return;
+  }
+  if(H.phase==="lobby"){
+    el.innerHTML=`<div class="board-join"><div><span class="note">Go to</span><div class="addr">${esc(APP.joinAddress||"")}</div><span class="note">and type the code</span><div class="code big">${H.code}</div></div>
+      <div class="qr">${qrSvg()}</div></div>
+      <div class="card"><h3>${ps.length} chef${ps.length===1?"":"s"} ${H.kind==="coop"?"(maximum 4)":""}</h3><div class="plist">${chips}</div>
+      <p class="note">${H.kind==="brigade"?`Brigades of ${H.team}, ${H.game==="arcade"?"Mode arcade":"Service classique"}, ${H.mins} minutes.`:`One shared kitchen, ${H.mins} minutes.`} Pupils who join late are added to a brigade.</p>
+      <div class="row"><button class="btn" data-cl="start">Lancer le service</button><button class="btn ghost" data-cl="close">Annuler</button></div></div>`;
+    return;
+  }
+  if(H.phase==="play"&&H.kind==="brigade"){
+    const teams=hostTeams(),top=Math.max(1,...teams.map(t=>t.score)),chefs=ps.slice().sort((a,b)=>b.score-a.score).slice(0,5);
+    el.innerHTML=`<div class="board-top"><div class="code">${H.code}</div><div class="clock">${fmt((H.endAt-Date.now())/1000)}</div><button class="btn ghost small" data-cl="end">Terminer</button></div>
+      <div class="teams">${teams.map((t,i)=>`<div class="team"><div class="tn"><span class="rank">${i+1}</span><b>${esc(t.name)}</b><span class="tc">${t.chefs.map(p=>esc(p.name)).join(", ")}</span><b class="ts">${t.score} €</b></div>
+        <div class="tbar"><i style="width:${t.score/top*100}%;background:${t.col}"></i></div></div>`).join("")}</div>
+      <div class="card"><h3>Meilleurs chefs</h3><ol class="chefs">${chefs.map(p=>`<li><span>${esc(p.name)}</span><b>${p.score} €</b></li>`).join("")}</ol></div>`;
+    return;
+  }
+  if(H.phase==="ended"){
+    const F=H.final;
+    el.innerHTML=H.kind==="brigade"?`<div class="card"><h2 class="win">🏆 ${F.teams[0]?esc(F.teams[0].name):"—"}</h2>
+      <ol class="chefs">${F.teams.map(t=>`<li><span>${esc(t.name)} <span class="tc">${t.chefs.map(p=>esc(p.name)).join(", ")}</span></span><b>${t.score} €</b></li>`).join("")}</ol>
+      <h3>Meilleurs chefs</h3><ol class="chefs">${F.chefs.slice(0,5).map(p=>`<li><span>${esc(p.name)}</span><b>${p.score} € · ${p.served} servis</b></li>`).join("")}</ol>
+      <div class="row"><button class="btn" data-cl="again">Nouvelle partie</button><button class="btn ghost" data-cl="close">Menu</button></div></div>`
+      :`<div class="card"><h2 class="win">La cuisine a gagné ${F.score} €</h2><p>${F.served} commandes servies, ${F.missed} clients partis.</p><p class="note">Chefs: ${ps.map(p=>esc(p.name)).join(", ")}</p>
+      <div class="row"><button class="btn" data-cl="again">Nouvelle partie</button><button class="btn ghost" data-cl="close">Menu</button></div></div>`;
+  }
+}
+$("scrClass").addEventListener("click",e=>{
+  const k=e.target.closest("[data-kick]");if(k){hostKick(k.dataset.kick);return}
+  const b=e.target.closest("[data-cl]");if(!b)return;const a=b.dataset.cl;
+  if(a==="open")hostOpen();else if(a==="cancel"){H=null;mode="lobby";show("scrLobby")}
+  else if(a==="start")hostStart();else if(a==="end")hostEnd();
+  else if(a==="close"){hostClose();toMenu()}
+  else if(a==="again"){hostClose();hostSetup()}
+});
+$("scrClass").addEventListener("change",e=>{if(e.target.name==="kind"){H.kind=e.target.value;$("clGameSet").hidden=H.kind!=="brigade"}});
+
+/* ---------- a pupil's device ---------- */
+const PKEY=()=>APP.storagePrefix+".bistro";
+async function pupilBoot(){
+  let s=null;try{s=JSON.parse(localStorage.getItem(PKEY())||"null")}catch(e){}
+  CL.role="pupil";mode="pupil";show("scrPupil");
+  if(!s||!s.chan||Date.now()-s.at>3*3600e3){pupilMsg("Join a game","Go to the Ludus join page and type the code on the board.",`<a class="btn" href="../">Join a game</a>`);return}
+  P={code:s.code,chan:s.chan,name:s.name,ch:null,kch:null,st:null,playing:false,rep:null,base:0,inpSent:"",inpT:0};
+  pupilMsg("Joining…",`Game ${esc(P.code)}`);
+  P.ch=await clSub(LB.pupilChannel(P.code,P.chan),{state:pupilState,kicked:m=>pupilLeave(m.cancelled?"Your teacher closed the game.":"Your teacher has removed you from this game.")});
+  if(!P.ch){pupilMsg("Can't reach your game","Check the internet connection, then try again.",`<button class="btn" onclick="location.reload()">Try again</button>`);return}
+  const hello=()=>{if(P&&!P.st)clSend(P.ch,"hello",{})};hello();P.hi=setInterval(hello,2500);
+  setTimeout(()=>{if(P&&!P.st)pupilMsg("Can't reach your game","If the game has finished, join a new one.",`<a class="btn" href="../">Join a game</a>`)},15000);
+}
+function pupilMsg(h,t,acts){$("scrPupil").innerHTML=`<div class="card pupil"><h2>${h}</h2><p>${t}</p>${acts||""}</div>`}
+function pupilLeave(msg){
+  try{localStorage.removeItem(PKEY())}catch(e){}
+  clearInterval(P&&P.rep);clearInterval(P&&P.hi);if(P){clDrop(P.kch);clDrop(P.ch)}P=null;
+  stopClassic();stopArcade();tutoEnd();$("endModal").classList.remove("on");NET.role=null;NET.kind=null;
+  mode="pupil";show("scrPupil");pupilMsg("Merci !",esc(msg),`<a class="btn" href="../">Join another game</a>`);
+}
+function pupilScore(){if(!P)return;const cash=S?S.cash:(A&&A.players.some(p=>p.local!=null))?A.score:0,served=S?S.served:A?A.served:0;
+  clSend(P.ch,"score",{cash:P.base+cash,served})}
+function pupilState(st){
+  if(!P)return;P.st=st;if(typeof st.lvl==="string"&&LEVELS[st.lvl])lvl=st.lvl;
+  const team=st.team?`<p class="team-badge" style="--team:${esc(st.team.col)}">Brigade <b>${esc(st.team.name)}</b>${st.team.mates.length?` with ${st.team.mates.map(esc).join(", ")}`:""}</p>`:"";
+  if(st.phase==="lobby"){pupilMsg(`Tu es dans la partie, ${esc(st.name)} !`,`${st.kind==="coop"?"Cuisine partagée: you share one kitchen with up to 3 other chefs.":"Brigades: you run your own kitchen and your team adds up its takings."} Look at the board and wait for your teacher to start.`+team,
+    `<div class="row"><button class="btn ghost" data-pt="tuto">🎓 Practise with the tutorial while you wait</button></div>`);return}
+  if(st.phase==="play"&&!P.playing){
+    P.playing=true;tutoEnd();$("endModal").classList.remove("on");P.base=st.base||0;
+    if(st.kind==="brigade"){
+      const secs=Math.max(5,(st.left||0)/1000);
+      if(st.game==="classic")startClassic({seconds:secs});else startLocal({seconds:secs,name:st.name});
+      if(team)toast(`Brigade ${st.team.name} !`);
+      clearInterval(P.rep);P.rep=setInterval(pupilScore,2000);
+    }else{
+      SET.sound=false;syncSoundBtn();MUS.on=false;syncMusicUI();musicApply();
+      NET.role="client";NET.kind="sb";NET.me=st.me;VIEW=null;
+      clSub(KITCHEN_CH(P.code),{st:snapIn}).then(c=>{if(P)P.kch=c});
+      startArcadeView();toast("Tap 🔊 Son to hear the orders on this device.");
+    }
+    return;
+  }
+  if(st.phase==="ended"){
+    clearInterval(P.rep);if(st.kind==="brigade"&&P.playing)pupilScore();P.playing=false;
+    const f=st.final||{};
+    if(S&&!S.paused)endClassic();else if(A&&A.phase==="play")endArcade();
+    const line=st.kind==="brigade"&&f.teamRank?`Brigade ${esc(st.team?st.team.name:"")}: <b>${f.teamRank}${f.teamRank===1?"re":"e"}</b> sur ${f.teams} avec ${f.teamScore} €. You were chef number ${f.chefRank} of ${f.chefs}.`
+      :f.score!=null?`Your kitchen took <b>${f.score} €</b> and served ${f.served} orders.`:"";
+    if(line){$("endTitle").innerHTML=st.kind==="brigade"&&f.teamRank===1?"🏆 Ta brigade a gagné !":"Le service est terminé !";$("endExtra").innerHTML=line;$("endExtra").hidden=false;$("endModal").classList.add("on")}
+    try{localStorage.removeItem(PKEY())}catch(e){}
+  }
+}
+$("scrPupil").addEventListener("click",e=>{const b=e.target.closest("[data-pt]");if(b&&b.dataset.pt==="tuto"){P&&P.st&&P.st.game==="classic"?classicTutorial():arcadeTutorial()}});
+function snapIn(s){
+  if(!s||!Array.isArray(s.pl)||!P)return;NET.lastSnap=s;
+  VIEW=viewFromSnap(s,VIEW);(s.ev||[]).forEach(e=>{if(Array.isArray(e))handleEv(e)});
+}
+
+if(CL.on){$("roomCard").hidden=true;$("classCard").hidden=false;$("classBtn").onclick=hostSetup}
+syncMusicUI();renderCarte();
+if(CFG.target==="ludus"&&location.hash==="#play"&&CL.on)pupilBoot();else show("scrMenu");
+}
+</script>
+</body>
+</html>

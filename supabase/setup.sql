@@ -23,9 +23,15 @@ create table if not exists public.sets (
   title        text not null default '',
   questions    jsonb not null default '[]'::jsonb,
   tags         text[] not null default '{}',
+  subject      text,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
+
+-- Subject: 'latin', 'french', 'none' (chosen as none), or empty (worked out from the questions)
+alter table public.sets add column if not exists subject text;
+alter table public.sets drop constraint if exists sets_subject_check;
+alter table public.sets add constraint sets_subject_check check (subject in ('latin', 'french', 'geography', 'history', 'none'));
 
 create index if not exists sets_owner_idx  on public.sets (owner);
 create index if not exists sets_folder_idx on public.sets (folder_id);

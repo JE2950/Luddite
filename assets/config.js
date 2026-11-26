@@ -4,25 +4,111 @@
    ============================================================ */
 window.APP = {
   // The name shown on every page, in tab titles and on downloaded files.
-  name: 'Quiz Arena',
+  name: 'Ludus',
+
+  // The school name shown above the app name on the home pages, and the crest image.
+  // Put the crest at assets/ludgrove-logo.png (a PNG with a transparent background works best).
+  // Until that file exists, the pages show the name alone.
+  school: 'Ludgrove',
+  crest: 'assets/ludgrove-logo.png',
 
   // From Supabase: Project Settings → Data API (Project URL) and → API Keys (Publishable key).
   // The publishable key is meant to be public; the database rules decide what it can do.
-  supabaseUrl: 'PASTE-YOUR-SUPABASE-PROJECT-URL-HERE',
-  supabaseKey: 'PASTE-YOUR-SUPABASE-PUBLISHABLE-KEY-HERE',
+  supabaseUrl: 'https://beymbzxkhowkgqmjpglr.supabase.co',
+  supabaseKey: 'sb_publishable_RDhTPrJJqX-f3yUH1JXfvg_2c4ou363',
 
   // Optional: your own web address. Leave both as '' if you're using the free netlify.app address.
   // Example: domain: 'myquiz.com', playHost: 'play.myquiz.com'
   // (teachers then use myquiz.com, pupils use play.myquiz.com)
-  domain: '',
-  playHost: '',
+  domain: 'playludus.co.uk',
+  playHost: 'playludus.co.uk',
 
-  // Names of the game modes and the double-weight event in the fishing mode.
+  // Names of the game modes and the double-weight event in the fishing mode,
+  // used for sets with no subject.
   modes: {
     classic: 'Classic',
     fishing: 'Marine Mania',
     event: 'Marine Mayhem'
   },
+
+  // Subjects. A set takes on its subject's look, mode names, answer-key labels, fish and music
+  // as soon as a game starts. Sets with no subject chosen have it worked out from their questions.
+  //   pixels: the takeover colours (the third is the background the new look grows from)
+  //   music:  lobby plays while pupils join; game plays from Start until the game ends.
+  //           Music plays on the host laptop only. Missing files fall back to the tracks in assets/music.
+  subjects: {
+    latin: {
+      label: 'Latin',
+      banner: 'LINGVA LATINA',
+      modes: { classic: 'Certamen', fishing: 'Piscatus', event: 'Aestus Neptuni' },
+      keys: ['I', 'II', 'III', 'IV'],
+      pixels: ['#8f1d1d', '#b8892b', '#f3ede1', '#2a1a12', '#6b2a6e', '#d9c9a3'],
+      music: { lobby: 'assets/music/latin-lobby.mp3', game: 'assets/music/latin.mp3' },
+      // Fishing mode brings up treasures instead of fish, worth denarii. [name, picture], five tiers from Common to Legendary.
+      treasure: { unit: 'denarii', items: [
+        [['Rusty sword', 'sword'], ['Chipped pot', 'pot'], ['Old sandal', 'sandal'], ['Bronze coin', 'coin']],
+        [['Oil lamp', 'lamp'], ['Greek vase', 'vase'], ['Wax tablet', 'tablet']],
+        [['Legionary helmet', 'helmet'], ['Model Trojan horse', 'horse'], ['Silver ring', 'ring']],
+        [['Golden laurel wreath', 'wreath'], ['Marble bust', 'bust'], ['Golden eagle', 'eagle']],
+        [['Golden Fleece', 'fleece'], ['Neptune’s trident', 'trident'], ['Shield of Achilles', 'shield']]
+      ] }
+    },
+    french: {
+      label: 'French',
+      banner: 'FRANÇAIS',
+      modes: { classic: 'Le Concours', fishing: 'La Pêche', event: 'La Grande Marée' },
+      pixels: ['#0055a4', '#ffffff', '#e1352b', '#14213d', '#f6f1e6', '#0055a4'],
+      music: { lobby: 'assets/music/french-lobby.mp3', game: 'assets/music/french.mp3' },
+      treasure: { unit: 'francs', items: [
+        [['Garlic bulb', 'garlic'], ['Stale baguette', 'baguette'], ['Old beret', 'beret'], ['Snail shell', 'snail']],
+        [['Bottle of perfume', 'perfume'], ['Copy of Les Misérables', 'book'], ['Pétanque boule', 'boule']],
+        [['Napoleon’s hat', 'bicorne'], ['Accordion', 'accordion'], ['Painter’s palette', 'palette']],
+        [['Model Eiffel Tower', 'eiffel'], ['Golden croissant', 'croissant'], ['Royal crown', 'crown']],
+        [['Sword of Joan of Arc', 'sword'], ['The Golden Snail', 'snail'], ['The Great Golden Cheese', 'cheese']]
+      ] }
+    },
+    geography: {
+      label: 'Geography',
+      banner: 'GEOGRAPHY',
+      modes: { classic: 'Expedition', fishing: 'Deep Sea Dive', event: 'Monsoon' },
+      keys: ['N', 'E', 'S', 'W'],
+      pixels: ['#1f5f4a', '#c98a2b', '#2f7fb5', '#13342a', '#eef1e6', '#1f5f4a'],
+      music: { lobby: 'assets/music/geography-lobby.mp3', game: 'assets/music/geography.mp3' },
+      treasure: { unit: 'pounds', symbol: '£', items: [
+        [['Soggy map', 'map'], ['Broken compass', 'compass'], ['Old postcard', 'postcard'], ['Old penny', 'coin']],
+        [['Ammonite fossil', 'fossil'], ['School globe', 'globe'], ['Message in a bottle', 'bottle']],
+        [['Explorer’s telescope', 'telescope'], ['Gold nugget', 'nugget'], ['Quartz crystal', 'crystal']],
+        [['Pirate’s treasure chest', 'chest'], ['Meteorite', 'meteorite'], ['Golden compass', 'gcompass']],
+        [['Idol of the Lost City', 'idol'], ['The Great Diamond', 'diamond'], ['The Golden Globe', 'gglobe']]
+      ] }
+    },
+    history: {
+      label: 'History',
+      banner: 'HISTORY',
+      modes: { classic: 'The March of Time', fishing: 'Mudlarking', event: 'Low Tide' },
+      keys: ['A', 'B', 'C', 'D'],
+      pixels: ['#5b2a4a', '#b8892b', '#efe6d2', '#2a1f17', '#2f5b8c', '#d9c9a3'],
+      music: { lobby: 'assets/music/geography-lobby.mp3', game: 'assets/music/geography.mp3' },   // the same tracks as Geography
+      // Treasures reuse pictures drawn for the other subjects.
+      treasure: { unit: 'pounds', symbol: '£', items: [
+        [['Old penny', 'coin'], ['Chipped pot', 'pot'], ['Rusty sword', 'sword'], ['Old postcard', 'postcard']],
+        [['Bronze coin', 'coin'], ['Leather-bound book', 'book'], ['Oil lamp', 'lamp']],
+        [['Legionary helmet', 'helmet'], ['Signet ring', 'ring'], ['Ship’s telescope', 'telescope']],
+        [['Pirate’s treasure chest', 'chest'], ['Knight’s sword', 'sword'], ['Napoleon’s hat', 'bicorne']],
+        [['The Crown Jewels', 'crown'], ['The Great Diamond', 'diamond'], ['The Golden Eagle', 'eagle']]
+      ] }
+    }
+  },
+  // Team names for team games, by subject, with each team's colour
+  teams: {
+    latin: [['Romani', '#8f1d1d'], ['Graeci', '#2d5a8c'], ['Galli', '#4f7a3f'], ['Carthaginienses', '#b8892b']],
+    french: [['Les Bleus', '#0055a4'], ['Les Rouges', '#e1352b'], ['Les Verts', '#2e8b6e'], ['Les Jaunes', '#c9962a']],
+    geography: [['Explorers', '#1f5f4a'], ['Navigators', '#2f7fb5'], ['Pioneers', '#c98a2b'], ['Voyagers', '#a3402e']],
+    history: [['Normans', '#5b2a4a'], ['Saxons', '#2f5b8c'], ['Tudors', '#a8402c'], ['Victorians', '#2e6b4e']],
+    none: [['Red', '#c7392b'], ['Blue', '#1f5fae'], ['Green', '#1f8a5c'], ['Gold', '#b8892b']]
+  },
+  // Takeover colours for the Ludgrove pages (used when a game ends and the page returns home).
+  pixels: ['#002664', '#ffffff', '#dbe6f6', '#0a3a86', '#f4f6fa', '#002664'],
 
   // Must match the name you give the Edge Function in Supabase (setup step 6).
   adminFunction: 'quiz-admin'
@@ -39,11 +125,29 @@ window.APP = {
   C.playUrl = C.onDomain && C.playHost ? 'https://' + C.playHost + '/' : './';
   C.teacherUrl = C.onDomain ? 'https://' + C.domain + '/teacher.html' : 'teacher.html';
   // What the host screen tells pupils to type
-  C.joinAddress = C.onDomain && C.playHost ? C.playHost : (location.host + location.pathname.replace(/[^/]*$/, '')).replace(/\/$/, '');
+  // Pupils are always told the play address when there is one, whichever address the teacher is using
+  C.joinAddress = C.playHost ? C.playHost : (location.host + location.pathname.replace(/[^/]*$/, '')).replace(/\/$/, '');
+  // The full join link, for the QR code on the host screen (a game code is added to it)
+  C.joinUrl = C.playHost ? 'https://' + C.playHost + '/' : location.origin + location.pathname.replace(/[^/]*$/, '');
+  // Plain mode, for private tutoring: no school name or crest anywhere (pages, posters, worksheets).
+  // Turned on from a hidden, password-protected button on the teacher page; a pupil's device picks it up from a link with plain=1.
+  C.plainKey = C.storagePrefix + '.plain';
+  try {
+    const u = new URLSearchParams(location.search);
+    if (u.get('plain') === '1') localStorage.setItem(C.plainKey, '1');
+    if (u.get('plain') === '0') localStorage.removeItem(C.plainKey);
+    C.plain = localStorage.getItem(C.plainKey) === '1';
+  } catch (e) { C.plain = false; }
+  if (C.plain) { C.school = ''; C.crest = ''; document.documentElement.classList.add('plain'); }
+  C.plainParam = () => (C.plain ? '&plain=1' : '');
+  C.PLAIN_HASH = '787600ebe6d6c75b6bc0b2db0bfd6aeec78897b67d3192e2208bc8b714237841';
   // Page titles follow the app name
-  document.title = document.title.replace('Quiz Arena', C.name);
-  // The logo: two overlapping dots and the name
-  C.logo = () => `<div class="mark" role="img" aria-label="${String(C.name).replace(/"/g, '&quot;')}"><span class="oo" aria-hidden="true"><i></i><i></i></span><span class="mark-name">${String(C.name).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</span></div>`;
+  document.title = document.title.replace('Ludus', C.name);
+  // The logo: the school crest (when the file exists) and the name
+  const hx = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  C.logo = () => `<div class="mark" role="img" aria-label="${hx(C.name)}">${C.crest ? `<img class="crest" src="${hx(C.crest)}" alt="" onerror="this.remove()">` : ''}<span class="mark-name">${hx(C.name)}</span></div>`;
+  // The school name, shown small above the headings on the home pages
+  C.schoolLine = () => (C.school ? `<span class="school">${hx(C.school)}</span>` : '');
   // Friendly message until the Supabase settings above are filled in
   if (!C.configured) {
     document.addEventListener('DOMContentLoaded', () => {
