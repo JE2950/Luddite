@@ -266,6 +266,7 @@ function renderLibrary() {
   rail += ui.newFolder
     ? `<form class="inline-form" data-form="new-folder"><label class="sr" for="new-folder-name">Folder name</label><input id="new-folder-name" placeholder="e.g. Year 8 set 4" data-autofocus maxlength="60"><button class="btn small primary">Add</button></form>`
     : `<button class="btn ghost small" data-act="new-folder" style="justify-content:flex-start">+ New folder</button>`;
+  rail += `<h3>Games</h3><a class="fold" style="text-decoration:none;color:inherit" href="bistro/" title="A French restaurant game: solo, tutorials and class games"><span class="lbl">🥖 Le Petit Bistro</span></a>`;
   rail += `</nav>`;
 
   let head = `<div class="main-head"><div>`;

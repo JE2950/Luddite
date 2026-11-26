@@ -198,3 +198,14 @@ Fish come in five tiers: Common, Uncommon, Rare, Epic and Legendary. To take luc
 **Live games:** pupils' names, answers and scores are held only on the teacher's laptop, and are never saved online. The browser keeps the last game for up to 3 hours so a closed tab can be reopened, then wipes it. They pass through the live-game service in transit without being stored. The only data stored online is teacher accounts and the question sets and folders teachers make. Download the results before closing the tab if you want to keep them.
 
 **Assignments and revision folders:** each play is saved online in the Supabase project (London): the pupil's first name and surname initial as typed, the score, and each answer. Nothing else is stored. Deleting an assignment deletes its plays.
+
+## Le Petit Bistro (French restaurant game)
+
+A French game that runs on the same site and the same join system as the quizzes. Open it from **Games → Le Petit Bistro** in the teacher library, or share the link **playludus.co.uk/bistro** with a colleague.
+
+- **Solo and tutorials:** anyone with the link can play Service classique or Mode arcade on one device, and each mode has a step-by-step tutorial. No sign-in needed.
+- **Class games:** on the Mode arcade screen, click **Ouvrir une partie de classe**. This needs a Ludus teacher sign-in, like hosting a quiz. Pupils join at playludus.co.uk with the code and their first name (or scan the QR code), and Ludus sends them to the bistro.
+  - **Brigades:** the whole class. Each pupil runs a kitchen on their own device (Mode arcade or Service classique) and their team's takings add up on the board. Choose the team size and the length.
+  - **Cuisine partagée:** up to 4 chefs share one kitchen across their devices, with the kitchen shown on the board.
+- Music plays from the board only. Pupils hear their own customers' orders on their device.
+- The free Supabase plan allows 100 live messages a second. Brigades uses about 10 for a class of 30, and a shared kitchen about 30, so you can run one class game at a time comfortably.
